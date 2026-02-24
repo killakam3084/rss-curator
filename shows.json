@@ -1,0 +1,236 @@
+{
+  "shows": [
+    {
+      "name": "1923",
+      "min_quality": "2160p",
+      "preferred_codec": "x265"
+    },
+    {
+      "name": "Alien Earth",
+      "min_quality": "2160p"
+    },
+    {
+      "name": "American Experience",
+      "min_quality": "1080p"
+    },
+    {
+      "name": "American Manhunt",
+      "min_quality": "1080p"
+    },
+    {
+      "name": "Andor",
+      "min_quality": "2160p",
+      "preferred_codec": "x265"
+    },
+    {
+      "name": "Benjamin Franklin",
+      "min_quality": "1080p"
+    },
+    {
+      "name": "Black Rabbit",
+      "min_quality": "2160p"
+    },
+    {
+      "name": "Bosch Legacy",
+      "min_quality": "2160p"
+    },
+    {
+      "name": "Common Side Effects",
+      "min_quality": "1080p"
+    },
+    {
+      "name": "Daredevil Born Again",
+      "min_quality": "2160p"
+    },
+    {
+      "name": "Dune Prophecy",
+      "min_quality": "2160p"
+    },
+    {
+      "name": "FDR",
+      "min_quality": "1080p"
+    },
+    {
+      "name": "Frontline",
+      "min_quality": "1080p"
+    },
+    {
+      "name": "Godfather of Harlem",
+      "min_quality": "2160p"
+    },
+    {
+      "name": "Hacks",
+      "min_quality": "2160p"
+    },
+    {
+      "name": "Invincible",
+      "min_quality": "1080p"
+    },
+    {
+      "name": "Landman",
+      "min_quality": "2160p"
+    },
+    {
+      "name": "Last Week Tonight",
+      "min_quality": "1080p"
+    },
+    {
+      "name": "Leonardo da Vinci",
+      "min_quality": "2160p"
+    },
+    {
+      "name": "Lioness",
+      "min_quality": "2160p"
+    },
+    {
+      "name": "Love Island US",
+      "min_quality": "1080p"
+    },
+    {
+      "name": "NOVA",
+      "min_quality": "1080p"
+    },
+    {
+      "name": "Number One on the Call Sheet",
+      "min_quality": "2160p"
+    },
+    {
+      "name": "Ocean with David Attenborough",
+      "min_quality": "2160p"
+    },
+    {
+      "name": "One Hundred Years of Solitude",
+      "min_quality": "1080p"
+    },
+    {
+      "name": "Outlander",
+      "min_quality": "1080p"
+    },
+    {
+      "name": "Outlander Blood of My Blood",
+      "min_quality": "2160p"
+    },
+    {
+      "name": "Pluribus",
+      "min_quality": "2160p"
+    },
+    {
+      "name": "Reacher",
+      "min_quality": "2160p"
+    },
+    {
+      "name": "Rise of the Nazis",
+      "min_quality": "1080p"
+    },
+    {
+      "name": "Saturday Night Live",
+      "min_quality": "1080p"
+    },
+    {
+      "name": "Severance",
+      "min_quality": "2160p",
+      "preferred_codec": "x265",
+      "preferred_groups": ["ATVP", "SuccessfulCrab"]
+    },
+    {
+      "name": "Shogun",
+      "min_quality": "2160p"
+    },
+    {
+      "name": "Silo",
+      "min_quality": "2160p"
+    },
+    {
+      "name": "Slow Horses",
+      "min_quality": "2160p"
+    },
+    {
+      "name": "South Park",
+      "min_quality": "1080p"
+    },
+    {
+      "name": "Star Wars Skeleton Crew",
+      "min_quality": "2160p"
+    },
+    {
+      "name": "The American Revolution",
+      "min_quality": "2160p"
+    },
+    {
+      "name": "The Americas",
+      "min_quality": "2160p"
+    },
+    {
+      "name": "The Boondocks",
+      "min_quality": "1080p"
+    },
+    {
+      "name": "The Diplomat",
+      "min_quality": "2160p"
+    },
+    {
+      "name": "The Gilded Age",
+      "min_quality": "2160p"
+    },
+    {
+      "name": "The Handmaids Tale",
+      "min_quality": "2160p"
+    },
+    {
+      "name": "The Last of Us",
+      "min_quality": "2160p",
+      "preferred_codec": "x265",
+      "preferred_groups": ["NTb", "FLUX", "HMAX"]
+    },
+    {
+      "name": "The Morning Show",
+      "min_quality": "2160p"
+    },
+    {
+      "name": "The Pitt",
+      "min_quality": "2160p"
+    },
+    {
+      "name": "The Righteous Gemstones",
+      "min_quality": "2160p"
+    },
+    {
+      "name": "The Studio",
+      "min_quality": "2160p"
+    },
+    {
+      "name": "The Wheel of Time",
+      "min_quality": "2160p"
+    },
+    {
+      "name": "The Witcher",
+      "min_quality": "2160p"
+    },
+    {
+      "name": "Tulsa King",
+      "min_quality": "2160p"
+    },
+    {
+      "name": "Turning Point The Vietnam War",
+      "min_quality": "2160p"
+    },
+    {
+      "name": "Vietnam The War That Changed America",
+      "min_quality": "2160p"
+    },
+    {
+      "name": "Yellowstone",
+      "min_quality": "2160p"
+    },
+    {
+      "name": "Your Friends and Neighbors",
+      "min_quality": "2160p"
+    }
+  ],
+  "defaults": {
+    "min_quality": "1080p",
+    "preferred_codec": "x265",
+    "preferred_groups": ["NTb", "FLUX", "HMAX", "CMRG", "ATVP"],
+    "exclude_groups": ["YIFY", "RARBG", "MeGusta"]
+  }
+}
