@@ -34,13 +34,16 @@ services:
       - curator-data:/app/data
     
     # Restart policy
-    restart: unless-stopped
+    restart: always
     
     # Optional: Configure to run checks on a schedule
     # Remove or modify the entrypoint/command to suit your needs
-    entrypoint: /app/curator
-    command: 
-      - check
+    entrypoint: /app/scheduler.sh
+    
+    # Environment variable for check interval (in seconds)
+    # Default is 3600 (1 hour). Adjust as needed.
+    environment:
+      - CHECK_INTERVAL=3600
 
 volumes:
   curator-data:

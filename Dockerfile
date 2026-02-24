@@ -32,11 +32,14 @@ WORKDIR /app
 # Copy the binary from builder stage
 COPY --from=builder /build/curator /app/curator
 
+# Copy scheduler script
+COPY scripts/scheduler.sh /app/scheduler.sh
+
 # Create data directory for SQLite database
-RUN mkdir -p /app/data
+RUN mkdir -p /app/data /app/logs
 
 # Set permissions
-RUN chmod +x /app/curator
+RUN chmod +x /app/curator /app/scheduler.sh
 
 # Expose port (if needed for any future features)
 EXPOSE 8080
