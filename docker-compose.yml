@@ -1,0 +1,73 @@
+version: '3.8'
+
+services:
+  curator:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: rss-curator
+    
+    # Use the host network to reach qBittorrent on localhost
+    network_mode: "host"
+    
+    # Environment variables - override with your own .env file
+    env_file:
+      - .env
+    
+    # Environment variables that can be set here or in .env
+    environment:
+      # These can be overridden by .env file
+      - RSS_FEED_URL=${RSS_FEED_URL}
+      - QBITTORRENT_HOST=${QBITTORRENT_HOST:-http://localhost:8080}
+      - QBITTORRENT_USER=${QBITTORRENT_USER}
+      - QBITTORRENT_PASS=${QBITTORRENT_PASS}
+      - QBITTORRENT_CATEGORY=${QBITTORRENT_CATEGORY:-curator}
+      - SHOW_NAMES=${SHOW_NAMES}
+      - MIN_QUALITY=${MIN_QUALITY:-1080p}
+      - PREFERRED_CODEC=${PREFERRED_CODEC:-x265}
+      - PREFERRED_GROUPS=${PREFERRED_GROUPS}
+      - EXCLUDE_GROUPS=${EXCLUDE_GROUPS}
+      - STORAGE_PATH=${STORAGE_PATH:-/app/data/curator.db}
+    
+    # Volume for persistent database storage
+    volumes:
+      - curator-data:/app/data
+    
+    # Restart policy
+    restart: unless-stopped
+    
+    # Optional: Configure to run checks on a schedule
+    # Remove or modify the entrypoint/command to suit your needs
+    entrypoint: /app/curator
+    command: 
+      - check
+
+volumes:
+  curator-data:
+    driver: local
+
+# To use this docker-compose file:
+#
+# 1. Create a .env file with your configuration:
+#    cp curator.env.sample .env
+#    vim .env
+#
+# 2. Build the image:
+#    docker-compose build
+#
+# 3. Run the service:
+#    docker-compose up -d
+#
+# 4. View logs:
+#    docker-compose logs -f
+#
+# 5. Run commands:
+#    docker-compose exec curator /app/curator list
+#    docker-compose exec curator /app/curator check
+#    docker-compose exec curator /app/curator add <url>
+#
+# 6. Stop:
+#    docker-compose down
+#
+# For persistent data across containers, the curator-data volume is used
+# and mounted at /app/data where the SQLite database is stored.
