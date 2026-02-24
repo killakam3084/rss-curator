@@ -2,6 +2,10 @@
 
 A semi-automated torrent curator for private tracker RSS feeds with human-in-the-loop approval.
 
+[![Build and Push to GHCR](https://github.com/iillmaticc/rss-curator/actions/workflows/build-and-push.yml/badge.svg)](https://github.com/iillmaticc/rss-curator/actions/workflows/build-and-push.yml)
+[![Container Image](https://img.shields.io/badge/container-ghcr.io-blue)](https://github.com/iillmaticc/rss-curator/pkgs/container/rss-curator)
+[![Go](https://img.shields.io/badge/Go-1.22-blue)](https://golang.org)
+
 ## Features
 
 - ✅ Parse RSS feeds from private trackers
@@ -11,6 +15,8 @@ A semi-automated torrent curator for private tracker RSS feeds with human-in-the
 - ✅ Integration with qBittorrent Web API
 - ✅ Interactive CLI for approvals
 - ✅ Batch operations support
+- ✅ Docker containerization for easy deployment
+- ✅ TrueNAS compatible setup
 
 ## Installation
 
@@ -34,6 +40,54 @@ go build -o curator ./cmd/curator
 # Copy to your PATH
 sudo cp curator /usr/local/bin/
 ```
+
+### Install using Docker
+
+For containerized deployment (recommended for production and TrueNAS):
+
+**Option 1: Using Docker Compose (easiest)**
+
+```bash
+# Copy and configure environment
+cp curator.env.sample .env
+vim .env
+
+# Start the container
+docker-compose up -d
+
+# View logs
+docker-compose logs -f
+```
+
+**Option 2: Using Docker directly**
+
+```bash
+# Build image
+docker build -t rss-curator:latest .
+
+# Run container
+docker run --rm \
+  --env-file .env \
+  --network host \
+  -v curator-data:/app/data \
+  rss-curator:latest check
+```
+
+**Option 3: Using pre-built image from GitHub Container Registry**
+
+```bash
+# Pull the image
+docker pull ghcr.io/iillmaticc/rss-curator:latest
+
+# Run with your configuration
+docker run --rm \
+  --env-file .env \
+  --network host \
+  -v curator-data:/app/data \
+  ghcr.io/iillmaticc/rss-curator:latest check
+```
+
+For more details, see [CONTAINER_GUIDE.md](./CONTAINER_GUIDE.md).
 
 ## Configuration
 
