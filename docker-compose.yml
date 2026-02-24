@@ -37,11 +37,8 @@ services:
     restart: always
     
     # Optional: Configure to run checks on a schedule
-    # Remove or modify the entrypoint/command to suit your needs
-    entrypoint: /app/scheduler.sh
-    
-    # Environment variable for check interval (in seconds)
-    # Default is 3600 (1 hour). Adjust as needed.
+    # The image entrypoint is already set to scheduler.sh
+    # Adjust CHECK_INTERVAL as needed (in seconds)
     environment:
       - CHECK_INTERVAL=3600
 

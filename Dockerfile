@@ -44,8 +44,5 @@ RUN chmod +x /app/curator /app/scheduler.sh
 # Expose port (if needed for any future features)
 EXPOSE 8080
 
-# Set entrypoint
-ENTRYPOINT ["/app/curator"]
-
-# Default command - can be overridden
-CMD ["check"]
+# Set entrypoint to scheduler for continuous operation
+ENTRYPOINT ["/app/scheduler.sh"]
