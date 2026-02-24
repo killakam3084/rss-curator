@@ -1,0 +1,31 @@
+{
+  "shows": [
+    {
+      "name": "The Last of Us",
+      "min_quality": "1080p",
+      "preferred_codec": "x265",
+      "preferred_groups": ["NTb", "FLUX"]
+    },
+    {
+      "name": "Foundation",
+      "min_quality": "1080p",
+      "preferred_codec": "x265"
+    },
+    {
+      "name": "Severance",
+      "min_quality": "1080p"
+    },
+    {
+      "name": "House of the Dragon",
+      "min_quality": "1080p",
+      "preferred_codec": "x265",
+      "preferred_groups": ["HMAX", "FLUX"]
+    }
+  ],
+  "defaults": {
+    "min_quality": "1080p",
+    "preferred_codec": "x265",
+    "preferred_groups": ["NTb", "FLUX", "HMAX", "CMRG"],
+    "exclude_groups": ["YIFY", "RARBG"]
+  }
+}
