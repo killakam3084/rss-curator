@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"time"
 
-	_ "github.com/mattn/go-sqlite3"
 	"github.com/iillmaticc/rss-curator/pkg/models"
+	_ "github.com/mattn/go-sqlite3"
 )
 
 // Storage handles persistent storage of staged torrents
@@ -47,8 +47,20 @@ func (s *Storage) migrate() error {
 		approved_at DATETIME
 	);
 
+	CREATE TABLE IF NOT EXISTS activity_log (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		torrent_id INTEGER NOT NULL,
+		torrent_title TEXT NOT NULL,
+		action TEXT NOT NULL,
+		action_at DATETIME NOT NULL,
+		match_reason TEXT NOT NULL,
+		FOREIGN KEY (torrent_id) REFERENCES staged_torrents(id)
+	);
+
 	CREATE INDEX IF NOT EXISTS idx_status ON staged_torrents(status);
 	CREATE INDEX IF NOT EXISTS idx_link ON staged_torrents(link);
+	CREATE INDEX IF NOT EXISTS idx_activity_action_at ON activity_log(action_at DESC);
+	CREATE INDEX IF NOT EXISTS idx_activity_action ON activity_log(action);
 	`
 
 	_, err := s.db.Exec(schema)
@@ -214,4 +226,63 @@ func (s *Storage) GetByID(id int) (*models.StagedTorrent, error) {
 	}
 
 	return &t, nil
+}
+
+// LogActivity records an action taken on a torrent
+func (s *Storage) LogActivity(torrentID int, title, action, matchReason string) error {
+	_, err := s.db.Exec(`
+		INSERT INTO activity_log (torrent_id, torrent_title, action, action_at, match_reason)
+		VALUES (?, ?, ?, ?, ?)
+	`, torrentID, title, action, time.Now(), matchReason)
+	return err
+}
+
+// GetActivity retrieves activity log entries with optional filtering
+func (s *Storage) GetActivity(limit int, offset int, action string) ([]models.Activity, error) {
+	query := `
+		SELECT id, torrent_id, torrent_title, action, action_at, match_reason
+		FROM activity_log
+	`
+	args := []interface{}{}
+
+	if action != "" {
+		query += ` WHERE action = ?`
+		args = append(args, action)
+	}
+
+	query += ` ORDER BY action_at DESC LIMIT ? OFFSET ?`
+	args = append(args, limit, offset)
+
+	rows, err := s.db.Query(query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var activities []models.Activity
+	for rows.Next() {
+		var a models.Activity
+		err := rows.Scan(&a.ID, &a.TorrentID, &a.TorrentTitle, &a.Action, &a.ActionAt, &a.MatchReason)
+		if err != nil {
+			return nil, err
+		}
+		activities = append(activities, a)
+	}
+
+	return activities, rows.Err()
+}
+
+// GetActivityCount returns total count of activities (with optional filter)
+func (s *Storage) GetActivityCount(action string) (int, error) {
+	query := `SELECT COUNT(*) FROM activity_log`
+	args := []interface{}{}
+
+	if action != "" {
+		query += ` WHERE action = ?`
+		args = append(args, action)
+	}
+
+	var count int
+	err := s.db.QueryRow(query, args...).Scan(&count)
+	return count, err
 }

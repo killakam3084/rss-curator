@@ -52,6 +52,20 @@ type HealthResponse struct {
 	Status string `json:"status"`
 }
 
+type ActivityResponse struct {
+	Activities []ActivityItem `json:"activities"`
+	Total      int            `json:"total"`
+}
+
+type ActivityItem struct {
+	ID           int    `json:"id"`
+	TorrentID    int    `json:"torrent_id"`
+	TorrentTitle string `json:"torrent_title"`
+	Action       string `json:"action"`
+	ActionAt     string `json:"action_at"`
+	MatchReason  string `json:"match_reason"`
+}
+
 // NewServer creates a new API server instance
 func NewServer(store *storage.Storage, client *client.Client, port int) *Server {
 	// Create a production logger (use development logger in dev if preferred)
@@ -77,6 +91,7 @@ func (s *Server) Start() error {
 	mux.HandleFunc("/api/torrents", s.handleList)
 	mux.HandleFunc("/api/torrents/", s.handleTorrentAction)
 	mux.HandleFunc("/api/health", s.handleHealth)
+	mux.HandleFunc("/api/activity", s.handleActivity)
 
 	// Static files and UI
 	mux.Handle("/style.css", http.FileServer(http.Dir("./web")))
@@ -243,6 +258,12 @@ func (s *Server) handleApprove(w http.ResponseWriter, r *http.Request, id int) {
 		return
 	}
 
+	// Log the activity
+	if err := s.store.LogActivity(id, torrent.FeedItem.Title, "approve", torrent.MatchReason); err != nil {
+		s.logger.Error("failed to log activity", zap.Int("id", id), zap.Error(err))
+		// Don't fail the request, just log the error
+	}
+
 	s.logger.Info("torrent approved", zap.Int("id", id), zap.String("title", torrent.FeedItem.Title))
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(ApproveResponse{
@@ -292,6 +313,12 @@ func (s *Server) handleReject(w http.ResponseWriter, r *http.Request, id int) {
 		return
 	}
 
+	// Log the activity
+	if err := s.store.LogActivity(id, torrent.FeedItem.Title, "reject", torrent.MatchReason); err != nil {
+		s.logger.Error("failed to log activity", zap.Int("id", id), zap.Error(err))
+		// Don't fail the request, just log the error
+	}
+
 	s.logger.Info("torrent rejected", zap.Int("id", id), zap.String("title", torrent.FeedItem.Title))
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(RejectResponse{
@@ -309,4 +336,67 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(HealthResponse{Status: "healthy"})
+}
+
+// handleActivity returns activity log
+func (s *Server) handleActivity(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// Get query parameters
+	limit := 50
+	if l := r.URL.Query().Get("limit"); l != "" {
+		if lim, err := strconv.Atoi(l); err == nil && lim > 0 && lim <= 100 {
+			limit = lim
+		}
+	}
+
+	offset := 0
+	if o := r.URL.Query().Get("offset"); o != "" {
+		if off, err := strconv.Atoi(o); err == nil && off >= 0 {
+			offset = off
+		}
+	}
+
+	action := r.URL.Query().Get("action")
+	if action != "" && action != "approve" && action != "reject" {
+		action = ""
+	}
+
+	activities, err := s.store.GetActivity(limit, offset, action)
+	if err != nil {
+		s.logger.Error("failed to get activities", zap.Error(err))
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(ErrorResponse{Error: err.Error()})
+		return
+	}
+
+	// Convert to response items
+	items := make([]ActivityItem, 0)
+	for _, a := range activities {
+		items = append(items, ActivityItem{
+			ID:           a.ID,
+			TorrentID:    a.TorrentID,
+			TorrentTitle: a.TorrentTitle,
+			Action:       a.Action,
+			ActionAt:     a.ActionAt.Format("2006-01-02 15:04:05"),
+			MatchReason:  a.MatchReason,
+		})
+	}
+
+	total, err := s.store.GetActivityCount(action)
+	if err != nil {
+		s.logger.Error("failed to get activity count", zap.Error(err))
+		total = 0
+	}
+
+	s.logger.Info("activities retrieved", zap.Int("count", len(activities)), zap.String("action", action))
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(ActivityResponse{
+		Activities: items,
+		Total:      total,
+	})
 }

@@ -3,6 +3,7 @@ const { createApp, ref, computed, onMounted } = Vue;
 const app = createApp({
     setup() {
         const torrents = ref([]);
+        const activities = ref([]);
         const loading = ref(false);
         const bulkLoading = ref(false);
         const activeTab = ref('pending');
@@ -39,6 +40,16 @@ const app = createApp({
                 showToast('Failed to load torrents', 'error');
             } finally {
                 loading.value = false;
+            }
+        };
+
+        const fetchActivities = async () => {
+            try {
+                const response = await fetch(`/api/activity?limit=20&offset=0`);
+                const data = await response.json();
+                activities.value = data.activities || [];
+            } catch (error) {
+                console.error('Failed to fetch activities:', error);
             }
         };
 
@@ -179,14 +190,17 @@ const app = createApp({
         // Load initial data
         onMounted(() => {
             fetchTorrents('pending');
+            fetchActivities();
             // Auto-refresh every 30 seconds
             setInterval(() => {
                 fetchTorrents(activeTab.value);
+                fetchActivities();
             }, 30000);
         });
 
         return {
             torrents,
+            activities,
             loading,
             bulkLoading,
             activeTab,
@@ -200,6 +214,7 @@ const app = createApp({
             selectedCount,
             displayedTorrents,
             fetchTorrents,
+            fetchActivities,
             approveTorrent,
             rejectTorrent,
             bulkApprove,
