@@ -9,11 +9,13 @@ import (
 
 	"github.com/iillmaticc/rss-curator/internal/client"
 	"github.com/iillmaticc/rss-curator/internal/storage"
+	"go.uber.org/zap"
 )
 
 type Server struct {
 	store  *storage.Storage
 	client *client.Client // May be nil if qBittorrent is unavailable
+	logger *zap.Logger
 	port   int
 }
 
@@ -52,9 +54,17 @@ type HealthResponse struct {
 
 // NewServer creates a new API server instance
 func NewServer(store *storage.Storage, client *client.Client, port int) *Server {
+	// Create a production logger (use development logger in dev if preferred)
+	logger, err := zap.NewProduction()
+	if err != nil {
+		panic(fmt.Sprintf("failed to create logger: %v", err))
+	}
+	defer logger.Sync() // Flush logs on shutdown
+
 	return &Server{
 		store:  store,
 		client: client,
+		logger: logger,
 		port:   port,
 	}
 }
@@ -76,7 +86,7 @@ func (s *Server) Start() error {
 	mux.HandleFunc("/", s.handleRoot)
 
 	addr := fmt.Sprintf(":%d", s.port)
-	fmt.Printf("[API] Server listening on 0.0.0.0%s\n", addr)
+	s.logger.Info("API server starting", zap.String("address", addr))
 
 	return http.ListenAndServe(addr, mux)
 }
@@ -104,18 +114,16 @@ func (s *Server) handleList(w http.ResponseWriter, r *http.Request) {
 		status = "pending"
 	}
 
-	fmt.Printf("[API] handleList: status=%s\n", status)
-
 	torrents, err := s.store.List(status)
 	if err != nil {
-		fmt.Printf("[API] Error listing torrents: %v\n", err)
+		s.logger.Error("failed to list torrents", zap.String("status", status), zap.Error(err))
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusInternalServerError)
 		json.NewEncoder(w).Encode(ErrorResponse{Error: err.Error()})
 		return
 	}
 
-	fmt.Printf("[API] Found %d torrents with status %s\n", len(torrents), status)
+	s.logger.Info("torrents listed", zap.String("status", status), zap.Int("count", len(torrents)))
 
 	resp := ListResponse{
 		Torrents: make([]TorrentResponse, 0),
@@ -123,7 +131,6 @@ func (s *Server) handleList(w http.ResponseWriter, r *http.Request) {
 	}
 
 	for _, t := range torrents {
-		fmt.Printf("[API] Torrent: id=%d, title=%s, status=%s\n", t.ID, t.FeedItem.Title, t.Status)
 		resp.Torrents = append(resp.Torrents, TorrentResponse{
 			ID:          t.ID,
 			Title:       t.FeedItem.Title,
@@ -142,10 +149,8 @@ func (s *Server) handleList(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleTorrentAction(w http.ResponseWriter, r *http.Request) {
 	// Remove /api/torrents/ prefix to get {id}/action
 	path := strings.TrimPrefix(r.URL.Path, "/api/torrents/")
-	fmt.Printf("[API] handleTorrentAction: path=%s, method=%s\n", path, r.Method)
 
 	parts := strings.Split(path, "/")
-	fmt.Printf("[API] path parts: %v\n", parts)
 
 	if len(parts) < 2 {
 		w.Header().Set("Content-Type", "application/json")
@@ -156,11 +161,10 @@ func (s *Server) handleTorrentAction(w http.ResponseWriter, r *http.Request) {
 
 	idStr := parts[0]
 	action := parts[1]
-	fmt.Printf("[API] idStr=%s, action=%s\n", idStr, action)
 
 	id, err := strconv.Atoi(idStr)
 	if err != nil {
-		fmt.Printf("[API] Failed to parse ID: %s, error: %v\n", idStr, err)
+		s.logger.Warn("invalid torrent ID in request", zap.String("id", idStr), zap.Error(err))
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(ErrorResponse{Error: "Invalid torrent ID"})
@@ -173,7 +177,7 @@ func (s *Server) handleTorrentAction(w http.ResponseWriter, r *http.Request) {
 	case "reject":
 		s.handleReject(w, r, id)
 	default:
-		fmt.Printf("[API] Unknown action: %s\n", action)
+		s.logger.Warn("unknown torrent action", zap.Int("id", id), zap.String("action", action))
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(ErrorResponse{Error: "Unknown action"})
@@ -187,11 +191,9 @@ func (s *Server) handleApprove(w http.ResponseWriter, r *http.Request, id int) {
 		return
 	}
 
-	fmt.Printf("[API] handleApprove: id=%d\n", id)
-
 	// Check if qBittorrent is available
 	if s.client == nil {
-		fmt.Println("[API] qBittorrent client unavailable")
+		s.logger.Error("qBittorrent client unavailable", zap.Int("torrent_id", id))
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusServiceUnavailable)
 		json.NewEncoder(w).Encode(ErrorResponse{Error: "qBittorrent service unavailable"})
@@ -200,7 +202,7 @@ func (s *Server) handleApprove(w http.ResponseWriter, r *http.Request, id int) {
 
 	torrent, err := s.store.Get(id)
 	if err != nil {
-		fmt.Printf("[API] Error retrieving torrent %d: %v\n", id, err)
+		s.logger.Error("failed to retrieve torrent", zap.Int("id", id), zap.Error(err))
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusInternalServerError)
 		json.NewEncoder(w).Encode(ErrorResponse{Error: fmt.Sprintf("Error retrieving torrent: %v", err)})
@@ -208,7 +210,7 @@ func (s *Server) handleApprove(w http.ResponseWriter, r *http.Request, id int) {
 	}
 
 	if torrent == nil {
-		fmt.Printf("[API] Torrent %d not found in database\n", id)
+		s.logger.Warn("torrent not found", zap.Int("id", id))
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusNotFound)
 		json.NewEncoder(w).Encode(ErrorResponse{Error: "Torrent not found"})
@@ -216,7 +218,7 @@ func (s *Server) handleApprove(w http.ResponseWriter, r *http.Request, id int) {
 	}
 
 	if torrent.Status != "pending" {
-		fmt.Printf("[API] Torrent %d is already %s, cannot approve\n", id, torrent.Status)
+		s.logger.Warn("cannot approve non-pending torrent", zap.Int("id", id), zap.String("status", torrent.Status))
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(ErrorResponse{Error: fmt.Sprintf("Torrent already %s", torrent.Status)})
@@ -224,9 +226,8 @@ func (s *Server) handleApprove(w http.ResponseWriter, r *http.Request, id int) {
 	}
 
 	// Add to qBittorrent
-	fmt.Printf("[API] Adding torrent %d to qBittorrent: %s\n", id, torrent.FeedItem.Title)
 	if err := s.client.AddTorrent(torrent.FeedItem.Link, nil); err != nil {
-		fmt.Printf("[API] Error adding torrent %d to qBittorrent: %v\n", id, err)
+		s.logger.Error("failed to add torrent to qBittorrent", zap.Int("id", id), zap.String("title", torrent.FeedItem.Title), zap.Error(err))
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusInternalServerError)
 		json.NewEncoder(w).Encode(ErrorResponse{Error: fmt.Sprintf("Failed to add torrent: %v", err)})
@@ -234,16 +235,15 @@ func (s *Server) handleApprove(w http.ResponseWriter, r *http.Request, id int) {
 	}
 
 	// Update status in storage
-	fmt.Printf("[API] Updating torrent %d status to approved\n", id)
 	if err := s.store.UpdateStatus(id, "approved"); err != nil {
-		fmt.Printf("[API] Error updating torrent %d status: %v\n", id, err)
+		s.logger.Error("failed to update torrent status", zap.Int("id", id), zap.Error(err))
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusInternalServerError)
 		json.NewEncoder(w).Encode(ErrorResponse{Error: err.Error()})
 		return
 	}
 
-	fmt.Printf("[API] Torrent %d approved successfully\n", id)
+	s.logger.Info("torrent approved", zap.Int("id", id), zap.String("title", torrent.FeedItem.Title))
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(ApproveResponse{
 		ID:     id,
@@ -261,7 +261,7 @@ func (s *Server) handleReject(w http.ResponseWriter, r *http.Request, id int) {
 
 	torrent, err := s.store.Get(id)
 	if err != nil {
-		fmt.Printf("[API] Error retrieving torrent %d: %v\n", id, err)
+		s.logger.Error("failed to retrieve torrent", zap.Int("id", id), zap.Error(err))
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusInternalServerError)
 		json.NewEncoder(w).Encode(ErrorResponse{Error: fmt.Sprintf("Error retrieving torrent: %v", err)})
@@ -269,7 +269,7 @@ func (s *Server) handleReject(w http.ResponseWriter, r *http.Request, id int) {
 	}
 
 	if torrent == nil {
-		fmt.Printf("[API] Torrent %d not found in database\n", id)
+		s.logger.Warn("torrent not found", zap.Int("id", id))
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusNotFound)
 		json.NewEncoder(w).Encode(ErrorResponse{Error: "Torrent not found"})
@@ -277,7 +277,7 @@ func (s *Server) handleReject(w http.ResponseWriter, r *http.Request, id int) {
 	}
 
 	if torrent.Status != "pending" {
-		fmt.Printf("[API] Torrent %d is already %s, cannot reject\n", id, torrent.Status)
+		s.logger.Warn("cannot reject non-pending torrent", zap.Int("id", id), zap.String("status", torrent.Status))
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(ErrorResponse{Error: fmt.Sprintf("Torrent already %s", torrent.Status)})
@@ -285,14 +285,14 @@ func (s *Server) handleReject(w http.ResponseWriter, r *http.Request, id int) {
 	}
 
 	if err := s.store.UpdateStatus(id, "rejected"); err != nil {
-		fmt.Printf("[API] Error updating torrent %d status: %v\n", id, err)
+		s.logger.Error("failed to update torrent status", zap.Int("id", id), zap.Error(err))
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusInternalServerError)
 		json.NewEncoder(w).Encode(ErrorResponse{Error: err.Error()})
 		return
 	}
 
-	fmt.Printf("[API] Torrent %d rejected successfully\n", id)
+	s.logger.Info("torrent rejected", zap.Int("id", id), zap.String("title", torrent.FeedItem.Title))
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(RejectResponse{
 		ID:     id,
