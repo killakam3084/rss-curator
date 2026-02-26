@@ -13,7 +13,7 @@ import (
 
 type Server struct {
 	store  *storage.Storage
-	client *client.Client
+	client *client.Client // May be nil if qBittorrent is unavailable
 	port   int
 }
 
@@ -162,6 +162,14 @@ func (s *Server) handleTorrentAction(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleApprove(w http.ResponseWriter, r *http.Request, id int) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// Check if qBittorrent is available
+	if s.client == nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusServiceUnavailable)
+		json.NewEncoder(w).Encode(ErrorResponse{Error: "qBittorrent service unavailable"})
 		return
 	}
 

@@ -535,11 +535,16 @@ func cmdPause(cfg models.Config, store *storage.Storage, args []string) {
 }
 
 func cmdServe(cfg models.Config, store *storage.Storage) {
-	// Initialize qBittorrent client
+	// Try to initialize qBittorrent client, but don't fail if unavailable
+	var qb *client.Client
 	qb, err := client.New(cfg.QBittorrent)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error connecting to qBittorrent: %v\n", err)
-		os.Exit(1)
+		fmt.Printf("[Serve] Warning: qBittorrent unavailable at startup (%v)\n", err)
+		fmt.Println("[Serve] API will start but approve/reject operations may fail")
+		fmt.Println("[Serve] Retrying qBittorrent connection will happen during operation")
+		qb = nil // Set to nil to signal unavailable
+	} else {
+		fmt.Println("[Serve] qBittorrent connection successful")
 	}
 
 	// Parse API port from environment or use default
@@ -550,7 +555,7 @@ func cmdServe(cfg models.Config, store *storage.Storage) {
 		}
 	}
 
-	// Create and start API server
+	// Create and start API server (even if qBittorrent is unavailable)
 	server := api.NewServer(store, qb, port)
 	fmt.Printf("[Serve] Starting API server on port %d\n", port)
 	if err := server.Start(); err != nil {
