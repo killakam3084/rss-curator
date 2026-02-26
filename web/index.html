@@ -3,55 +3,100 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>RSS Curator - Torrent Review Dashboard</title>
-    <link rel="stylesheet" href="/style.css">
+    <title>RSS Curator</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
 </head>
 <body>
-    <div class="container">
-        <header>
-            <h1>🎬 RSS Curator</h1>
-            <p class="subtitle">Torrent Review Dashboard</p>
-        </header>
+    <div id="app">
+        <div class="container">
+            <header class="header">
+                <h1>📡 RSS Curator</h1>
+                <div class="header-stats">
+                    <div class="stat">
+                        <span class="label">Pending</span>
+                        <span class="value">{{ pendingCount }}</span>
+                    </div>
+                    <div class="stat">
+                        <span class="label">Approved</span>
+                        <span class="value">{{ approvedCount }}</span>
+                    </div>
+                    <div class="stat">
+                        <span class="label">Rejected</span>
+                        <span class="value">{{ rejectedCount }}</span>
+                    </div>
+                </div>
+            </header>
 
-        <!-- Stats Section -->
-        <div class="stats">
-            <div class="stat-card">
-                <span class="stat-number" id="pendingCount">-</span>
-                <span class="stat-label">Pending</span>
-            </div>
-            <div class="stat-card">
-                <span class="stat-number" id="approvedCount">-</span>
-                <span class="stat-label">Approved</span>
-            </div>
-            <div class="stat-card">
-                <span class="stat-number" id="rejectedCount">-</span>
-                <span class="stat-label">Rejected</span>
-            </div>
-            <div class="stat-card">
-                <span class="stat-number" id="healthStatus">-</span>
-                <span class="stat-label">Health</span>
-            </div>
-        </div>
+            <main class="main">
+                <div class="controls">
+                    <div class="filter-tabs">
+                        <button 
+                            v-for="tab in tabs" 
+                            :key="tab"
+                            @click="activeTab = tab"
+                            :class="['tab', { active: activeTab === tab }]"
+                        >
+                            {{ tab }}
+                        </button>
+                    </div>
+                    <div v-if="selectedCount > 0" class="bulk-actions">
+                        <span class="selection-info">{{ selectedCount }} selected</span>
+                        <button @click="bulkApprove" class="btn btn-success">Approve Selected</button>
+                        <button @click="bulkReject" class="btn btn-danger">Reject Selected</button>
+                    </div>
+                </div>
 
-        <!-- Controls -->
-        <div class="controls">
-            <button class="btn btn-primary" id="refreshBtn">⟳ Refresh</button>
-            <label>
-                <input type="checkbox" id="autoRefresh">
-                Auto-refresh (30s)
-            </label>
-            <span class="last-updated">Loading...</span>
-        </div>
+                <div v-if="loading" class="loading">
+                    <p>Loading torrents...</p>
+                </div>
 
-        <!-- Torrents Section -->
-        <div class="torrents-section">
-            <h2>Pending Torrents</h2>
-            <div id="torrents-list" class="torrents-list">
-                <div class="loading">Loading torrents...</div>
-            </div>
+                <div v-else-if="displayedTorrents.length === 0" class="empty-state">
+                    <p>No {{ activeTab }} torrents</p>
+                </div>
+
+                <div v-else class="torrents-grid">
+                    <div 
+                        v-for="torrent in displayedTorrents" 
+                        :key="torrent.id"
+                        class="torrent-card"
+                    >
+                        <div class="card-header">
+                            <input 
+                                v-if="activeTab === 'pending'"
+                                type="checkbox" 
+                                :checked="isSelected(torrent.id)"
+                                @change="toggleSelection(torrent.id)"
+                                class="checkbox"
+                            >
+                            <span class="status-badge" :class="`status-${torrent.status}`">
+                                {{ torrent.status }}
+                            </span>
+                        </div>
+                        
+                        <h3 class="torrent-title">{{ torrent.title }}</h3>
+                        
+                        <div class="torrent-details">
+                            <span class="detail-item">
+                                <span class="label">Size:</span>
+                                <span class="value">{{ formatSize(torrent.size) }}</span>
+                            </span>
+                            <span class="detail-item">
+                                <span class="label">Match:</span>
+                                <span class="value">{{ torrent.match_reason }}</span>
+                            </span>
+                        </div>
+                        
+                        <div v-if="activeTab === 'pending'" class="card-actions">
+                            <button @click="approveTorrent(torrent.id)" class="btn btn-success">Approve</button>
+                            <button @click="rejectTorrent(torrent.id)" class="btn btn-danger">Reject</button>
+                        </div>
+                    </div>
+                </div>
+            </main>
         </div>
     </div>
 
-    <script src="/app.js"></script>
+    <script src="app.js"></script>
 </body>
 </html>
