@@ -53,7 +53,7 @@ jobs:
             type=semver,pattern={{major}}.{{minor}}
             type=sha,prefix={{branch}}-
             # for tag pushes, also tag the image with the literal ref name (e.g. v0.2.0)
-            type=raw,value=${{ github.ref_name }},if=startsWith(github.ref, 'refs/tags/')
+            # NOTE: `type=ref,event=tag` already handles tagging. remove explicit raw tag to avoid empty value issues.
             type=raw,value=latest,enable={{is_default_branch}}
       
       - name: Build and push
