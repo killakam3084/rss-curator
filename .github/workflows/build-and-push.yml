@@ -56,6 +56,15 @@ jobs:
             # NOTE: `type=ref,event=tag` already handles tagging. remove explicit raw tag to avoid empty value issues.
             type=raw,value=latest,enable={{is_default_branch}}
       
+      - name: Debug metadata
+        run: |
+          echo "event_name=${GITHUB_EVENT_NAME}"
+          echo "ref=${GITHUB_REF}"
+          echo "ref_name=${GITHUB_REF_NAME}"
+          echo "computed_tags=${{ steps.meta.outputs.tags }}"
+          echo "computed_labels=${{ steps.meta.outputs.labels }}"
+
+      
       - name: Build and push
         uses: docker/build-push-action@v5
         with:
