@@ -9,6 +9,16 @@
 </head>
 <body>
     <div id="app">
+        <div class="toast-container">
+            <div 
+                v-for="toast in toasts" 
+                :key="toast.id"
+                :class="['toast', `toast-${toast.type}`]"
+            >
+                {{ toast.message }}
+            </div>
+        </div>
+
         <div class="container">
             <header class="header">
                 <h1>📡 RSS Curator</h1>
@@ -42,8 +52,22 @@
                     </div>
                     <div v-if="selectedCount > 0" class="bulk-actions">
                         <span class="selection-info">{{ selectedCount }} selected</span>
-                        <button @click="bulkApprove" class="btn btn-success">Approve Selected</button>
-                        <button @click="bulkReject" class="btn btn-danger">Reject Selected</button>
+                        <button 
+                            @click="bulkApprove" 
+                            class="btn btn-success"
+                            :disabled="bulkLoading"
+                        >
+                            <span v-if="bulkLoading" class="spinner"></span>
+                            {{ bulkLoading ? 'Approving...' : 'Approve Selected' }}
+                        </button>
+                        <button 
+                            @click="bulkReject" 
+                            class="btn btn-danger"
+                            :disabled="bulkLoading"
+                        >
+                            <span v-if="bulkLoading" class="spinner"></span>
+                            {{ bulkLoading ? 'Rejecting...' : 'Reject Selected' }}
+                        </button>
                     </div>
                 </div>
 
@@ -88,8 +112,22 @@
                         </div>
                         
                         <div v-if="activeTab === 'pending'" class="card-actions">
-                            <button @click="approveTorrent(torrent.id)" class="btn btn-success">Approve</button>
-                            <button @click="rejectTorrent(torrent.id)" class="btn btn-danger">Reject</button>
+                            <button 
+                                @click="approveTorrent(torrent.id)" 
+                                class="btn btn-success"
+                                :disabled="operatingIds.has(torrent.id)"
+                            >
+                                <span v-if="operatingIds.has(torrent.id)" class="spinner"></span>
+                                {{ operatingIds.has(torrent.id) ? '' : 'Approve' }}
+                            </button>
+                            <button 
+                                @click="rejectTorrent(torrent.id)" 
+                                class="btn btn-danger"
+                                :disabled="operatingIds.has(torrent.id)"
+                            >
+                                <span v-if="operatingIds.has(torrent.id)" class="spinner"></span>
+                                {{ operatingIds.has(torrent.id) ? '' : 'Reject' }}
+                            </button>
                         </div>
                     </div>
                 </div>
