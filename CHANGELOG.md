@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.2] - 2026-02-26
+
+### Added
+- Zap structured logging framework for production-grade logging
+- Comprehensive logging throughout API handlers with appropriate log levels
+- Structured fields for all log entries (IDs, titles, statuses, errors)
+- Better error context and debugging information
+
+### Changed
+- Replace fmt.Printf debug logging with zap logger
+- Info logs for successful operations
+- Warn logs for validation failures
+- Error logs for internal errors
+
 ## [0.4.1] - 2026-02-26
 
 ### Fixed
