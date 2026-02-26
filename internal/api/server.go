@@ -63,9 +63,16 @@ func NewServer(store *storage.Storage, client *client.Client, port int) *Server 
 func (s *Server) Start() error {
 	mux := http.NewServeMux()
 
-	mux.HandleFunc("/torrents", s.handleList)
-	mux.HandleFunc("/torrents/", s.handleTorrentAction)
-	mux.HandleFunc("/health", s.handleHealth)
+	// API endpoints
+	mux.HandleFunc("/api/torrents", s.handleList)
+	mux.HandleFunc("/api/torrents/", s.handleTorrentAction)
+	mux.HandleFunc("/api/health", s.handleHealth)
+
+	// Static files and UI
+	mux.Handle("/style.css", http.FileServer(http.Dir("./web")))
+	mux.Handle("/app.js", http.FileServer(http.Dir("./web")))
+
+	// Root and fallback
 	mux.HandleFunc("/", s.handleRoot)
 
 	addr := fmt.Sprintf(":%d", s.port)
@@ -74,19 +81,15 @@ func (s *Server) Start() error {
 	return http.ListenAndServe(addr, mux)
 }
 
-// handleRoot returns basic API info
+// handleRoot serves the dashboard or API info
 func (s *Server) handleRoot(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Path != "/" {
 		http.NotFound(w, r)
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{
-		"service":   "rss-curator",
-		"version":   "0.3.0",
-		"endpoints": "/torrents, /torrents/{id}/approve, /torrents/{id}/reject, /health",
-	})
+	// Serve the dashboard HTML
+	http.ServeFile(w, r, "./web/index.html")
 }
 
 // handleList lists torrents by status

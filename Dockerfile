@@ -36,6 +36,9 @@ COPY --from=builder /build/curator /app/curator
 COPY scripts/scheduler.sh /app/scheduler.sh
 COPY scripts/start.sh /app/start.sh
 
+# Copy web assets (HTML, CSS, JS)
+COPY web/ /app/web/
+
 # Create data directory for SQLite database
 RUN mkdir -p /app/data /app/logs
 
