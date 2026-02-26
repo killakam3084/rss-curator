@@ -9,6 +9,7 @@ import (
 	"strings"
 	"text/tabwriter"
 
+	"github.com/iillmaticc/rss-curator/internal/api"
 	"github.com/iillmaticc/rss-curator/internal/client"
 	"github.com/iillmaticc/rss-curator/internal/feed"
 	"github.com/iillmaticc/rss-curator/internal/matcher"
@@ -17,7 +18,7 @@ import (
 )
 
 const (
-	version = "0.1.0"
+	version = "0.3.0"
 )
 
 func main() {
@@ -54,6 +55,8 @@ func main() {
 		cmdReject(store, os.Args[2:])
 	case "review":
 		cmdReview(cfg, store)
+	case "serve":
+		cmdServe(cfg, store)
 	case "test":
 		cmdTest(cfg)
 	case "resume":
@@ -73,7 +76,7 @@ func cmdCheck(cfg models.Config, store *storage.Storage) {
 	fmt.Println("Checking RSS feeds...")
 
 	parser := feed.NewParser()
-	
+
 	// Create matcher with shows config or legacy rules
 	var m *matcher.Matcher
 	if cfg.ShowsConfig != nil {
@@ -87,7 +90,7 @@ func cmdCheck(cfg models.Config, store *storage.Storage) {
 	totalNew := 0
 	for _, feedURL := range cfg.FeedURLs {
 		fmt.Printf("Fetching: %s\n", feedURL)
-		
+
 		items, err := parser.Parse(feedURL)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error parsing feed: %v\n", err)
@@ -142,7 +145,7 @@ func cmdList(store *storage.Storage) {
 	for _, t := range torrents {
 		sizeGB := float64(t.FeedItem.Size) / (1024 * 1024 * 1024)
 		dateStr := t.StagedAt.Format("Jan 02 15:04")
-		
+
 		// Truncate title if too long
 		title := t.FeedItem.Title
 		if len(title) > 60 {
@@ -249,7 +252,7 @@ func cmdReview(cfg models.Config, store *storage.Storage) {
 		fmt.Printf("\n[%d/%d] %s\n", i+1, len(torrents), t.FeedItem.Title)
 		fmt.Printf("      Size: %.2f GB | Match: %s\n", float64(t.FeedItem.Size)/(1024*1024*1024), t.MatchReason)
 		fmt.Printf("      Link: %s\n", t.FeedItem.Link)
-		
+
 		var response string
 		fmt.Print("      (a)pprove / (r)eject / (s)kip: ")
 		fmt.Scanln(&response)
@@ -286,7 +289,7 @@ func cmdTest(cfg models.Config) {
 		fmt.Printf("✗ Failed: %v\n", err)
 	} else {
 		fmt.Println("✓ Connected")
-		
+
 		// Get some info
 		torrents, _ := qb.GetTorrents()
 		fmt.Printf("  Active torrents: %d\n", len(torrents))
@@ -303,7 +306,7 @@ func cmdTest(cfg models.Config) {
 			fmt.Printf("✓ OK (%d items)\n", len(items))
 		}
 	}
-	
+
 	// Show config info
 	if cfg.ShowsConfig != nil {
 		fmt.Printf("\nShows configured: %d\n", len(cfg.ShowsConfig.Shows))
@@ -315,18 +318,18 @@ func cmdTest(cfg models.Config) {
 
 func loadConfig() (models.Config, error) {
 	homeDir, _ := os.UserHomeDir()
-	
+
 	cfg := models.Config{
 		FeedURLs: []string{
 			os.Getenv("RSS_FEED_URL"),
 		},
 		PollInterval: 30,
 		QBittorrent: models.QBConfig{
-			Host:     getEnv("QBITTORRENT_HOST", "http://localhost:8080"),
-			Username: os.Getenv("QBITTORRENT_USER"),
-			Password: os.Getenv("QBITTORRENT_PASS"),
-			Category: getEnv("QBITTORRENT_CATEGORY", "curator"),
-			SavePath: getEnv("QBITTORRENT_SAVEPATH", ""),
+			Host:      getEnv("QBITTORRENT_HOST", "http://localhost:8080"),
+			Username:  os.Getenv("QBITTORRENT_USER"),
+			Password:  os.Getenv("QBITTORRENT_PASS"),
+			Category:  getEnv("QBITTORRENT_CATEGORY", "curator"),
+			SavePath:  getEnv("QBITTORRENT_SAVEPATH", ""),
 			AddPaused: getEnv("QBITTORRENT_ADD_PAUSED", "false") == "true",
 		},
 		MatchRules: models.MatchRule{
@@ -359,26 +362,26 @@ func loadShowsConfig() (*models.ShowsConfig, error) {
 		"shows.json",
 		filepath.Join(os.Getenv("HOME"), ".curator-shows.json"),
 	}
-	
+
 	var data []byte
 	var err error
-	
+
 	for _, path := range paths {
 		data, err = os.ReadFile(path)
 		if err == nil {
 			break
 		}
 	}
-	
+
 	if err != nil {
 		return nil, err
 	}
-	
+
 	var config models.ShowsConfig
 	if err := json.Unmarshal(data, &config); err != nil {
 		return nil, fmt.Errorf("failed to parse shows.json: %w", err)
 	}
-	
+
 	return &config, nil
 }
 
@@ -528,5 +531,30 @@ func cmdPause(cfg models.Config, store *storage.Storage, args []string) {
 		if !found {
 			fmt.Fprintf(os.Stderr, "Torrent %d not found in qBittorrent\n", id)
 		}
+	}
+}
+
+func cmdServe(cfg models.Config, store *storage.Storage) {
+	// Initialize qBittorrent client
+	qb, err := client.New(cfg.QBittorrent)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error connecting to qBittorrent: %v\n", err)
+		os.Exit(1)
+	}
+
+	// Parse API port from environment or use default
+	port := 8081
+	if portStr := os.Getenv("CURATOR_API_PORT"); portStr != "" {
+		if p, err := strconv.Atoi(portStr); err == nil {
+			port = p
+		}
+	}
+
+	// Create and start API server
+	server := api.NewServer(store, qb, port)
+	fmt.Printf("[Serve] Starting API server on port %d\n", port)
+	if err := server.Start(); err != nil {
+		fmt.Fprintf(os.Stderr, "Error starting API server: %v\n", err)
+		os.Exit(1)
 	}
 }

@@ -32,17 +32,21 @@ WORKDIR /app
 # Copy the binary from builder stage
 COPY --from=builder /build/curator /app/curator
 
-# Copy scheduler script
+# Copy scheduler and start scripts
 COPY scripts/scheduler.sh /app/scheduler.sh
+COPY scripts/start.sh /app/start.sh
 
 # Create data directory for SQLite database
 RUN mkdir -p /app/data /app/logs
 
 # Set permissions
-RUN chmod +x /app/curator /app/scheduler.sh
+RUN chmod +x /app/curator /app/scheduler.sh /app/start.sh
 
-# Expose port (if needed for any future features)
-EXPOSE 8080
+# Expose API port
+EXPOSE 8081
 
-# Set entrypoint to scheduler for continuous operation
-ENTRYPOINT ["/app/scheduler.sh"]
+# Default: dual-mode (scheduler + API server)
+# Override with:
+#   docker run ... /app/scheduler.sh         # scheduler only
+#   docker run ... curator serve             # API only
+ENTRYPOINT ["/app/start.sh"]

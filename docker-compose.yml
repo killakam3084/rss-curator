@@ -16,58 +16,67 @@ services:
     
     # Environment variables that can be set here or in .env
     environment:
-      # These can be overridden by .env file
+      # Core configuration
       - RSS_FEED_URL=${RSS_FEED_URL}
       - QBITTORRENT_HOST=${QBITTORRENT_HOST:-http://localhost:8080}
       - QBITTORRENT_USER=${QBITTORRENT_USER}
       - QBITTORRENT_PASS=${QBITTORRENT_PASS}
       - QBITTORRENT_CATEGORY=${QBITTORRENT_CATEGORY:-curator}
+      - STORAGE_PATH=${STORAGE_PATH:-/app/data/curator.db}
+      
+      # Matching configuration (legacy, if not using shows.json)
       - SHOW_NAMES=${SHOW_NAMES}
       - MIN_QUALITY=${MIN_QUALITY:-1080p}
       - PREFERRED_CODEC=${PREFERRED_CODEC:-x265}
       - PREFERRED_GROUPS=${PREFERRED_GROUPS}
       - EXCLUDE_GROUPS=${EXCLUDE_GROUPS}
-      - STORAGE_PATH=${STORAGE_PATH:-/app/data/curator.db}
+      
+      # Scheduler configuration
+      - CHECK_INTERVAL=${CHECK_INTERVAL:-3600}
+      - LOG_FILE=${LOG_FILE:-/app/logs/curator.log}
+      
+      # API server configuration
+      - CURATOR_API_PORT=${CURATOR_API_PORT:-8081}
     
-    # Volume for persistent database storage
+    # Volumes for persistent storage and configuration
     volumes:
       - curator-data:/app/data
+      - ${PWD}/shows.json:/app/shows.json:ro
+      - ${PWD}/logs:/app/logs
     
-    # Restart policy
-    restart: always
+    # Restart policy - keeps both scheduler and API running
+    restart: unless-stopped
     
-    # Optional: Configure to run checks on a schedule
-    # The image entrypoint is already set to scheduler.sh
-    # Adjust CHECK_INTERVAL as needed (in seconds)
-    environment:
-      - CHECK_INTERVAL=3600
+    # Default: runs both scheduler (background) + API server (foreground)
+    # To run scheduler only, override with:
+    #   command: ["/app/scheduler.sh"]
+    # To run API only, override with:
+    #   command: ["curator", "serve"]
 
 volumes:
   curator-data:
     driver: local
 
-# To use this docker-compose file:
+# Usage notes:
 #
-# 1. Create a .env file with your configuration:
-#    cp curator.env.sample .env
-#    vim .env
-#
-# 2. Build the image:
-#    docker-compose build
-#
-# 3. Run the service:
+# 1. Default dual-mode (scheduler checks RSS, API accepts review via HTTP):
 #    docker-compose up -d
 #
-# 4. View logs:
+# 2. Scheduler only (automated checks, manual CLI review):
+#    docker-compose up -d
+#    (then override command: ["/app/scheduler.sh"])
+#
+# 3. API only (manual triggers, HTTP review):
+#    docker-compose up -d
+#    (then override command: ["curator", "serve"])
+#
+# 4. Monitor logs:
 #    docker-compose logs -f
 #
-# 5. Run commands:
-#    docker-compose exec curator /app/curator list
-#    docker-compose exec curator /app/curator check
-#    docker-compose exec curator /app/curator add <url>
+# 5. Review torrents via API:
+#    curl http://localhost:8081/torrents?status=pending
+#    curl -X POST http://localhost:8081/torrents/1/approve
+#    curl -X POST http://localhost:8081/torrents/2/reject
 #
 # 6. Stop:
 #    docker-compose down
-#
-# For persistent data across containers, the curator-data volume is used
-# and mounted at /app/data where the SQLite database is stored.
