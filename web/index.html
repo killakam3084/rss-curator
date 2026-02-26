@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RSS Curator - Torrent Review Dashboard</title>
+    <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🎬 RSS Curator</h1>
+            <p class="subtitle">Torrent Review Dashboard</p>
+        </header>
+
+        <!-- Stats Section -->
+        <div class="stats">
+            <div class="stat-card">
+                <span class="stat-number" id="pendingCount">-</span>
+                <span class="stat-label">Pending</span>
+            </div>
+            <div class="stat-card">
+                <span class="stat-number" id="approvedCount">-</span>
+                <span class="stat-label">Approved</span>
+            </div>
+            <div class="stat-card">
+                <span class="stat-number" id="rejectedCount">-</span>
+                <span class="stat-label">Rejected</span>
+            </div>
+            <div class="stat-card">
+                <span class="stat-number" id="healthStatus">-</span>
+                <span class="stat-label">Health</span>
+            </div>
+        </div>
+
+        <!-- Controls -->
+        <div class="controls">
+            <button class="btn btn-primary" id="refreshBtn">⟳ Refresh</button>
+            <label>
+                <input type="checkbox" id="autoRefresh">
+                Auto-refresh (30s)
+            </label>
+            <span class="last-updated">Loading...</span>
+        </div>
+
+        <!-- Torrents Section -->
+        <div class="torrents-section">
+            <h2>Pending Torrents</h2>
+            <div id="torrents-list" class="torrents-list">
+                <div class="loading">Loading torrents...</div>
+            </div>
+        </div>
+    </div>
+
+    <script src="/app.js"></script>
+</body>
+</html>

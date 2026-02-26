@@ -5,6 +5,44 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0] - 2026-02-26
+
+### Added
+- Web UI dashboard for torrent review and approval workflow
+- HTML/CSS/JavaScript dashboard interface serving on `/`
+- Auto-refresh capability (30-second interval toggle)
+- Real-time torrent list display with approve/reject buttons
+- Stats cards showing pending/approved/rejected torrent counts
+- Manual refresh button for immediate data updates
+- Responsive design supporting mobile and desktop viewports
+- Static file serving from `/style.css` and `/app.js`
+
+### Changed
+- API endpoints now prefixed with `/api/` (e.g., `/api/torrents`, `/api/torrents/{id}/approve`)
+- API server now serves complete web dashboard in addition to REST endpoints
+- Root endpoint (`/`) now serves dashboard HTML instead of API info
+
+## [0.3.1] - 2026-02-25
+
+### Fixed
+- Graceful handling of qBittorrent unavailability - API server now starts even if qBittorrent is unreachable
+- Container no longer crashes if qBittorrent is not available on startup
+
+## [0.3.0] - 2026-02-25
+
+### Added
+- REST HTTP API for torrent review operations
+- GET `/api/torrents` - list torrents by status
+- POST `/api/torrents/{id}/approve` - approve a torrent and add to qBittorrent
+- POST `/api/torrents/{id}/reject` - reject a torrent
+- GET `/api/health` - health check endpoint
+- Dual-mode execution: scheduler running in background + API server in foreground
+- `start.sh` orchestration script for dual-mode operation
+
+### Changed
+- Application now runs both scheduler and API server simultaneously
+- CURATOR_API_PORT environment variable controls API server port (default: 8081)
+
 ## [0.2.0] - 2026-02-25
 
 ### Added
