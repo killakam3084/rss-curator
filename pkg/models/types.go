@@ -10,7 +10,7 @@ type FeedItem struct {
 	PubDate     time.Time `json:"pub_date"`
 	Size        int64     `json:"size"`
 	Description string    `json:"description"`
-	
+
 	// Parsed metadata
 	ShowName     string `json:"show_name"`
 	Season       int    `json:"season"`
@@ -29,6 +29,16 @@ type StagedTorrent struct {
 	StagedAt    time.Time  `json:"staged_at"`
 	Status      string     `json:"status"`
 	ApprovedAt  *time.Time `json:"approved_at,omitempty"`
+}
+
+// Activity represents an action taken on a torrent (approve/reject)
+type Activity struct {
+	ID           int       `json:"id"`
+	TorrentID    int       `json:"torrent_id"`
+	TorrentTitle string    `json:"torrent_title"`
+	Action       string    `json:"action"` // "approve" or "reject"
+	ActionAt     time.Time `json:"action_at"`
+	MatchReason  string    `json:"match_reason"`
 }
 
 // ShowRule represents rules for a specific show
@@ -65,11 +75,11 @@ type MatchRule struct {
 
 // Config represents application configuration
 type Config struct {
-	FeedURLs     []string     `yaml:"feed_urls"`
-	PollInterval int          `yaml:"poll_interval"`
-	QBittorrent  QBConfig     `yaml:"qbittorrent"`
-	MatchRules   MatchRule    `yaml:"match_rules"`
-	StoragePath  string       `yaml:"storage_path"`
+	FeedURLs     []string  `yaml:"feed_urls"`
+	PollInterval int       `yaml:"poll_interval"`
+	QBittorrent  QBConfig  `yaml:"qbittorrent"`
+	MatchRules   MatchRule `yaml:"match_rules"`
+	StoragePath  string    `yaml:"storage_path"`
 	ShowsConfig  *ShowsConfig
 }
 

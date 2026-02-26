@@ -38,100 +38,129 @@
                 </div>
             </header>
 
-            <main class="main">
-                <div class="controls">
-                    <div class="filter-tabs">
-                        <button 
-                            v-for="tab in tabs" 
-                            :key="tab"
-                            @click="activeTab = tab"
-                            :class="['tab', { active: activeTab === tab }]"
-                        >
-                            {{ tab }}
-                        </button>
-                    </div>
-                    <div v-if="selectedCount > 0" class="bulk-actions">
-                        <span class="selection-info">{{ selectedCount }} selected</span>
-                        <button 
-                            @click="bulkApprove" 
-                            class="btn btn-success"
-                            :disabled="bulkLoading"
-                        >
-                            <span v-if="bulkLoading" class="spinner"></span>
-                            {{ bulkLoading ? 'Approving...' : 'Approve Selected' }}
-                        </button>
-                        <button 
-                            @click="bulkReject" 
-                            class="btn btn-danger"
-                            :disabled="bulkLoading"
-                        >
-                            <span v-if="bulkLoading" class="spinner"></span>
-                            {{ bulkLoading ? 'Rejecting...' : 'Reject Selected' }}
-                        </button>
-                    </div>
-                </div>
-
-                <div v-if="loading" class="loading">
-                    <p>Loading torrents...</p>
-                </div>
-
-                <div v-else-if="displayedTorrents.length === 0" class="empty-state">
-                    <p>No {{ activeTab }} torrents</p>
-                </div>
-
-                <div v-else class="torrents-grid">
-                    <div 
-                        v-for="torrent in displayedTorrents" 
-                        :key="torrent.id"
-                        class="torrent-card"
-                    >
-                        <div class="card-header">
-                            <input 
-                                v-if="activeTab === 'pending'"
-                                type="checkbox" 
-                                :checked="isSelected(torrent.id)"
-                                @change="toggleSelection(torrent.id)"
-                                class="checkbox"
-                            >
-                            <span class="status-badge" :class="`status-${torrent.status}`">
-                                {{ torrent.status }}
-                            </span>
-                        </div>
-                        
-                        <h3 class="torrent-title">{{ torrent.title }}</h3>
-                        
-                        <div class="torrent-details">
-                            <span class="detail-item">
-                                <span class="label">Size:</span>
-                                <span class="value">{{ formatSize(torrent.size) }}</span>
-                            </span>
-                            <span class="detail-item">
-                                <span class="label">Match:</span>
-                                <span class="value">{{ torrent.match_reason }}</span>
-                            </span>
-                        </div>
-                        
-                        <div v-if="activeTab === 'pending'" class="card-actions">
+            <div class="layout">
+                <main class="main">
+                    <div class="controls">
+                        <div class="filter-tabs">
                             <button 
-                                @click="approveTorrent(torrent.id)" 
+                                v-for="tab in tabs" 
+                                :key="tab"
+                                @click="activeTab = tab"
+                                :class="['tab', { active: activeTab === tab }]"
+                            >
+                                {{ tab }}
+                            </button>
+                        </div>
+                        <div v-if="selectedCount > 0" class="bulk-actions">
+                            <span class="selection-info">{{ selectedCount }} selected</span>
+                            <button 
+                                @click="bulkApprove" 
                                 class="btn btn-success"
-                                :disabled="operatingIds.has(torrent.id)"
+                                :disabled="bulkLoading"
                             >
-                                <span v-if="operatingIds.has(torrent.id)" class="spinner"></span>
-                                {{ operatingIds.has(torrent.id) ? '' : 'Approve' }}
+                                <span v-if="bulkLoading" class="spinner"></span>
+                                {{ bulkLoading ? 'Approving...' : 'Approve Selected' }}
                             </button>
                             <button 
-                                @click="rejectTorrent(torrent.id)" 
+                                @click="bulkReject" 
                                 class="btn btn-danger"
-                                :disabled="operatingIds.has(torrent.id)"
+                                :disabled="bulkLoading"
                             >
-                                <span v-if="operatingIds.has(torrent.id)" class="spinner"></span>
-                                {{ operatingIds.has(torrent.id) ? '' : 'Reject' }}
+                                <span v-if="bulkLoading" class="spinner"></span>
+                                {{ bulkLoading ? 'Rejecting...' : 'Reject Selected' }}
                             </button>
                         </div>
                     </div>
-                </div>
-            </main>
+
+                    <div v-if="loading" class="loading">
+                        <p>Loading torrents...</p>
+                    </div>
+
+                    <div v-else-if="displayedTorrents.length === 0" class="empty-state">
+                        <p>No {{ activeTab }} torrents</p>
+                    </div>
+
+                    <div v-else class="torrents-grid">
+                        <div 
+                            v-for="torrent in displayedTorrents" 
+                            :key="torrent.id"
+                            class="torrent-card"
+                        >
+                            <div class="card-header">
+                                <input 
+                                    v-if="activeTab === 'pending'"
+                                    type="checkbox" 
+                                    :checked="isSelected(torrent.id)"
+                                    @change="toggleSelection(torrent.id)"
+                                    class="checkbox"
+                                >
+                                <span class="status-badge" :class="`status-${torrent.status}`">
+                                    {{ torrent.status }}
+                                </span>
+                            </div>
+                            
+                            <h3 class="torrent-title">{{ torrent.title }}</h3>
+                            
+                            <div class="torrent-details">
+                                <span class="detail-item">
+                                    <span class="label">Size:</span>
+                                    <span class="value">{{ formatSize(torrent.size) }}</span>
+                                </span>
+                                <span class="detail-item">
+                                    <span class="label">Match:</span>
+                                    <span class="value">{{ torrent.match_reason }}</span>
+                                </span>
+                            </div>
+                            
+                            <div v-if="activeTab === 'pending'" class="card-actions">
+                                <button 
+                                    @click="approveTorrent(torrent.id)" 
+                                    class="btn btn-success"
+                                    :disabled="operatingIds.has(torrent.id)"
+                                >
+                                    <span v-if="operatingIds.has(torrent.id)" class="spinner"></span>
+                                    {{ operatingIds.has(torrent.id) ? '' : 'Approve' }}
+                                </button>
+                                <button 
+                                    @click="rejectTorrent(torrent.id)" 
+                                    class="btn btn-danger"
+                                    :disabled="operatingIds.has(torrent.id)"
+                                >
+                                    <span v-if="operatingIds.has(torrent.id)" class="spinner"></span>
+                                    {{ operatingIds.has(torrent.id) ? '' : 'Reject' }}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </main>
+
+                <aside class="sidebar">
+                    <div class="activity-log">
+                        <h2 class="activity-title">📋 Activity Log</h2>
+                        <div v-if="activities.length === 0" class="empty-activity">
+                            <p>No activity yet</p>
+                        </div>
+                        <div v-else class="activity-list">
+                            <div 
+                                v-for="activity in activities" 
+                                :key="activity.id"
+                                :class="['activity-item', `activity-${activity.action}`]"
+                            >
+                                <div class="activity-action">
+                                    <span class="action-badge" :class="`action-${activity.action}`">
+                                        {{ activity.action }}
+                                    </span>
+                                </div>
+                                <div class="activity-content">
+                                    <p class="activity-title">{{ activity.torrent_title }}</p>
+                                    <p class="activity-reason">{{ activity.match_reason }}</p>
+                                    <p class="activity-time">{{ activity.action_at }}</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </aside>
+            </div>
         </div>
     </div>
 
