@@ -11,6 +11,63 @@ body {
     padding: 20px;
 }
 
+/* Toast Notifications */
+.toast-container {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    z-index: 1000;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    max-width: 400px;
+}
+
+.toast {
+    padding: 12px 16px;
+    border-radius: 8px;
+    font-weight: 500;
+    animation: slideInRight 0.3s ease-out, slideOutRight 0.3s ease-out 4.7s forwards;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+}
+
+.toast-success {
+    background: #48bb78;
+    color: white;
+}
+
+.toast-error {
+    background: #f56565;
+    color: white;
+}
+
+.toast-info {
+    background: #4299e1;
+    color: white;
+}
+
+@keyframes slideInRight {
+    from {
+        transform: translateX(100%);
+        opacity: 0;
+    }
+    to {
+        transform: translateX(0);
+        opacity: 1;
+    }
+}
+
+@keyframes slideOutRight {
+    from {
+        transform: translateX(0);
+        opacity: 1;
+    }
+    to {
+        transform: translateX(100%);
+        opacity: 0;
+    }
+}
+
 .container {
     max-width: 1200px;
     margin: 0 auto;
@@ -342,4 +399,22 @@ input[type="checkbox"] {
 
 .refreshing {
     animation: spin 1s linear infinite;
+}
+
+/* Loading Spinner */
+.spinner {
+    display: inline-block;
+    width: 14px;
+    height: 14px;
+    border: 2px solid rgba(255, 255, 255, 0.3);
+    border-radius: 50%;
+    border-top-color: white;
+    animation: spin 0.8s linear infinite;
+    margin-right: 6px;
+}
+
+/* Disabled button state */
+button:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
 }

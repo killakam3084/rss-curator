@@ -4,9 +4,13 @@ const app = createApp({
     setup() {
         const torrents = ref([]);
         const loading = ref(false);
+        const bulkLoading = ref(false);
         const activeTab = ref('pending');
         const selectedIds = ref(new Set());
+        const operatingIds = ref(new Set());
+        const toasts = ref([]);
         const tabs = ['pending', 'approved', 'rejected'];
+        let toastCounter = 0;
 
         // Computed properties
         const pendingCount = computed(() => 
@@ -32,55 +36,123 @@ const app = createApp({
                 torrents.value = data.torrents || [];
             } catch (error) {
                 console.error('Failed to fetch torrents:', error);
+                showToast('Failed to load torrents', 'error');
             } finally {
                 loading.value = false;
             }
         };
 
+        const showToast = (message, type = 'info', duration = 5000) => {
+            const id = toastCounter++;
+            const toast = { id, message, type };
+            toasts.value.push(toast);
+            setTimeout(() => {
+                toasts.value = toasts.value.filter(t => t.id !== id);
+            }, duration);
+        };
+
         const approveTorrent = async (id) => {
+            operatingIds.value.add(id);
             try {
                 const response = await fetch(`/api/torrents/${id}/approve`, {
                     method: 'POST'
                 });
                 if (response.ok) {
+                    showToast('Torrent approved!', 'success');
                     await fetchTorrents('pending');
                     await fetchTorrents('approved');
                 } else {
-                    alert('Failed to approve torrent');
+                    showToast('Failed to approve torrent', 'error');
                 }
             } catch (error) {
                 console.error('Error approving torrent:', error);
+                showToast('Error approving torrent', 'error');
+            } finally {
+                operatingIds.value.delete(id);
             }
         };
 
         const rejectTorrent = async (id) => {
+            operatingIds.value.add(id);
             try {
                 const response = await fetch(`/api/torrents/${id}/reject`, {
                     method: 'POST'
                 });
                 if (response.ok) {
+                    showToast('Torrent rejected!', 'success');
                     await fetchTorrents('pending');
                     await fetchTorrents('rejected');
                 } else {
-                    alert('Failed to reject torrent');
+                    showToast('Failed to reject torrent', 'error');
                 }
             } catch (error) {
                 console.error('Error rejecting torrent:', error);
+                showToast('Error rejecting torrent', 'error');
+            } finally {
+                operatingIds.value.delete(id);
             }
         };
 
         const bulkApprove = async () => {
-            for (const id of selectedIds.value) {
-                await approveTorrent(id);
+            if (selectedIds.value.size === 0) return;
+            
+            bulkLoading.value = true;
+            const ids = Array.from(selectedIds.value);
+            let successCount = 0;
+            
+            try {
+                for (const id of ids) {
+                    const response = await fetch(`/api/torrents/${id}/approve`, {
+                        method: 'POST'
+                    });
+                    if (response.ok) {
+                        successCount++;
+                    }
+                }
+                
+                if (successCount > 0) {
+                    showToast(`Approved ${successCount}/${ids.length} torrents`, 'success');
+                    selectedIds.value.clear();
+                    await fetchTorrents('pending');
+                    await fetchTorrents('approved');
+                }
+            } catch (error) {
+                console.error('Error in bulk approve:', error);
+                showToast('Error approving torrents', 'error');
+            } finally {
+                bulkLoading.value = false;
             }
-            selectedIds.value.clear();
         };
 
         const bulkReject = async () => {
-            for (const id of selectedIds.value) {
-                await rejectTorrent(id);
+            if (selectedIds.value.size === 0) return;
+            
+            bulkLoading.value = true;
+            const ids = Array.from(selectedIds.value);
+            let successCount = 0;
+            
+            try {
+                for (const id of ids) {
+                    const response = await fetch(`/api/torrents/${id}/reject`, {
+                        method: 'POST'
+                    });
+                    if (response.ok) {
+                        successCount++;
+                    }
+                }
+                
+                if (successCount > 0) {
+                    showToast(`Rejected ${successCount}/${ids.length} torrents`, 'success');
+                    selectedIds.value.clear();
+                    await fetchTorrents('pending');
+                    await fetchTorrents('rejected');
+                }
+            } catch (error) {
+                console.error('Error in bulk reject:', error);
+                showToast('Error rejecting torrents', 'error');
+            } finally {
+                bulkLoading.value = false;
             }
-            selectedIds.value.clear();
         };
 
         const toggleSelection = (id) => {
@@ -116,8 +188,11 @@ const app = createApp({
         return {
             torrents,
             loading,
+            bulkLoading,
             activeTab,
             selectedIds,
+            operatingIds,
+            toasts,
             tabs,
             pendingCount,
             approvedCount,
@@ -131,7 +206,8 @@ const app = createApp({
             bulkReject,
             toggleSelection,
             isSelected,
-            formatSize
+            formatSize,
+            showToast
         };
     }
 });
