@@ -19,6 +19,8 @@ type Client struct {
 
 // New creates a new qBittorrent client
 func New(cfg models.QBConfig) (*Client, error) {
+	fmt.Printf("[QBittorrent] Initializing client - Host: %s, Username: %s\n", cfg.Host, cfg.Username)
+
 	qbClient := qbt.NewClient(qbt.Config{
 		Host:     cfg.Host,
 		Username: cfg.Username,
@@ -29,11 +31,14 @@ func New(cfg models.QBConfig) (*Client, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
+	fmt.Printf("[QBittorrent] Testing connection to %s...\n", cfg.Host)
 	_, err := qbClient.GetTorrentsCtx(ctx, qbt.TorrentFilterOptions{})
 	if err != nil {
-		return nil, fmt.Errorf("failed to connect to qBittorrent: %w", err)
+		fmt.Printf("[QBittorrent] Connection failed: %v\n", err)
+		return nil, fmt.Errorf("failed to connect to qBittorrent at %s: %w", cfg.Host, err)
 	}
 
+	fmt.Printf("[QBittorrent] Connection successful to %s\n", cfg.Host)
 	return &Client{
 		qb:        qbClient,
 		category:  cfg.Category,
@@ -54,7 +59,7 @@ func (c *Client) AddTorrent(url string, options map[string]string) error {
 	if c.savePath != "" {
 		opts["savepath"] = c.savePath
 	}
-	
+
 	// Set paused state based on client config (can be overridden by options)
 	if c.addPaused {
 		opts["paused"] = "true"
@@ -67,11 +72,14 @@ func (c *Client) AddTorrent(url string, options map[string]string) error {
 		opts[k] = v
 	}
 
+	fmt.Printf("[QBittorrent] Adding torrent from URL: %s with options: %v\n", url, opts)
 	err := c.qb.AddTorrentFromUrlCtx(ctx, url, opts)
 	if err != nil {
+		fmt.Printf("[QBittorrent] Failed to add torrent: %v\n", err)
 		return fmt.Errorf("failed to add torrent: %w", err)
 	}
 
+	fmt.Printf("[QBittorrent] Successfully added torrent from URL: %s\n", url)
 	return nil
 }
 
