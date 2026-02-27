@@ -332,7 +332,7 @@ func loadConfig() (models.Config, error) {
 			Password:  os.Getenv("QBITTORRENT_PASS"),
 			Category:  getEnv("QBITTORRENT_CATEGORY", "curator"),
 			SavePath:  getEnv("QBITTORRENT_SAVEPATH", ""),
-			AddPaused: getEnv("QBITTORRENT_ADD_PAUSED", "false") == "true",
+			AddPaused: getEnv("QBITTORRENT_ADD_PAUSED", "true") == "true",
 		},
 		MatchRules: models.MatchRule{
 			ShowNames:       strings.Split(os.Getenv("SHOW_NAMES"), ","),
@@ -343,6 +343,27 @@ func loadConfig() (models.Config, error) {
 		},
 		StoragePath: getEnv("STORAGE_PATH", filepath.Join(homeDir, ".curator.db")),
 	}
+
+	// Log all configured options at startup
+	fmt.Println("\n========== Configuration Loaded ==========")
+	fmt.Printf("[Config] RSS_FEED_URL: %s\n", cfg.FeedURLs[0])
+	fmt.Printf("[Config] POLL_INTERVAL: %d seconds\n", cfg.PollInterval)
+	fmt.Println("\n--- QBittorrent Settings ---")
+	fmt.Printf("[Config] QBITTORRENT_HOST: %s\n", cfg.QBittorrent.Host)
+	fmt.Printf("[Config] QBITTORRENT_USER: %s\n", cfg.QBittorrent.Username)
+	fmt.Printf("[Config] QBITTORRENT_CATEGORY: %s\n", cfg.QBittorrent.Category)
+	fmt.Printf("[Config] QBITTORRENT_SAVEPATH: %s\n", cfg.QBittorrent.SavePath)
+	fmt.Printf("[Config] QBITTORRENT_ADD_PAUSED (env): %s\n", os.Getenv("QBITTORRENT_ADD_PAUSED"))
+	fmt.Printf("[Config] QBITTORRENT_ADD_PAUSED (parsed): %v\n", cfg.QBittorrent.AddPaused)
+	fmt.Println("\n--- Match Rules ---")
+	fmt.Printf("[Config] SHOW_NAMES: %v\n", cfg.MatchRules.ShowNames)
+	fmt.Printf("[Config] MIN_QUALITY: %s\n", cfg.MatchRules.MinQuality)
+	fmt.Printf("[Config] PREFERRED_CODEC: %s\n", cfg.MatchRules.PreferredCodec)
+	fmt.Printf("[Config] EXCLUDE_GROUPS: %v\n", cfg.MatchRules.ExcludeGroups)
+	fmt.Printf("[Config] PREFERRED_GROUPS: %v\n", cfg.MatchRules.PreferredGroups)
+	fmt.Println("\n--- Storage ---")
+	fmt.Printf("[Config] STORAGE_PATH: %s\n", cfg.StoragePath)
+	fmt.Println("==========================================\n")
 
 	// Validate required fields
 	if cfg.FeedURLs[0] == "" {

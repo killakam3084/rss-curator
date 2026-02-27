@@ -35,6 +35,11 @@
       "min_quality": "2160p"
     },
     {
+      "name": "Bridgerton",
+      "min_quality": "1080p",
+      "preferred_codec": "x265"
+    },
+    {
       "name": "Common Side Effects",
       "min_quality": "1080p"
     },
@@ -230,7 +235,6 @@
   "defaults": {
     "min_quality": "1080p",
     "preferred_codec": "x265",
-    "preferred_groups": ["NTb", "FLUX", "HMAX", "CMRG", "ATVP"],
-    "exclude_groups": ["YIFY", "RARBG", "MeGusta"]
+    "preferred_groups": ["NTb", "FLUX", "HMAX", "CMRG", "ATVP"]
   }
 }

@@ -16,6 +16,11 @@
       "min_quality": "1080p"
     },
     {
+      "name": "Bridgerton",
+      "min_quality": "1080p",
+      "preferred_codec": "x265"
+    },
+    {
       "name": "House of the Dragon",
       "min_quality": "1080p",
       "preferred_codec": "x265",
