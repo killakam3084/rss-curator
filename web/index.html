@@ -130,6 +130,18 @@
                                     {{ operatingIds.has(torrent.id) ? '' : 'Reject' }}
                                 </button>
                             </div>
+                            
+                            <div v-if="activeTab === 'approved'" class="card-actions">
+                                <button 
+                                    @click="retryQBittorrent(torrent.id)" 
+                                    class="btn btn-warning"
+                                    :disabled="operatingIds.has(torrent.id)"
+                                    title="Manually retry adding this torrent to qBittorrent"
+                                >
+                                    <span v-if="operatingIds.has(torrent.id)" class="spinner"></span>
+                                    {{ operatingIds.has(torrent.id) ? '' : 'Retry qBittorrent' }}
+                                </button>
+                            </div>
                         </div>
                     </div>
                 </main>

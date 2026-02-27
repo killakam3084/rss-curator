@@ -1,11 +1,13 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/iillmaticc/rss-curator/internal/client"
 	"github.com/iillmaticc/rss-curator/internal/storage"
@@ -198,6 +200,8 @@ func (s *Server) handleTorrentAction(w http.ResponseWriter, r *http.Request) {
 		s.handleApprove(w, r, id)
 	case "reject":
 		s.handleReject(w, r, id)
+	case "retry-qb":
+		s.handleRetryQBittorrent(w, r, id)
 	default:
 		s.logger.Warn("unknown torrent action", zap.Int("id", id), zap.String("action", action))
 		w.Header().Set("Content-Type", "application/json")
@@ -261,7 +265,10 @@ func (s *Server) handleApprove(w http.ResponseWriter, r *http.Request, id int) {
 		}
 
 		s.logger.Info("attempting to add torrent to qBittorrent", zap.Int("torrent_id", id), zap.String("title", torrent.FeedItem.Title), zap.String("link", torrent.FeedItem.Link))
-		if err := s.client.AddTorrent(torrent.FeedItem.Link, nil); err != nil {
+		opts := map[string]string{
+			"title": torrent.FeedItem.Title,
+		}
+		if err := s.client.AddTorrent(torrent.FeedItem.Link, opts); err != nil {
 			s.logger.Error("failed to add torrent to qBittorrent (non-blocking)", zap.Int("id", id), zap.String("title", torrent.FeedItem.Title), zap.String("link", torrent.FeedItem.Link), zap.Error(err))
 			// Log this failure but don't change the approved status - could be a temporary network issue
 			return
@@ -330,6 +337,73 @@ func (s *Server) handleReject(w http.ResponseWriter, r *http.Request, id int) {
 	json.NewEncoder(w).Encode(RejectResponse{
 		ID:     id,
 		Status: "rejected",
+	})
+}
+
+// handleRetryQBittorrent manually retries adding an approved torrent to qBittorrent
+func (s *Server) handleRetryQBittorrent(w http.ResponseWriter, r *http.Request, id int) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	if s.client == nil {
+		s.logger.Warn("qBittorrent client unavailable for retry", zap.Int("id", id))
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusServiceUnavailable)
+		json.NewEncoder(w).Encode(ErrorResponse{Error: "qBittorrent client is not available"})
+		return
+	}
+
+	torrent, err := s.store.Get(id)
+	if err != nil {
+		s.logger.Error("failed to retrieve torrent", zap.Int("id", id), zap.Error(err))
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(ErrorResponse{Error: fmt.Sprintf("Error retrieving torrent: %v", err)})
+		return
+	}
+
+	if torrent == nil {
+		s.logger.Warn("torrent not found", zap.Int("id", id))
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusNotFound)
+		json.NewEncoder(w).Encode(ErrorResponse{Error: "Torrent not found"})
+		return
+	}
+
+	if torrent.Status != "approved" {
+		s.logger.Warn("can only retry approved torrents", zap.Int("id", id), zap.String("status", torrent.Status))
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(ErrorResponse{Error: fmt.Sprintf("Can only retry approved torrents, this one is %s", torrent.Status)})
+		return
+	}
+
+	s.logger.Info("manually retrying torrent add to qBittorrent", zap.Int("id", id), zap.String("title", torrent.FeedItem.Title), zap.String("link", torrent.FeedItem.Link))
+
+	// Use blocking retry with context timeout
+	ctx, cancel := getContextWithTimeout(r.Context())
+	defer cancel()
+
+	opts := map[string]string{
+		"title": torrent.FeedItem.Title,
+	}
+	err = s.client.RetryAddTorrent(ctx, torrent.FeedItem.Link, opts)
+	if err != nil {
+		s.logger.Error("retry failed to add torrent to qBittorrent", zap.Int("id", id), zap.String("title", torrent.FeedItem.Title), zap.String("link", torrent.FeedItem.Link), zap.Error(err))
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(ErrorResponse{Error: fmt.Sprintf("Failed to add to qBittorrent: %v", err)})
+		return
+	}
+
+	s.logger.Info("torrent successfully added to qBittorrent via retry", zap.Int("id", id), zap.String("title", torrent.FeedItem.Title))
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"id":     id,
+		"status": "retry_successful",
+		"title":  torrent.FeedItem.Title,
 	})
 }
 
@@ -441,4 +515,9 @@ func (s *Server) handleStats(w http.ResponseWriter, r *http.Request) {
 		Approved: approvedCount,
 		Rejected: rejectedCount,
 	})
+}
+
+// getContextWithTimeout wraps a context with a 30 second timeout
+func getContextWithTimeout(baseCtx context.Context) (context.Context, context.CancelFunc) {
+	return context.WithTimeout(baseCtx, 30*time.Second)
 }
