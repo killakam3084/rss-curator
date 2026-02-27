@@ -5,6 +5,43 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.1] - 2026-02-26
+
+### Fixed
+- Header stats (Pending/Approved/Rejected) now update correctly after operations
+- Bulk operations now refresh all torrent statuses instead of just active tab
+- Auto-refresh now fetches all statuses for accurate count synchronization
+
+### Added
+- GET `/api/stats` endpoint returning approved/rejected counts from activity log
+- Historical stats sourced from audit trail for accurate reporting
+
+### Changed
+- Frontend `fetchAllTorrents()` method fetches and merges all three statuses in parallel
+- All approve/reject/bulk operations use unified data fetch strategy
+- Approved/Rejected counts now sourced from activity_log for audit trail accuracy
+
+## [0.6.0] - 2026-02-26
+
+### Added
+- Activity log system with SQLite persistence for audit trail
+- Activity struct data model with ID, TorrentID, TorrentTitle, Action, ActionAt, MatchReason
+- `activity_log` SQLite table with proper schema and indexes
+- Storage layer methods: LogActivity(), GetActivity(), GetActivityCount()
+- GET `/api/activity` endpoint with limit/offset pagination and action filtering
+- Activity sidebar UI component displaying recent activities
+- Color-coded action badges (green for approve, red for reject)
+- Automatic logging on torrent approve/reject operations
+- Responsive layout with 2-column grid (main content + sidebar)
+- Activity display includes torrent title, match reason, and timestamp
+- Auto-refresh of activity log every 30 seconds alongside torrents
+
+### Improved
+- UI layout now features activity log sidebar separate from main torrent list
+- Better visual organization with negative space and padding
+- Bootstrap-ish button styling with proper active/disabled states
+- Cleaner torrent card presentation in organized grid
+
 ## [0.5.1] - 2026-02-26
 
 ### Added
