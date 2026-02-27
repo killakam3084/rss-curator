@@ -131,6 +131,20 @@ func (c *Client) AddTorrent(url string, options map[string]string) error {
 // RetryAddTorrent attempts to add a torrent with exponential backoff retry logic
 // This is designed for manual retries from the UI when initial add fails
 func (c *Client) RetryAddTorrent(ctx context.Context, url string, opts map[string]string) error {
+	// Extract title from options for URL transformation
+	title := ""
+	if opts != nil {
+		title = opts["title"]
+	}
+
+	// Transform info page URLs to actual torrent download URLs
+	originalURL := url
+	url = transformTorrentURL(url, title)
+	if url != originalURL {
+		fmt.Printf("[QBittorrent] Retry: Transformed URL from: %s\n", originalURL)
+		fmt.Printf("[QBittorrent] Retry: Transformed URL to: %s\n", url)
+	}
+
 	var lastErr error
 	delayMs := c.retryDelayMs
 
@@ -151,6 +165,7 @@ func (c *Client) RetryAddTorrent(ctx context.Context, url string, opts map[strin
 			}
 		}
 
+		fmt.Printf("[QBittorrent] Retry attempt %d: Adding torrent from URL: %s\n", attempt+1, url)
 		err := c.qb.AddTorrentFromUrlCtx(ctx, url, opts)
 		if err == nil {
 			if attempt > 0 {
@@ -160,7 +175,7 @@ func (c *Client) RetryAddTorrent(ctx context.Context, url string, opts map[strin
 		}
 
 		lastErr = err
-		fmt.Printf("[QBittorrent] Attempt %d failed: %v\n", attempt+1, err)
+		fmt.Printf("[QBittorrent] Retry attempt %d failed: %v\n", attempt+1, err)
 	}
 
 	return lastErr
