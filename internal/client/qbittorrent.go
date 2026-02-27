@@ -3,7 +3,6 @@ package client
 import (
 	"context"
 	"fmt"
-	"net/url"
 	"strings"
 	"time"
 
@@ -63,20 +62,6 @@ func (c *Client) AddTorrent(url string, options map[string]string) error {
 		return fmt.Errorf("torrent URL cannot be empty")
 	}
 
-	// Extract title from options if provided (for URL transformation)
-	title := ""
-	if options != nil {
-		title = options["title"]
-	}
-
-	// Transform info page URLs to actual torrent download URLs
-	originalURL := url
-	url = transformTorrentURL(url, title)
-	if url != originalURL {
-		fmt.Printf("[QBittorrent] Transformed URL from: %s\n", originalURL)
-		fmt.Printf("[QBittorrent] Transformed URL to: %s\n", url)
-	}
-
 	// Log what we received
 	fmt.Printf("[QBittorrent] Received URL to add: %s\n", url)
 	fmt.Printf("[QBittorrent] URL scheme: %v (is magnet: %v, is http: %v)\n",
@@ -116,6 +101,12 @@ func (c *Client) AddTorrent(url string, options map[string]string) error {
 		fmt.Printf("[QBittorrent] Failed to add torrent: error_type=%T\n", err)
 		fmt.Printf("[QBittorrent] Error: %v\n", extractErrorDetails(err))
 		fmt.Printf("[QBittorrent] Raw error: %+v\n", err)
+		fmt.Printf("[QBittorrent] DEBUG: If error mentions 'bencoded', the URL may not be serving a valid .torrent file\n")
+		fmt.Printf("[QBittorrent] DEBUG: Possible causes:\n")
+		fmt.Printf("[QBittorrent]   - Wrong URL format\n")
+		fmt.Printf("[QBittorrent]   - Missing authentication cookies (site requires login)\n")
+		fmt.Printf("[QBittorrent]   - Rate limiting or blocked request\n")
+		fmt.Printf("[QBittorrent]   - Site is serving redirect/error page instead of .torrent file\n")
 		return fmt.Errorf("failed to add torrent: %w", err)
 	}
 
@@ -133,19 +124,7 @@ func (c *Client) AddTorrent(url string, options map[string]string) error {
 // RetryAddTorrent attempts to add a torrent with exponential backoff retry logic
 // This is designed for manual retries from the UI when initial add fails
 func (c *Client) RetryAddTorrent(ctx context.Context, url string, opts map[string]string) error {
-	// Extract title from options for URL transformation
-	title := ""
-	if opts != nil {
-		title = opts["title"]
-	}
-
-	// Transform info page URLs to actual torrent download URLs
-	originalURL := url
-	url = transformTorrentURL(url, title)
-	if url != originalURL {
-		fmt.Printf("[QBittorrent] Retry: Transformed URL from: %s\n", originalURL)
-		fmt.Printf("[QBittorrent] Retry: Transformed URL to: %s\n", url)
-	}
+	fmt.Printf("[QBittorrent] Retry: Adding torrent from URL: %s\n", url)
 
 	var lastErr error
 	delayMs := c.retryDelayMs
@@ -178,51 +157,15 @@ func (c *Client) RetryAddTorrent(ctx context.Context, url string, opts map[strin
 
 		lastErr = err
 		fmt.Printf("[QBittorrent] Retry attempt %d failed: %s\n", attempt+1, extractErrorDetails(err))
+		fmt.Printf("[QBittorrent] NOTE: If error is 'bencoded string', the URL may be serving HTML instead of .torrent file\n")
+		fmt.Printf("[QBittorrent] This typically means: wrong URL format, site requires authentication, or rate limiting\n")
+		fmt.Printf("[QBittorrent] SOLUTION: Ensure qBittorrent has authentication cookies for restricted sites\n")
 	}
 
 	return lastErr
 }
 
-// Helper functions for URL validation and transformation
-
-// transformTorrentURL converts info page links to actual .torrent download URLs
-// Example: https://iptorrents.com/t/7228493 → https://iptorrents.com/download.php/7228493/{title}.torrent
-// Takes optional title parameter to construct proper .torrent filename
-func transformTorrentURL(url_str, title string) string {
-	// IPTorrents: https://iptorrents.com/t/7228493 -> https://iptorrents.com/download.php/7228493/{filename}.torrent
-	if strings.Contains(url_str, "iptorrents.com/t/") {
-		// Extract the torrent ID from /t/{id}
-		parts := strings.Split(url_str, "/t/")
-		if len(parts) == 2 {
-			torrentID := parts[1]
-			// Clean up torrent ID (remove trailing slashes, query params, fragments)
-			torrentID = strings.TrimRight(torrentID, "/")
-			if idx := strings.Index(torrentID, "?"); idx > -1 {
-				torrentID = torrentID[:idx]
-			}
-			if idx := strings.Index(torrentID, "#"); idx > -1 {
-				torrentID = torrentID[:idx]
-			}
-
-			// Build filename from title if provided, otherwise use generic name
-			filename := "torrent.torrent"
-			if title != "" {
-				// Clean and encode title for use as filename
-				cleanTitle := strings.TrimSpace(title)
-				// URL encode the title (spaces become %20, etc.)
-				// Use PathEscape for proper path encoding (not QueryEscape which uses +)
-				cleanTitle = url.PathEscape(cleanTitle)
-				filename = cleanTitle + ".torrent"
-			}
-
-			return "https://iptorrents.com/download.php/" + torrentID + "/" + filename
-		}
-	}
-
-	// Add more torrent site transformations here as needed
-	// For now, return the URL unchanged if no transformation matches
-	return url_str
-}
+// Helper functions for URL validation
 
 func isMagnetLink(url string) bool {
 	return strings.HasPrefix(url, "magnet:")
@@ -335,6 +278,9 @@ func extractErrorDetails(err error) string {
 	}
 	if strings.Contains(errStr, "TooManyRequests") || strings.Contains(errStr, "429") {
 		return "HTTP 429 Too Many Requests - qBittorrent rate limiting"
+	}
+	if strings.Contains(errStr, "bencoded") {
+		return "Bencoded error - Downloaded content is not a valid torrent file. Likely causes: missing authentication cookies, site redirect, or HTML error page"
 	}
 
 	// Return the original error message if we can't identify it
