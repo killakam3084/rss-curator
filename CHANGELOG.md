@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.6.9] - 2026-02-26
 
+### Added
+- Comprehensive configuration logging at startup showing all environment variables and parsed values
+- Debug logging in AddTorrent() to track paused state through the qBittorrent client
+- Full visibility into final options map before sending to qBittorrent API
+
 ### Changed
 - Default behavior: torrents now added to qBittorrent in paused state
 - Prevents accidental downloads during testing and iteration

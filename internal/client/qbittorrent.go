@@ -78,6 +78,7 @@ func (c *Client) AddTorrent(url string, options map[string]string) error {
 	}
 
 	// Set paused state based on client config (can be overridden by options)
+	fmt.Printf("[QBittorrent] c.addPaused value: %v\n", c.addPaused)
 	if c.addPaused {
 		opts["paused"] = "true"
 	} else {
@@ -93,6 +94,7 @@ func (c *Client) AddTorrent(url string, options map[string]string) error {
 		}
 	}
 
+	fmt.Printf("[QBittorrent] Final options before AddTorrentFromUrlCtx: %v\n", opts)
 	fmt.Printf("[QBittorrent] Adding torrent from URL: %s with options: %v\n", url, opts)
 
 	// Single attempt - no automatic retries
