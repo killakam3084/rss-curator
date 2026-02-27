@@ -3,6 +3,8 @@ package client
 import (
 	"context"
 	"fmt"
+	"net/url"
+	"strings"
 	"time"
 
 	qbt "github.com/autobrr/go-qbittorrent"
@@ -11,10 +13,12 @@ import (
 
 // Client wraps qBittorrent client
 type Client struct {
-	qb        *qbt.Client
-	category  string
-	savePath  string
-	addPaused bool
+	qb           *qbt.Client
+	category     string
+	savePath     string
+	addPaused    bool
+	maxRetries   int
+	retryDelayMs int // Initial delay in milliseconds between retries
 }
 
 // New creates a new qBittorrent client
@@ -40,10 +44,12 @@ func New(cfg models.QBConfig) (*Client, error) {
 
 	fmt.Printf("[QBittorrent] Connection successful to %s\n", cfg.Host)
 	return &Client{
-		qb:        qbClient,
-		category:  cfg.Category,
-		savePath:  cfg.SavePath,
-		addPaused: cfg.AddPaused,
+		qb:           qbClient,
+		category:     cfg.Category,
+		savePath:     cfg.SavePath,
+		addPaused:    cfg.AddPaused,
+		maxRetries:   3,   // Retry up to 3 times
+		retryDelayMs: 500, // Start with 500ms delay, exponential backoff
 	}, nil
 }
 
@@ -51,6 +57,32 @@ func New(cfg models.QBConfig) (*Client, error) {
 func (c *Client) AddTorrent(url string, options map[string]string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
+
+	// Validate URL format
+	if url == "" {
+		return fmt.Errorf("torrent URL cannot be empty")
+	}
+
+	// Extract title from options if provided (for URL transformation)
+	title := ""
+	if options != nil {
+		title = options["title"]
+	}
+
+	// Transform info page URLs to actual torrent download URLs
+	originalURL := url
+	url = transformTorrentURL(url, title)
+	if url != originalURL {
+		fmt.Printf("[QBittorrent] Transformed URL from: %s\n", originalURL)
+		fmt.Printf("[QBittorrent] Transformed URL to: %s\n", url)
+	}
+
+	// Log what we received
+	fmt.Printf("[QBittorrent] Received URL to add: %s\n", url)
+	fmt.Printf("[QBittorrent] URL scheme: %v (is magnet: %v, is http: %v)\n",
+		getURLScheme(url),
+		isMagnetLink(url),
+		isHTTPURL(url))
 
 	// Merge default options with any provided options
 	opts := map[string]string{
@@ -67,12 +99,18 @@ func (c *Client) AddTorrent(url string, options map[string]string) error {
 		opts["paused"] = "false"
 	}
 
-	// Override with any provided options
-	for k, v := range options {
-		opts[k] = v
+	// Override with any provided options (except "title" which is just for transformation)
+	if options != nil {
+		for k, v := range options {
+			if k != "title" { // Skip the title key as it's only for URL transformation
+				opts[k] = v
+			}
+		}
 	}
 
 	fmt.Printf("[QBittorrent] Adding torrent from URL: %s with options: %v\n", url, opts)
+
+	// Single attempt - no automatic retries
 	err := c.qb.AddTorrentFromUrlCtx(ctx, url, opts)
 	if err != nil {
 		fmt.Printf("[QBittorrent] Failed to add torrent: %v\n", err)
@@ -80,7 +118,113 @@ func (c *Client) AddTorrent(url string, options map[string]string) error {
 	}
 
 	fmt.Printf("[QBittorrent] Successfully added torrent from URL: %s\n", url)
+
+	// Log current torrents to verify addition
+	torrents, err := c.GetTorrents()
+	if err == nil {
+		fmt.Printf("[QBittorrent] Current torrent count after add: %d\n", len(torrents))
+	}
+
 	return nil
+}
+
+// RetryAddTorrent attempts to add a torrent with exponential backoff retry logic
+// This is designed for manual retries from the UI when initial add fails
+func (c *Client) RetryAddTorrent(ctx context.Context, url string, opts map[string]string) error {
+	var lastErr error
+	delayMs := c.retryDelayMs
+
+	for attempt := 0; attempt <= c.maxRetries; attempt++ {
+		if attempt > 0 {
+			fmt.Printf("[QBittorrent] Retry attempt %d/%d after %dms delay...\n", attempt, c.maxRetries, delayMs)
+			// Check context before sleeping
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-time.After(time.Duration(delayMs) * time.Millisecond):
+				// Continue with retry
+			}
+			// Exponential backoff: double the delay for next retry (capped at 5 seconds)
+			delayMs = delayMs * 2
+			if delayMs > 5000 {
+				delayMs = 5000
+			}
+		}
+
+		err := c.qb.AddTorrentFromUrlCtx(ctx, url, opts)
+		if err == nil {
+			if attempt > 0 {
+				fmt.Printf("[QBittorrent] Successfully added torrent on retry attempt %d\n", attempt)
+			}
+			return nil
+		}
+
+		lastErr = err
+		fmt.Printf("[QBittorrent] Attempt %d failed: %v\n", attempt+1, err)
+	}
+
+	return lastErr
+}
+
+// Helper functions for URL validation and transformation
+
+// transformTorrentURL converts info page links to actual .torrent download URLs
+// Example: https://iptorrents.com/t/7228493 → https://iptorrents.com/download.php/7228493/{title}.torrent
+// Takes optional title parameter to construct proper .torrent filename
+func transformTorrentURL(url_str, title string) string {
+	// IPTorrents: https://iptorrents.com/t/7228493 -> https://iptorrents.com/download.php/7228493/{filename}.torrent
+	if strings.Contains(url_str, "iptorrents.com/t/") {
+		// Extract the torrent ID from /t/{id}
+		parts := strings.Split(url_str, "/t/")
+		if len(parts) == 2 {
+			torrentID := parts[1]
+			// Clean up torrent ID (remove trailing slashes, query params, fragments)
+			torrentID = strings.TrimRight(torrentID, "/")
+			if idx := strings.Index(torrentID, "?"); idx > -1 {
+				torrentID = torrentID[:idx]
+			}
+			if idx := strings.Index(torrentID, "#"); idx > -1 {
+				torrentID = torrentID[:idx]
+			}
+
+			// Build filename from title if provided, otherwise use generic name
+			filename := "torrent.torrent"
+			if title != "" {
+				// Clean and encode title for use as filename
+				cleanTitle := strings.TrimSpace(title)
+				// URL encode the title (spaces become %20, etc.)
+				cleanTitle = url.QueryEscape(cleanTitle)
+				filename = cleanTitle + ".torrent"
+			}
+
+			return "https://iptorrents.com/download.php/" + torrentID + "/" + filename
+		}
+	}
+
+	// Add more torrent site transformations here as needed
+	// For now, return the URL unchanged if no transformation matches
+	return url_str
+}
+
+func isMagnetLink(url string) bool {
+	return strings.HasPrefix(url, "magnet:")
+}
+
+func isHTTPURL(url string) bool {
+	return strings.HasPrefix(url, "http://") || strings.HasPrefix(url, "https://")
+}
+
+func getURLScheme(url string) string {
+	if strings.HasPrefix(url, "magnet:") {
+		return "magnet"
+	}
+	if strings.HasPrefix(url, "https://") {
+		return "https"
+	}
+	if strings.HasPrefix(url, "http://") {
+		return "http"
+	}
+	return "unknown"
 }
 
 // GetTorrents retrieves current torrents
