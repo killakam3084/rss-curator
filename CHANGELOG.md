@@ -5,6 +5,29 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.7] - 2026-02-26
+
+### Changed
+- Removed dead URL transformation logic that couldn't work without authentication cookies
+- RSS feeds now used as-is with pre-authenticated URLs containing `torrent_pass` tokens
+- Simplified AddTorrent and RetryAddTorrent to trust RSS feed URLs directly
+
+### Removed
+- `transformTorrentURL()` function and related conditional transformation logic
+- IPTorrents info page (`/t/{id}`) pattern detection (requires auth that info pages cannot provide)
+
+## [0.6.6] - 2026-02-26
+
+### Fixed
+- Preserve authenticated query parameters in torrent URLs from RSS feeds
+- RSS feeds provide fully authenticated URLs with `torrent_pass` that must not be stripped
+- Skip URL transformation when URLs contain query parameters (detected by `?`)
+- URLs without query parameters still attempted transformation for info page links (`/t/{id}`)
+
+### Added
+- Enhanced debug logging for bencoded errors explaining common causes
+- Detailed error messages indicating missing authentication cookies as likely cause
+
 ## [0.6.5] - 2026-02-27
 
 ### Fixed
