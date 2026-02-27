@@ -213,15 +213,6 @@ func (s *Server) handleApprove(w http.ResponseWriter, r *http.Request, id int) {
 		return
 	}
 
-	// Check if qBittorrent is available
-	if s.client == nil {
-		s.logger.Error("qBittorrent client unavailable", zap.Int("torrent_id", id))
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusServiceUnavailable)
-		json.NewEncoder(w).Encode(ErrorResponse{Error: "qBittorrent service unavailable"})
-		return
-	}
-
 	torrent, err := s.store.Get(id)
 	if err != nil {
 		s.logger.Error("failed to retrieve torrent", zap.Int("id", id), zap.Error(err))
@@ -247,16 +238,7 @@ func (s *Server) handleApprove(w http.ResponseWriter, r *http.Request, id int) {
 		return
 	}
 
-	// Add to qBittorrent
-	if err := s.client.AddTorrent(torrent.FeedItem.Link, nil); err != nil {
-		s.logger.Error("failed to add torrent to qBittorrent", zap.Int("id", id), zap.String("title", torrent.FeedItem.Title), zap.Error(err))
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusInternalServerError)
-		json.NewEncoder(w).Encode(ErrorResponse{Error: fmt.Sprintf("Failed to add torrent: %v", err)})
-		return
-	}
-
-	// Update status in storage
+	// Update status to approved (approval decision made - this always succeeds)
 	if err := s.store.UpdateStatus(id, "approved"); err != nil {
 		s.logger.Error("failed to update torrent status", zap.Int("id", id), zap.Error(err))
 		w.Header().Set("Content-Type", "application/json")
@@ -270,6 +252,23 @@ func (s *Server) handleApprove(w http.ResponseWriter, r *http.Request, id int) {
 		s.logger.Error("failed to log activity", zap.Int("id", id), zap.Error(err))
 		// Don't fail the request, just log the error
 	}
+
+	// Try to add to qBittorrent asynchronously (non-blocking)
+	go func() {
+		if s.client == nil {
+			s.logger.Warn("qBittorrent client unavailable, torrent approved but not added", zap.Int("torrent_id", id), zap.String("title", torrent.FeedItem.Title))
+			return
+		}
+
+		s.logger.Info("attempting to add torrent to qBittorrent", zap.Int("torrent_id", id), zap.String("title", torrent.FeedItem.Title), zap.String("link", torrent.FeedItem.Link))
+		if err := s.client.AddTorrent(torrent.FeedItem.Link, nil); err != nil {
+			s.logger.Error("failed to add torrent to qBittorrent (non-blocking)", zap.Int("id", id), zap.String("title", torrent.FeedItem.Title), zap.String("link", torrent.FeedItem.Link), zap.Error(err))
+			// Log this failure but don't change the approved status - could be a temporary network issue
+			return
+		}
+
+		s.logger.Info("torrent added to qBittorrent after approval", zap.Int("id", id), zap.String("title", torrent.FeedItem.Title))
+	}()
 
 	s.logger.Info("torrent approved", zap.Int("id", id), zap.String("title", torrent.FeedItem.Title))
 	w.Header().Set("Content-Type", "application/json")
