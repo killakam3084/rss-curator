@@ -5,6 +5,52 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.5] - 2026-02-27
+
+### Fixed
+- RetryAddTorrent now applies URL transformation to info page links
+- Retry operations now correctly convert IPTorrents `/t/{id}` to `/download.php/{id}/{title}.torrent`
+- Torrents now actually appear in qBittorrent when using manual retry
+
+## [0.6.4] - 2026-02-27
+
+### Added
+- Manual retry capability for qBittorrent torrent addition
+- POST `/api/torrents/{id}/retry-qb` endpoint for manual retries
+- `RetryAddTorrent()` method with exponential backoff (3 attempts, 500ms-5s delays)
+- "Retry qBittorrent" button in approved torrents tab UI
+- Detailed logging of retry attempts and results
+
+### Changed
+- AddTorrent now performs single non-blocking attempt (no automatic retries)
+- Approval and qBittorrent integration are now completely decoupled
+- Users can manually retry failed qBittorrent additions without re-approving
+
+## [0.6.3] - 2026-02-27
+
+### Added
+- URL transformation logic for torrent info page links
+- IPTorrents pattern detection and conversion (`/t/{id}` → `/download.php/{id}/{title}.torrent`)
+- Support for URL encoding titles with spaces and special characters
+- Title parameter passing from API handler to qBittorrent client
+
+### Changed
+- transformTorrentURL() now accepts title parameter for proper filename construction
+- AddTorrent extracts title from options map before calling transformation
+
+## [0.6.2] - 2026-02-27
+
+### Added
+- Enhanced connection logging to qBittorrent client showing host, username, and test results
+- Detailed logging in AddTorrent with URL scheme detection
+- Torrent count verification after successful qBittorrent addition
+
+### Changed
+- Approval workflow decoupled from qBittorrent integration
+- Status update happens immediately regardless of qBittorrent availability
+- qBittorrent add moved to non-blocking async goroutine
+- Activity logged before qBittorrent attempt for audit trail accuracy
+
 ## [0.6.1] - 2026-02-26
 
 ### Fixed
