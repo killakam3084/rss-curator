@@ -86,6 +86,13 @@ func (p *Parser) Parse(feedURL string) ([]models.FeedItem, error) {
 		// Extract metadata from title
 		extractMetadata(&item)
 
+		// Log the parsed link for observability
+		if strings.Contains(item.Link, "download") {
+			fmt.Printf("[Feed] Parsed authenticated download link: %s\n", item.Link)
+		} else if strings.Contains(item.Link, "/t/") {
+			fmt.Printf("[Feed] WARNING: Parsed info page link (not authenticated): %s\n", item.Link)
+		}
+
 		items = append(items, item)
 	}
 
@@ -97,16 +104,16 @@ func parseSize(description string) int64 {
 	// Match patterns like "1.44 GB", "500 MB", "21 GB"
 	re := regexp.MustCompile(`([\d.]+)\s*(GB|MB|KB)`)
 	matches := re.FindStringSubmatch(description)
-	
+
 	if len(matches) != 3 {
 		return 0
 	}
-	
+
 	size, err := strconv.ParseFloat(matches[1], 64)
 	if err != nil {
 		return 0
 	}
-	
+
 	// Convert to bytes
 	unit := strings.ToUpper(matches[2])
 	switch unit {

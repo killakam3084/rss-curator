@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.8] - 2026-02-26
+
+### Added
+- `cleanup` command to remove stale database entries with pattern matching
+- Feed parser logging showing whether parsed URLs are authenticated downloads or info pages
+- `CleanupStaleLinks()` storage method for removing entries by URL pattern
+- Default cleanup removes pending entries with IPTorrents info page links (`/t/{id}`)
+
+### Fixed
+- Observability for tracking parsed link formats (helps diagnose database staleness)
+- Tooling to manage database when RSS feed format or URL structure changes
+
 ## [0.6.7] - 2026-02-26
 
 ### Changed
