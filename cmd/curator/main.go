@@ -63,6 +63,8 @@ func main() {
 		cmdResume(cfg, store, os.Args[2:])
 	case "pause":
 		cmdPause(cfg, store, os.Args[2:])
+	case "cleanup":
+		cmdCleanup(store, os.Args[2:])
 	case "version":
 		fmt.Printf("rss-curator v%s\n", version)
 	default:
@@ -408,6 +410,8 @@ Commands:
   version              Show version
   resume <id>...       Resume paused torrent(s) in qBittorrent
   pause <id>...        Pause torrent(s) in qBittorrent
+  cleanup [pattern]    Remove stale database entries (default: info page links)
+  serve                Start API server and scheduler
 
 Configuration:
   1. shows.json (recommended) - Per-show rules
@@ -418,6 +422,8 @@ Examples:
   curator list                     # List pending torrents
   curator approve 1 3 5            # Approve specific torrents
   curator review                   # Interactive review mode
+  curator cleanup                  # Remove stale info page links
+  curator cleanup "%/old/%"        # Remove entries matching pattern
   curator test                     # Test configuration
 `)
 }
@@ -561,5 +567,41 @@ func cmdServe(cfg models.Config, store *storage.Storage) {
 	if err := server.Start(); err != nil {
 		fmt.Fprintf(os.Stderr, "Error starting API server: %v\n", err)
 		os.Exit(1)
+	}
+}
+
+func cmdCleanup(store *storage.Storage, args []string) {
+	if len(args) == 0 {
+		// Default: clean up info page links (IPTorrents /t/{id} format)
+		fmt.Println("Cleaning up stale torrent links...")
+		fmt.Println("Removing pending entries with info page links (e.g., /t/{id})...")
+
+		patterns := []string{"%/t/%"}
+		deleted, err := store.CleanupStaleLinks(patterns)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error cleaning up: %v\n", err)
+			os.Exit(1)
+		}
+
+		if deleted == 0 {
+			fmt.Println("✓ No stale entries found")
+		} else {
+			fmt.Printf("✓ Removed %d stale torrent entries\n", deleted)
+		}
+		return
+	}
+
+	// Custom cleanup: accept patterns as arguments
+	fmt.Printf("Cleaning up entries matching pattern(s): %v\n", args)
+	deleted, err := store.CleanupStaleLinks(args)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error cleaning up: %v\n", err)
+		os.Exit(1)
+	}
+
+	if deleted == 0 {
+		fmt.Println("✓ No matching entries found")
+	} else {
+		fmt.Printf("✓ Removed %d torrent entries\n", deleted)
 	}
 }

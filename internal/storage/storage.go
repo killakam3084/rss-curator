@@ -193,6 +193,33 @@ func (s *Storage) DeleteOld(olderThan time.Duration) error {
 	return err
 }
 
+// CleanupStaleLinks removes torrent entries with stale/invalid link formats
+// This is useful when the RSS feed format changes (e.g., from info pages to authenticated URLs)
+func (s *Storage) CleanupStaleLinks(patterns []string) (int64, error) {
+	if len(patterns) == 0 {
+		return 0, fmt.Errorf("no patterns specified for cleanup")
+	}
+
+	// Build query with OR conditions for each pattern
+	query := "DELETE FROM staged_torrents WHERE status = 'pending' AND ("
+	var args []interface{}
+	for i, pattern := range patterns {
+		if i > 0 {
+			query += " OR "
+		}
+		query += "link LIKE ?"
+		args = append(args, pattern)
+	}
+	query += ")"
+
+	result, err := s.db.Exec(query, args...)
+	if err != nil {
+		return 0, err
+	}
+
+	return result.RowsAffected()
+}
+
 // Close closes the database connection
 func (s *Storage) Close() error {
 	return s.db.Close()
