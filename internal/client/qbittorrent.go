@@ -113,7 +113,9 @@ func (c *Client) AddTorrent(url string, options map[string]string) error {
 	// Single attempt - no automatic retries
 	err := c.qb.AddTorrentFromUrlCtx(ctx, url, opts)
 	if err != nil {
-		fmt.Printf("[QBittorrent] Failed to add torrent: %v\n", err)
+		fmt.Printf("[QBittorrent] Failed to add torrent: error_type=%T\n", err)
+		fmt.Printf("[QBittorrent] Error: %v\n", extractErrorDetails(err))
+		fmt.Printf("[QBittorrent] Raw error: %+v\n", err)
 		return fmt.Errorf("failed to add torrent: %w", err)
 	}
 
@@ -175,7 +177,7 @@ func (c *Client) RetryAddTorrent(ctx context.Context, url string, opts map[strin
 		}
 
 		lastErr = err
-		fmt.Printf("[QBittorrent] Retry attempt %d failed: %v\n", attempt+1, err)
+		fmt.Printf("[QBittorrent] Retry attempt %d failed: %s\n", attempt+1, extractErrorDetails(err))
 	}
 
 	return lastErr
@@ -208,7 +210,8 @@ func transformTorrentURL(url_str, title string) string {
 				// Clean and encode title for use as filename
 				cleanTitle := strings.TrimSpace(title)
 				// URL encode the title (spaces become %20, etc.)
-				cleanTitle = url.QueryEscape(cleanTitle)
+				// Use PathEscape for proper path encoding (not QueryEscape which uses +)
+				cleanTitle = url.PathEscape(cleanTitle)
 				filename = cleanTitle + ".torrent"
 			}
 
@@ -294,4 +297,46 @@ func (c *Client) TestConnection() error {
 
 	_, err := c.qb.GetTorrentsCtx(ctx, qbt.TorrentFilterOptions{})
 	return err
+}
+
+// extractErrorDetails provides detailed error information for debugging qBittorrent API issues
+func extractErrorDetails(err error) string {
+	if err == nil {
+		return "no error"
+	}
+
+	// Check for common error types and HTTP status codes
+	errStr := err.Error()
+
+	// Try to detect HTTP status codes from error message
+	if strings.Contains(errStr, "401") || strings.Contains(errStr, "Unauthorized") {
+		return "HTTP 401 Unauthorized - check qBittorrent credentials"
+	}
+	if strings.Contains(errStr, "403") || strings.Contains(errStr, "Forbidden") {
+		return "HTTP 403 Forbidden - qBittorrent may have rejected the request"
+	}
+	if strings.Contains(errStr, "404") || strings.Contains(errStr, "Not Found") {
+		return "HTTP 404 Not Found - check qBittorrent host and port"
+	}
+	if strings.Contains(errStr, "400") || strings.Contains(errStr, "Bad Request") {
+		return "HTTP 400 Bad Request - qBittorrent rejected the URL or options"
+	}
+	if strings.Contains(errStr, "409") {
+		return "HTTP 409 Conflict - torrent may already exist in qBittorrent"
+	}
+	if strings.Contains(errStr, "415") {
+		return "HTTP 415 Unsupported Media Type - qBittorrent doesn't recognize torrent format"
+	}
+	if strings.Contains(errStr, "connection refused") {
+		return "Connection refused - qBittorrent may not be running or port is wrong"
+	}
+	if strings.Contains(errStr, "timeout") {
+		return "Connection timeout - qBittorrent is not responding"
+	}
+	if strings.Contains(errStr, "TooManyRequests") || strings.Contains(errStr, "429") {
+		return "HTTP 429 Too Many Requests - qBittorrent rate limiting"
+	}
+
+	// Return the original error message if we can't identify it
+	return fmt.Sprintf("Unknown error: %s", errStr)
 }
