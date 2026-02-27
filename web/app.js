@@ -43,6 +43,23 @@ const app = createApp({
             }
         };
 
+        const fetchAllTorrents = async () => {
+            try {
+                const [pending, approved, rejected] = await Promise.all([
+                    fetch('/api/torrents?status=pending').then(r => r.json()),
+                    fetch('/api/torrents?status=approved').then(r => r.json()),
+                    fetch('/api/torrents?status=rejected').then(r => r.json())
+                ]);
+                torrents.value = [
+                    ...(pending.torrents || []),
+                    ...(approved.torrents || []),
+                    ...(rejected.torrents || [])
+                ];
+            } catch (error) {
+                console.error('Failed to fetch all torrents:', error);
+            }
+        };
+
         const fetchActivities = async () => {
             try {
                 const response = await fetch(`/api/activity?limit=20&offset=0`);
@@ -70,8 +87,8 @@ const app = createApp({
                 });
                 if (response.ok) {
                     showToast('Torrent approved!', 'success');
-                    await fetchTorrents('pending');
-                    await fetchTorrents('approved');
+                    await fetchAllTorrents();
+                    await fetchActivities();
                 } else {
                     showToast('Failed to approve torrent', 'error');
                 }
@@ -91,8 +108,8 @@ const app = createApp({
                 });
                 if (response.ok) {
                     showToast('Torrent rejected!', 'success');
-                    await fetchTorrents('pending');
-                    await fetchTorrents('rejected');
+                    await fetchAllTorrents();
+                    await fetchActivities();
                 } else {
                     showToast('Failed to reject torrent', 'error');
                 }
@@ -124,8 +141,8 @@ const app = createApp({
                 if (successCount > 0) {
                     showToast(`Approved ${successCount}/${ids.length} torrents`, 'success');
                     selectedIds.value.clear();
-                    await fetchTorrents('pending');
-                    await fetchTorrents('approved');
+                    await fetchAllTorrents();
+                    await fetchActivities();
                 }
             } catch (error) {
                 console.error('Error in bulk approve:', error);
@@ -155,8 +172,8 @@ const app = createApp({
                 if (successCount > 0) {
                     showToast(`Rejected ${successCount}/${ids.length} torrents`, 'success');
                     selectedIds.value.clear();
-                    await fetchTorrents('pending');
-                    await fetchTorrents('rejected');
+                    await fetchAllTorrents();
+                    await fetchActivities();
                 }
             } catch (error) {
                 console.error('Error in bulk reject:', error);
@@ -189,11 +206,11 @@ const app = createApp({
 
         // Load initial data
         onMounted(() => {
-            fetchTorrents('pending');
+            fetchAllTorrents();
             fetchActivities();
             // Auto-refresh every 30 seconds
             setInterval(() => {
-                fetchTorrents(activeTab.value);
+                fetchAllTorrents();
                 fetchActivities();
             }, 30000);
         });
@@ -214,6 +231,7 @@ const app = createApp({
             selectedCount,
             displayedTorrents,
             fetchTorrents,
+            fetchAllTorrents,
             fetchActivities,
             approveTorrent,
             rejectTorrent,

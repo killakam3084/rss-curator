@@ -66,6 +66,12 @@ type ActivityItem struct {
 	MatchReason  string `json:"match_reason"`
 }
 
+type StatsResponse struct {
+	Pending  int `json:"pending"`
+	Approved int `json:"approved"`
+	Rejected int `json:"rejected"`
+}
+
 // NewServer creates a new API server instance
 func NewServer(store *storage.Storage, client *client.Client, port int) *Server {
 	// Create a production logger (use development logger in dev if preferred)
@@ -92,6 +98,7 @@ func (s *Server) Start() error {
 	mux.HandleFunc("/api/torrents/", s.handleTorrentAction)
 	mux.HandleFunc("/api/health", s.handleHealth)
 	mux.HandleFunc("/api/activity", s.handleActivity)
+	mux.HandleFunc("/api/stats", s.handleStats)
 
 	// Static files and UI
 	mux.Handle("/style.css", http.FileServer(http.Dir("./web")))
@@ -398,5 +405,41 @@ func (s *Server) handleActivity(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(ActivityResponse{
 		Activities: items,
 		Total:      total,
+	})
+}
+
+// handleStats returns torrent statistics
+func (s *Server) handleStats(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// Get counts from activity log
+	approvedCount, err := s.store.GetActivityCount("approve")
+	if err != nil {
+		s.logger.Error("failed to get approved count", zap.Error(err))
+		approvedCount = 0
+	}
+
+	rejectedCount, err := s.store.GetActivityCount("reject")
+	if err != nil {
+		s.logger.Error("failed to get rejected count", zap.Error(err))
+		rejectedCount = 0
+	}
+
+	// Get current pending count
+	pendingTorrents, err := s.store.List("pending")
+	if err != nil {
+		s.logger.Error("failed to get pending count", zap.Error(err))
+	}
+	pendingCount := len(pendingTorrents)
+
+	s.logger.Info("stats retrieved", zap.Int("pending", pendingCount), zap.Int("approved", approvedCount), zap.Int("rejected", rejectedCount))
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(StatsResponse{
+		Pending:  pendingCount,
+		Approved: approvedCount,
+		Rejected: rejectedCount,
 	})
 }
