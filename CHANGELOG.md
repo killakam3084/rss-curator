@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.0] - 2026-03-03
+
+### Changed
+- Complete UI redesign with Tailwind CSS for modern, sleek interface
+- Responsive grid layout for torrent cards (1 col mobile, 2 col tablet+)
+- Enhanced visual hierarchy with improved typography and spacing
+- Better status badges with color-coded states (blue/emerald/red)
+
+### Added
+- Smooth animations and transitions throughout the UI
+- Custom scrollbar styling in activity log
+- Gradient headers and stat cards with hover effects
+- Dark mode support (ready for toggle implementation)
+- Improved button states and focus indicators
+- Better empty state and loading state visuals
+
 ## [0.6.10] - 2026-02-26
 
 ### Added
