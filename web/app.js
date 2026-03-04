@@ -10,7 +10,8 @@ const app = createApp({
         const selectedIds = ref(new Set());
         const operatingIds = ref(new Set());
         const toasts = ref([]);
-        const darkMode = ref(false);
+        // Initialize dark mode from system preference immediately
+        const darkMode = ref(window.matchMedia('(prefers-color-scheme: dark)').matches);
         const tabs = ['pending', 'approved', 'rejected'];
         let toastCounter = 0;
 
@@ -229,8 +230,7 @@ const app = createApp({
 
         // Load initial data
         onMounted(() => {
-            // Initialize dark mode from system preference
-            darkMode.value = window.matchMedia('(prefers-color-scheme: dark)').matches;
+            // Apply dark mode class immediately based on initial value
             applyDarkMode();
             
             // Listen for system preference changes
