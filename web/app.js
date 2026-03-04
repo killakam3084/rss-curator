@@ -10,6 +10,7 @@ const app = createApp({
         const selectedIds = ref(new Set());
         const operatingIds = ref(new Set());
         const toasts = ref([]);
+        const darkMode = ref(false);
         const tabs = ['pending', 'approved', 'rejected'];
         let toastCounter = 0;
 
@@ -228,6 +229,16 @@ const app = createApp({
 
         // Load initial data
         onMounted(() => {
+            // Initialize dark mode from system preference
+            darkMode.value = window.matchMedia('(prefers-color-scheme: dark)').matches;
+            applyDarkMode();
+            
+            // Listen for system preference changes
+            window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', (e) => {
+                darkMode.value = e.matches;
+                applyDarkMode();
+            });
+            
             fetchAllTorrents();
             fetchActivities();
             // Auto-refresh every 30 seconds
@@ -236,6 +247,20 @@ const app = createApp({
                 fetchActivities();
             }, 30000);
         });
+
+        const toggleDarkMode = () => {
+            darkMode.value = !darkMode.value;
+            applyDarkMode();
+        };
+
+        const applyDarkMode = () => {
+            const html = document.documentElement;
+            if (darkMode.value) {
+                html.classList.add('dark');
+            } else {
+                html.classList.remove('dark');
+            }
+        };
 
         return {
             torrents,
@@ -247,6 +272,7 @@ const app = createApp({
             operatingIds,
             toasts,
             tabs,
+            darkMode,
             pendingCount,
             approvedCount,
             rejectedCount,
@@ -263,7 +289,8 @@ const app = createApp({
             toggleSelection,
             isSelected,
             formatSize,
-            showToast
+            showToast,
+            toggleDarkMode
         };
     }
 });
