@@ -4,170 +4,256 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>RSS Curator</title>
+    <!-- Tailwind CSS via CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        curator: {
+                            50: '#f8f9ff',
+                            100: '#f0f2ff',
+                            200: '#e1e6ff',
+                            500: '#667eea',
+                            600: '#5568d3',
+                            700: '#4c51bf',
+                            900: '#2d3748'
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
     <link rel="stylesheet" href="style.css">
     <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
 </head>
-<body>
+<body class="bg-gradient-to-br from-curator-500 via-purple-600 to-pink-600 min-h-screen transition-colors duration-300">
     <div id="app">
-        <div class="toast-container">
+        <!-- Toast Notifications -->
+        <div class="fixed top-6 right-6 z-50 flex flex-col gap-3 max-w-sm pointer-events-none">
             <div 
                 v-for="toast in toasts" 
                 :key="toast.id"
-                :class="['toast', `toast-${toast.type}`]"
+                :class="[
+                    'px-4 py-3 rounded-xl font-medium shadow-lg animate-in fade-in slide-in-from-right-4 duration-300 pointer-events-auto',
+                    toast.type === 'success' ? 'bg-emerald-500 text-white' :
+                    toast.type === 'error' ? 'bg-red-500 text-white' :
+                    'bg-blue-500 text-white'
+                ]"
             >
                 {{ toast.message }}
             </div>
         </div>
 
-        <div class="container">
-            <header class="header">
-                <h1>📡 RSS Curator</h1>
-                <div class="header-stats">
-                    <div class="stat">
-                        <span class="label">Pending</span>
-                        <span class="value">{{ pendingCount }}</span>
+        <div class="container mx-auto max-w-7xl px-4 py-8">
+            <!-- Header -->
+            <header class="mb-8">
+                <div class="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl p-8 backdrop-blur-sm bg-opacity-95">
+                    <div class="flex items-center justify-between mb-6">
+                        <h1 class="text-4xl font-bold bg-gradient-to-r from-curator-600 to-purple-600 bg-clip-text text-transparent">
+                            📡 RSS Curator
+                        </h1>
                     </div>
-                    <div class="stat">
-                        <span class="label">Approved</span>
-                        <span class="value">{{ approvedCount }}</span>
-                    </div>
-                    <div class="stat">
-                        <span class="label">Rejected</span>
-                        <span class="value">{{ rejectedCount }}</span>
+                    
+                    <!-- Stats Grid -->
+                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                        <div class="bg-gradient-to-br from-blue-50 to-blue-100 dark:from-blue-900 dark:to-blue-800 rounded-xl p-4 transition-transform duration-200 hover:scale-105">
+                            <p class="text-sm font-semibold text-blue-600 dark:text-blue-300 uppercase tracking-wide">Pending</p>
+                            <p class="text-3xl font-bold text-blue-900 dark:text-blue-100 mt-2">{{ pendingCount }}</p>
+                        </div>
+                        <div class="bg-gradient-to-br from-emerald-50 to-emerald-100 dark:from-emerald-900 dark:to-emerald-800 rounded-xl p-4 transition-transform duration-200 hover:scale-105">
+                            <p class="text-sm font-semibold text-emerald-600 dark:text-emerald-300 uppercase tracking-wide">Approved</p>
+                            <p class="text-3xl font-bold text-emerald-900 dark:text-emerald-100 mt-2">{{ approvedCount }}</p>
+                        </div>
+                        <div class="bg-gradient-to-br from-red-50 to-red-100 dark:from-red-900 dark:to-red-800 rounded-xl p-4 transition-transform duration-200 hover:scale-105">
+                            <p class="text-sm font-semibold text-red-600 dark:text-red-300 uppercase tracking-wide">Rejected</p>
+                            <p class="text-3xl font-bold text-red-900 dark:text-red-100 mt-2">{{ rejectedCount }}</p>
+                        </div>
                     </div>
                 </div>
             </header>
 
-            <div class="layout">
-                <main class="main">
-                    <div class="controls">
-                        <div class="filter-tabs">
+            <!-- Main Content Layout -->
+            <div class="grid grid-cols-1 lg:grid-cols-4 gap-6">
+                <!-- Main Content -->
+                <main class="lg:col-span-3 space-y-6">
+                    <!-- Controls -->
+                    <div class="bg-white dark:bg-slate-900 rounded-2xl shadow-lg p-6">
+                        <!-- Filter Tabs -->
+                        <div class="flex gap-2 mb-6 flex-wrap">
                             <button 
                                 v-for="tab in tabs" 
                                 :key="tab"
                                 @click="activeTab = tab"
-                                :class="['tab', { active: activeTab === tab }]"
+                                :class="[
+                                    'px-4 py-2 rounded-lg font-medium transition-all duration-200',
+                                    activeTab === tab 
+                                        ? 'bg-gradient-to-r from-curator-600 to-purple-600 text-white shadow-lg' 
+                                        : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
+                                ]"
                             >
                                 {{ tab }}
                             </button>
                         </div>
-                        <div v-if="selectedCount > 0" class="bulk-actions">
-                            <span class="selection-info">{{ selectedCount }} selected</span>
-                            <button 
-                                @click="bulkApprove" 
-                                class="btn btn-success"
-                                :disabled="bulkLoading"
-                            >
-                                <span v-if="bulkLoading" class="spinner"></span>
-                                {{ bulkLoading ? 'Approving...' : 'Approve Selected' }}
-                            </button>
-                            <button 
-                                @click="bulkReject" 
-                                class="btn btn-danger"
-                                :disabled="bulkLoading"
-                            >
-                                <span v-if="bulkLoading" class="spinner"></span>
-                                {{ bulkLoading ? 'Rejecting...' : 'Reject Selected' }}
-                            </button>
+
+                        <!-- Bulk Actions -->
+                        <div v-if="selectedCount > 0" class="flex items-center gap-4 p-4 bg-blue-50 dark:bg-blue-900/30 rounded-lg border border-blue-200 dark:border-blue-800 mb-6">
+                            <span class="text-sm font-semibold text-blue-900 dark:text-blue-200">{{ selectedCount }} selected</span>
+                            <div class="flex gap-2 ml-auto">
+                                <button 
+                                    @click="bulkApprove" 
+                                    :disabled="bulkLoading"
+                                    class="px-4 py-2 bg-emerald-500 hover:bg-emerald-600 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg font-medium transition-colors duration-200 flex items-center gap-2"
+                                >
+                                    <span v-if="bulkLoading" class="inline-block w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
+                                    {{ bulkLoading ? 'Approving...' : 'Approve Selected' }}
+                                </button>
+                                <button 
+                                    @click="bulkReject" 
+                                    :disabled="bulkLoading"
+                                    class="px-4 py-2 bg-red-500 hover:bg-red-600 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg font-medium transition-colors duration-200 flex items-center gap-2"
+                                >
+                                    <span v-if="bulkLoading" class="inline-block w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
+                                    {{ bulkLoading ? 'Rejecting...' : 'Reject Selected' }}
+                                </button>
+                            </div>
                         </div>
                     </div>
 
-                    <div v-if="loading" class="loading">
-                        <p>Loading torrents...</p>
+                    <!-- Loading State -->
+                    <div v-if="loading" class="flex justify-center items-center py-20">
+                        <div class="text-center">
+                            <div class="w-12 h-12 border-4 border-slate-200 dark:border-slate-700 border-t-curator-600 rounded-full animate-spin mx-auto mb-4"></div>
+                            <p class="text-slate-600 dark:text-slate-400 font-medium">Loading torrents...</p>
+                        </div>
                     </div>
 
-                    <div v-else-if="displayedTorrents.length === 0" class="empty-state">
-                        <p>No {{ activeTab }} torrents</p>
+                    <!-- Empty State -->
+                    <div v-else-if="displayedTorrents.length === 0" class="bg-white dark:bg-slate-900 rounded-2xl shadow-lg p-16 text-center">
+                        <p class="text-slate-500 dark:text-slate-400 text-lg">No {{ activeTab }} torrents</p>
                     </div>
 
-                    <div v-else class="torrents-grid">
+                    <!-- Torrents Grid -->
+                    <div v-else class="grid grid-cols-1 md:grid-cols-2 gap-6">
                         <div 
                             v-for="torrent in displayedTorrents" 
                             :key="torrent.id"
-                            class="torrent-card"
+                            class="bg-white dark:bg-slate-900 rounded-xl shadow-md hover:shadow-xl transition-shadow duration-300 overflow-hidden border border-slate-200 dark:border-slate-800"
                         >
-                            <div class="card-header">
-                                <input 
-                                    v-if="activeTab === 'pending'"
-                                    type="checkbox" 
-                                    :checked="isSelected(torrent.id)"
-                                    @change="toggleSelection(torrent.id)"
-                                    class="checkbox"
-                                >
-                                <span class="status-badge" :class="`status-${torrent.status}`">
-                                    {{ torrent.status }}
-                                </span>
+                            <!-- Card Header -->
+                            <div class="flex items-center justify-between p-4 border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50">
+                                <div class="flex items-center gap-3">
+                                    <input 
+                                        v-if="activeTab === 'pending'"
+                                        type="checkbox" 
+                                        :checked="isSelected(torrent.id)"
+                                        @change="toggleSelection(torrent.id)"
+                                        class="w-5 h-5 rounded border-slate-300 text-curator-600 focus:ring-2 focus:ring-curator-500 cursor-pointer"
+                                    >
+                                    <span :class="[
+                                        'inline-block px-3 py-1 rounded-full text-xs font-semibold uppercase tracking-wide',
+                                        torrent.status === 'pending' ? 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200' :
+                                        torrent.status === 'approved' ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200' :
+                                        'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200'
+                                    ]">
+                                        {{ torrent.status }}
+                                    </span>
+                                </div>
                             </div>
-                            
-                            <h3 class="torrent-title">{{ torrent.title }}</h3>
-                            
-                            <div class="torrent-details">
-                                <span class="detail-item">
-                                    <span class="label">Size:</span>
-                                    <span class="value">{{ formatSize(torrent.size) }}</span>
-                                </span>
-                                <span class="detail-item">
-                                    <span class="label">Match:</span>
-                                    <span class="value">{{ torrent.match_reason }}</span>
-                                </span>
-                            </div>
-                            
-                            <div v-if="activeTab === 'pending'" class="card-actions">
-                                <button 
-                                    @click="approveTorrent(torrent.id)" 
-                                    class="btn btn-success"
-                                    :disabled="operatingIds.has(torrent.id)"
-                                >
-                                    <span v-if="operatingIds.has(torrent.id)" class="spinner"></span>
-                                    {{ operatingIds.has(torrent.id) ? '' : 'Approve' }}
-                                </button>
-                                <button 
-                                    @click="rejectTorrent(torrent.id)" 
-                                    class="btn btn-danger"
-                                    :disabled="operatingIds.has(torrent.id)"
-                                >
-                                    <span v-if="operatingIds.has(torrent.id)" class="spinner"></span>
-                                    {{ operatingIds.has(torrent.id) ? '' : 'Reject' }}
-                                </button>
-                            </div>
-                            
-                            <div v-if="activeTab === 'approved'" class="card-actions">
-                                <button 
-                                    @click="retryQBittorrent(torrent.id)" 
-                                    class="btn btn-warning"
-                                    :disabled="operatingIds.has(torrent.id)"
-                                    title="Manually retry adding this torrent to qBittorrent"
-                                >
-                                    <span v-if="operatingIds.has(torrent.id)" class="spinner"></span>
-                                    {{ operatingIds.has(torrent.id) ? '' : 'Retry qBittorrent' }}
-                                </button>
+
+                            <!-- Card Body -->
+                            <div class="p-6">
+                                <h3 class="text-lg font-bold text-slate-900 dark:text-white mb-4 line-clamp-2 break-words">{{ torrent.title }}</h3>
+                                
+                                <div class="space-y-3 mb-6">
+                                    <div class="flex items-center justify-between text-sm">
+                                        <span class="text-slate-600 dark:text-slate-400 font-medium">Size:</span>
+                                        <span class="text-slate-900 dark:text-white font-semibold">{{ formatSize(torrent.size) }}</span>
+                                    </div>
+                                    <div class="flex items-center justify-between text-sm">
+                                        <span class="text-slate-600 dark:text-slate-400 font-medium">Match:</span>
+                                        <span class="text-slate-900 dark:text-white font-semibold px-2 py-1 bg-slate-100 dark:bg-slate-800 rounded">{{ torrent.match_reason }}</span>
+                                    </div>
+                                </div>
+
+                                <!-- Card Actions -->
+                                <div v-if="activeTab === 'pending'" class="flex gap-3">
+                                    <button 
+                                        @click="approveTorrent(torrent.id)" 
+                                        :disabled="operatingIds.has(torrent.id)"
+                                        class="flex-1 px-4 py-2 bg-emerald-500 hover:bg-emerald-600 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg font-medium transition-colors duration-200 flex items-center justify-center gap-2"
+                                    >
+                                        <span v-if="operatingIds.has(torrent.id)" class="inline-block w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
+                                        <span v-else>✓</span>
+                                        {{ operatingIds.has(torrent.id) ? '' : 'Approve' }}
+                                    </button>
+                                    <button 
+                                        @click="rejectTorrent(torrent.id)" 
+                                        :disabled="operatingIds.has(torrent.id)"
+                                        class="flex-1 px-4 py-2 bg-red-500 hover:bg-red-600 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg font-medium transition-colors duration-200 flex items-center justify-center gap-2"
+                                    >
+                                        <span v-if="operatingIds.has(torrent.id)" class="inline-block w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
+                                        <span v-else>✕</span>
+                                        {{ operatingIds.has(torrent.id) ? '' : 'Reject' }}
+                                    </button>
+                                </div>
+                                
+                                <div v-if="activeTab === 'approved'">
+                                    <button 
+                                        @click="retryQBittorrent(torrent.id)" 
+                                        :disabled="operatingIds.has(torrent.id)"
+                                        class="w-full px-4 py-2 bg-amber-500 hover:bg-amber-600 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg font-medium transition-colors duration-200 flex items-center justify-center gap-2"
+                                        title="Manually retry adding this torrent to qBittorrent"
+                                    >
+                                        <span v-if="operatingIds.has(torrent.id)" class="inline-block w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
+                                        <span v-else>⟲</span>
+                                        {{ operatingIds.has(torrent.id) ? 'Retrying...' : 'Retry qBittorrent' }}
+                                    </button>
+                                </div>
                             </div>
                         </div>
                     </div>
                 </main>
 
-                <aside class="sidebar">
-                    <div class="activity-log">
-                        <h2 class="activity-title">📋 Activity Log</h2>
-                        <div v-if="activities.length === 0" class="empty-activity">
-                            <p>No activity yet</p>
+                <!-- Sidebar -->
+                <aside class="lg:col-span-1">
+                    <div class="bg-white dark:bg-slate-900 rounded-2xl shadow-lg p-6 sticky top-8">
+                        <h2 class="text-xl font-bold text-slate-900 dark:text-white mb-6 flex items-center gap-2">
+                            📋 Activity Log
+                        </h2>
+                        
+                        <div v-if="activities.length === 0" class="text-center py-8">
+                            <p class="text-slate-500 dark:text-slate-400 text-sm">No activity yet</p>
                         </div>
-                        <div v-else class="activity-list">
+                        
+                        <div v-else class="space-y-3 max-h-96 overflow-y-auto">
                             <div 
                                 v-for="activity in activities" 
                                 :key="activity.id"
-                                :class="['activity-item', `activity-${activity.action}`]"
+                                class="p-3 rounded-lg border-l-4 transition-colors duration-200"
+                                :class="[
+                                    activity.action === 'approve' ? 'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-500' :
+                                    activity.action === 'reject' ? 'bg-red-50 dark:bg-red-900/20 border-red-500' :
+                                    'bg-blue-50 dark:bg-blue-900/20 border-blue-500'
+                                ]"
                             >
-                                <div class="activity-action">
-                                    <span class="action-badge" :class="`action-${activity.action}`">
+                                <div class="flex items-center gap-2 mb-2">
+                                    <span :class="[
+                                        'inline-block px-2 py-1 rounded text-xs font-semibold uppercase',
+                                        activity.action === 'approve' ? 'bg-emerald-200 text-emerald-800 dark:bg-emerald-800 dark:text-emerald-200' :
+                                        activity.action === 'reject' ? 'bg-red-200 text-red-800 dark:bg-red-800 dark:text-red-200' :
+                                        'bg-blue-200 text-blue-800 dark:bg-blue-800 dark:text-blue-200'
+                                    ]">
                                         {{ activity.action }}
                                     </span>
                                 </div>
-                                <div class="activity-content">
-                                    <p class="activity-title">{{ activity.torrent_title }}</p>
-                                    <p class="activity-reason">{{ activity.match_reason }}</p>
-                                    <p class="activity-time">{{ activity.action_at }}</p>
-                                </div>
+                                <p class="text-sm font-semibold text-slate-900 dark:text-white line-clamp-2">{{ activity.torrent_title }}</p>
+                                <p class="text-xs text-slate-600 dark:text-slate-400 mt-1">{{ activity.match_reason }}</p>
+                                <p class="text-xs text-slate-500 dark:text-slate-500 mt-2">{{ activity.action_at }}</p>
                             </div>
                         </div>
                     </div>
