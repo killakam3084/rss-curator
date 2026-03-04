@@ -12,6 +12,9 @@ const app = createApp({
         const toasts = ref([]);
         // Initialize dark mode from system preference immediately
         const darkMode = ref(window.matchMedia('(prefers-color-scheme: dark)').matches);
+        // Initialize sidebar collapse state from localStorage
+        const sidebarCollapsed = ref(JSON.parse(localStorage.getItem('rss-curator-sidebar-collapsed') || 'false'));
+        const sidebarTab = ref('activity'); // 'activity' or 'feed'
         const tabs = ['pending', 'approved', 'rejected'];
         let toastCounter = 0;
 
@@ -28,6 +31,13 @@ const app = createApp({
         const selectedCount = computed(() => selectedIds.value.size);
         const displayedTorrents = computed(() => 
             torrents.value.filter(t => t.status === activeTab.value)
+        );
+        // Sorted torrents for feed stream (most recent first)
+        const feedStreamTorrents = computed(() =>
+            torrents.value.slice().sort((a, b) => {
+                // Prioritize by newest first (assuming torrents are added in order)
+                return b.id - a.id;
+            })
         );
 
         // Methods
@@ -262,6 +272,11 @@ const app = createApp({
             }
         };
 
+        const toggleSidebarCollapse = () => {
+            sidebarCollapsed.value = !sidebarCollapsed.value;
+            localStorage.setItem('rss-curator-sidebar-collapsed', JSON.stringify(sidebarCollapsed.value));
+        };
+
         return {
             torrents,
             activities,
@@ -273,6 +288,9 @@ const app = createApp({
             toasts,
             tabs,
             darkMode,
+            sidebarCollapsed,
+            sidebarTab,
+            feedStreamTorrents,
             pendingCount,
             approvedCount,
             rejectedCount,
@@ -290,7 +308,8 @@ const app = createApp({
             isSelected,
             formatSize,
             showToast,
-            toggleDarkMode
+            toggleDarkMode,
+            toggleSidebarCollapse
         };
     }
 });

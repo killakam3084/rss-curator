@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.4] - 2026-03-03
+
+### Added
+- Collapsible sidebar with toggle button (defaults open)
+- Tab switcher between Activity Log and Feed Stream
+- Feed Stream ticker showing all discovered torrents
+- Vertical scrolling ticker display with title, size, and match reason
+- Visual highlighting for matched/approved torrents in lime
+- Muted styling for pending torrents
+- Sidebar collapse state persistence via localStorage
+
+### Changed
+- Reorganized sidebar to support multiple content panels
+- Main content now expands to full width when sidebar is collapsed
+
 ## [0.7.3] - 2026-03-03
 
 ### Changed
