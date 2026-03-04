@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.3] - 2026-03-03
+
+### Changed
+- Complete UI redesign with hacker aesthetic
+- Shift from gradient to dark charcoal background (#1a1a1a)
+- Replace purple/blue palette with electric lime (#00ff41) accents
+- Implement angular geometric triangular pattern background
+- Convert typography to bold monospace (Monaco/Courier)
+- Terminal-style UI with borders, glow effects, and uppercase commands
+- All elements now use dark theme with lime highlights and hover states
+- Enhanced retro-hacker vibe throughout interface
+
 ## [0.7.2] - 2026-03-03
 
 ### Fixed
