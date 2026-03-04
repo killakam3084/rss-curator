@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.1] - 2026-03-03
+
+### Added
+- Dark mode toggle with system preference detection
+- Automatic theme switching as system preference changes throughout the day
+- Manual override capability via toggle button in header
+
+### Changed
+- Dark mode now defaults to system preference instead of localStorage
+- Listens for system color scheme changes and updates in real-time
+
 ## [0.7.0] - 2026-03-03
 
 ### Changed
