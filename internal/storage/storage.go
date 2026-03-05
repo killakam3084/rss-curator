@@ -34,8 +34,9 @@ func New(dbPath string) (*Storage, error) {
 	return s, nil
 }
 
-// migrate creates the necessary tables
+// migrate creates the necessary tables and applies schema upgrades
 func (s *Storage) migrate() error {
+	// Create initial schema
 	schema := `
 	CREATE TABLE IF NOT EXISTS staged_torrents (
 		id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -72,8 +73,32 @@ func (s *Storage) migrate() error {
 	CREATE INDEX IF NOT EXISTS idx_raw_feed_expires_at ON raw_feed_items(expires_at);
 	`
 
-	_, err := s.db.Exec(schema)
-	return err
+	if _, err := s.db.Exec(schema); err != nil {
+		return err
+	}
+
+	// Apply schema migrations (idempotent)
+	migrations := []string{
+		// Migration 1: Ensure raw_feed_items table exists (in case DB was created before this feature)
+		`CREATE TABLE IF NOT EXISTS raw_feed_items (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			feed_item TEXT NOT NULL,
+			pulled_at DATETIME NOT NULL,
+			expires_at DATETIME NOT NULL
+		)`,
+		// Create indexes if they don't exist
+		`CREATE INDEX IF NOT EXISTS idx_raw_feed_pulled_at ON raw_feed_items(pulled_at DESC)`,
+		`CREATE INDEX IF NOT EXISTS idx_raw_feed_expires_at ON raw_feed_items(expires_at)`,
+	}
+
+	for _, migration := range migrations {
+		if _, err := s.db.Exec(migration); err != nil {
+			// Log but don't fail - migration may have already been applied
+			fmt.Printf("Migration note: %v\n", err)
+		}
+	}
+
+	return nil
 }
 
 // Add adds a new staged torrent (or ignores if Link already exists)
