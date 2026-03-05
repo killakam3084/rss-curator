@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 	"text/tabwriter"
+	"time"
 
 	"github.com/iillmaticc/rss-curator/internal/api"
 	"github.com/iillmaticc/rss-curator/internal/client"
@@ -90,6 +91,10 @@ func cmdCheck(cfg models.Config, store *storage.Storage) {
 	}
 
 	totalNew := 0
+	totalDiscovered := 0
+	now := time.Now()
+	ttl := 24 * time.Hour // Keep raw feed items for 24 hours
+
 	for _, feedURL := range cfg.FeedURLs {
 		fmt.Printf("Fetching: %s\n", feedURL)
 
@@ -100,6 +105,20 @@ func cmdCheck(cfg models.Config, store *storage.Storage) {
 		}
 
 		fmt.Printf("Found %d items\n", len(items))
+
+		// Store all raw feed items for console visibility
+		for _, item := range items {
+			rawItem := models.RawFeedItem{
+				FeedItem:  item,
+				PulledAt:  now,
+				ExpiresAt: now.Add(ttl),
+			}
+			if err := store.AddRawFeedItem(rawItem); err != nil {
+				fmt.Fprintf(os.Stderr, "Warning: Error storing raw feed item: %v\n", err)
+			} else {
+				totalDiscovered++
+			}
+		}
 
 		// Match items
 		matches := m.MatchAll(items)
@@ -115,8 +134,11 @@ func cmdCheck(cfg models.Config, store *storage.Storage) {
 		}
 	}
 
+	if totalDiscovered > 0 {
+		fmt.Printf("\n✓ Discovered %d items from RSS feeds\n", totalDiscovered)
+	}
 	if totalNew > 0 {
-		fmt.Printf("\n✓ Staged %d new torrents\n", totalNew)
+		fmt.Printf("✓ Staged %d new torrents\n", totalNew)
 		fmt.Println("Run 'curator list' to review pending items")
 	} else {
 		fmt.Println("\nNo new matches found")
