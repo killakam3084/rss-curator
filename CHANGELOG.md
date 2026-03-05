@@ -5,6 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.2] - 2026-03-05
+
+### Added
+- Idempotent schema migration system for safe database upgrades
+- Raw feed item persistence in `curator check` command
+- Debug logging for feed stream endpoint to track retrieval count
+- 24-hour TTL for raw feed items with automatic expiration
+
+### Fixed
+- Database migration now creates `raw_feed_items` table on existing databases
+- Feed stream endpoint now properly displays discovered items (not just matched ones)
+- Migration errors no longer cause startup failures (graceful handling)
+
+### Technical
+- Separate migration strategy with idempotent SQL statements
+- Background cleanup of expired raw feed items on every feed stream request
+- All discovered torrents from RSS feeds are now persisted for console visibility
+
 ## [0.8.1] - 2026-03-04
 
 ### Added
