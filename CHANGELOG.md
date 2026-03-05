@@ -5,6 +5,32 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.0] - 2026-03-04
+
+### Added
+- Full-height fixed navigation sidebar (300px wide, right-side)
+- Hamburger toggle for collapsing sidebar to icon-only strip (64px)
+- Dark mode toggle integrated into sidebar (visible in both states)
+- New backend endpoint `/api/feed/stream` for real-time RSS feed discoveries
+- Jenga-style slide/fade-in animations for feed stream items
+- Live feed ticker pulling from actual RSS feed data (refreshes every 30s)
+- Support for future admin features (settings panel placeholder)
+
+### Changed
+- Sidebar refactored from relative grid position to fixed full-height panel
+- Feed stream now uses real backend data instead of static torrent list
+- Layout changed from grid to flex to accommodate fixed sidebar
+- Dark mode toggle moved from header to sidebar
+- Main content area now uses dynamic margin based on sidebar state
+- Sidebar collapse behavior: hamburger ☰ when collapsed, ✕ when expanded
+
+### Technical
+- Added `FeedStreamItem` and `FeedStreamResponse` types to server
+- Implemented `handleFeedStream()` handler with sorting and timestamp simulation
+- Frontend `fetchFeedStream()` function integrated with 30s polling
+- CSS animations for smooth slide-in effects from top
+- Proper z-index layering for fixed sidebar
+
 ## [0.7.4] - 2026-03-03
 
 ### Added

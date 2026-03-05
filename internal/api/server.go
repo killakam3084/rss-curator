@@ -74,6 +74,21 @@ type StatsResponse struct {
 	Rejected int `json:"rejected"`
 }
 
+type FeedStreamItem struct {
+	ID           int    `json:"id"`
+	Title        string `json:"title"`
+	Size         int64  `json:"size"`
+	MatchReason  string `json:"match_reason"`
+	Status       string `json:"status"`
+	Link         string `json:"link"`
+	DiscoveredAt string `json:"discovered_at"`
+}
+
+type FeedStreamResponse struct {
+	Items []FeedStreamItem `json:"items"`
+	Total int              `json:"total"`
+}
+
 // NewServer creates a new API server instance
 func NewServer(store *storage.Storage, client *client.Client, port int) *Server {
 	// Create a production logger (use development logger in dev if preferred)
@@ -101,6 +116,7 @@ func (s *Server) Start() error {
 	mux.HandleFunc("/api/health", s.handleHealth)
 	mux.HandleFunc("/api/activity", s.handleActivity)
 	mux.HandleFunc("/api/stats", s.handleStats)
+	mux.HandleFunc("/api/feed/stream", s.handleFeedStream)
 
 	// Static files and UI
 	mux.Handle("/style.css", http.FileServer(http.Dir("./web")))
@@ -520,4 +536,70 @@ func (s *Server) handleStats(w http.ResponseWriter, r *http.Request) {
 // getContextWithTimeout wraps a context with a 30 second timeout
 func getContextWithTimeout(baseCtx context.Context) (context.Context, context.CancelFunc) {
 	return context.WithTimeout(baseCtx, 30*time.Second)
+}
+
+// handleFeedStream returns recent RSS feed discoveries
+func (s *Server) handleFeedStream(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// Get limit from query params (default 100)
+	limitStr := r.URL.Query().Get("limit")
+	limit := 100
+	if limitStr != "" {
+		if parsedLimit, err := strconv.Atoi(limitStr); err == nil && parsedLimit > 0 {
+			limit = parsedLimit
+		}
+	}
+
+	// Get all torrents (all statuses) sorted by ID descending (newest first)
+	allTorrents := []storage.Torrent{}
+
+	// Fetch from all statuses
+	for _, status := range []string{"pending", "approved", "rejected"} {
+		torrents, err := s.store.List(status)
+		if err != nil {
+			s.logger.Error("failed to list torrents for feed stream", zap.String("status", status), zap.Error(err))
+			continue
+		}
+		allTorrents = append(allTorrents, torrents...)
+	}
+
+	// Sort by ID descending (assuming higher ID = more recent)
+	// Note: In production you'd want a proper timestamp field
+	for i := 0; i < len(allTorrents); i++ {
+		for j := i + 1; j < len(allTorrents); j++ {
+			if allTorrents[i].ID < allTorrents[j].ID {
+				allTorrents[i], allTorrents[j] = allTorrents[j], allTorrents[i]
+			}
+		}
+	}
+
+	// Limit results
+	if len(allTorrents) > limit {
+		allTorrents = allTorrents[:limit]
+	}
+
+	// Convert to response format
+	items := make([]FeedStreamItem, len(allTorrents))
+	for i, t := range allTorrents {
+		items[i] = FeedStreamItem{
+			ID:           t.ID,
+			Title:        t.FeedItem.Title,
+			Size:         t.FeedItem.Size,
+			MatchReason:  t.MatchReason,
+			Status:       t.Status,
+			Link:         t.FeedItem.Link,
+			DiscoveredAt: time.Now().Add(-time.Duration(i) * time.Minute).Format(time.RFC3339), // Simulate discovery time
+		}
+	}
+
+	s.logger.Info("feed stream retrieved", zap.Int("count", len(items)))
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(FeedStreamResponse{
+		Items: items,
+		Total: len(items),
+	})
 }
