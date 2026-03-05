@@ -11,6 +11,7 @@ import (
 
 	"github.com/iillmaticc/rss-curator/internal/client"
 	"github.com/iillmaticc/rss-curator/internal/storage"
+	"github.com/iillmaticc/rss-curator/pkg/models"
 	"go.uber.org/zap"
 )
 
@@ -555,7 +556,7 @@ func (s *Server) handleFeedStream(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Get all torrents (all statuses) sorted by ID descending (newest first)
-	allTorrents := []storage.Torrent{}
+	allTorrents := []models.StagedTorrent{}
 
 	// Fetch from all statuses
 	for _, status := range []string{"pending", "approved", "rejected"} {
