@@ -73,10 +73,10 @@
             </div>
         </div>
 
-        <!-- Full Height Layout with Sidebar -->
+        <!-- Full Height Layout with Console -->
         <div class="flex min-h-screen">
             <!-- Main Content Area -->
-            <div :class="['flex-1 transition-all duration-300 overflow-hidden', sidebarCollapsed ? 'mr-16' : 'mr-80']">
+            <div :style="{marginRight: sidebarCollapsed ? '64px' : '320px'}" class="flex-1 transition-all duration-300 overflow-hidden">
                 <div class="w-full h-full overflow-y-auto px-4 py-8">
             <!-- Header -->
             <header class="mb-8">
@@ -250,7 +250,7 @@
         </div>
 
         <!-- Full Height Right Console -->
-        <aside :class="['fixed top-0 right-0 h-screen bg-gray-900 border-l border-gray-800 shadow-2xl transition-all duration-300 z-40', sidebarCollapsed ? 'w-16' : 'w-80']">
+        <aside :style="{width: sidebarCollapsed ? '64px' : '320px'}" class="fixed top-0 right-0 h-screen bg-gray-900 border-l border-gray-800 shadow-2xl transition-all duration-300 z-40">
             <!-- Console Header with Hamburger Toggle -->
             <div class="flex items-center justify-between p-4 border-b border-gray-800 bg-gray-800/50">
                 <h2 v-if="!sidebarCollapsed" class="text-sm font-bold font-mono text-curator-500 uppercase">
