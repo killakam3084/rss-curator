@@ -31,6 +31,15 @@ type StagedTorrent struct {
 	ApprovedAt  *time.Time `json:"approved_at,omitempty"`
 }
 
+// RawFeedItem represents a raw item pulled from RSS feed (before filtering/matching)
+// This is temporary data for UI visibility into feed discovery process
+type RawFeedItem struct {
+	ID        int       `json:"id"`
+	FeedItem  FeedItem  `json:"feed_item"`
+	PulledAt  time.Time `json:"pulled_at"`
+	ExpiresAt time.Time `json:"expires_at"` // TTL for cleanup
+}
+
 // Activity represents an action taken on a torrent (approve/reject)
 type Activity struct {
 	ID           int       `json:"id"`

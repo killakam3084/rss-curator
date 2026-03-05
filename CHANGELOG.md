@@ -5,6 +5,25 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.1] - 2026-03-04
+
+### Added
+- `RawFeedItem` model for tracking unfiltered RSS feed pulls
+- `raw_feed_items` table with TTL-based cleanup for temporary feed visibility
+- Storage methods: `AddRawFeedItem()`, `GetRawFeedItems()`, `CleanupExpiredRawFeedItems()`
+- Backend support for tracking all torrents pulled from RSS (not just matched ones)
+
+### Changed
+- Renamed sidebar to "console" throughout UI for clarity
+- `/api/feed/stream` now returns raw feed items instead of matched torrents
+- Console layout: left column content stays visible and fits-to-width when console expands/collapses
+- Feed stream shows all discovered items with "discovered" status vs. matched/approved/rejected
+- Fixed responsive behavior when toggling console collapse state
+
+### Fixed
+- Main content area now properly constrains width based on console state
+- Layout transitions smoothly without content jumping
+
 ## [0.8.0] - 2026-03-04
 
 ### Added
