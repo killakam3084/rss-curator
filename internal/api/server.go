@@ -562,6 +562,8 @@ func (s *Server) handleFeedStream(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	s.logger.Debug("retrieved raw feed items", zap.Int("count", len(rawItems)))
+
 	// Clean up expired items in background
 	go func() {
 		if err := s.store.CleanupExpiredRawFeedItems(); err != nil {
