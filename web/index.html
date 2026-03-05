@@ -76,8 +76,8 @@
         <!-- Full Height Layout with Sidebar -->
         <div class="flex min-h-screen">
             <!-- Main Content Area -->
-            <div :class="['flex-1 transition-all duration-300', sidebarCollapsed ? 'mr-16' : 'mr-0']">
-                <div class="container mx-auto max-w-7xl px-4 py-8">
+            <div :class="['flex-1 transition-all duration-300 overflow-hidden', sidebarCollapsed ? 'mr-16' : 'mr-80']">
+                <div class="w-full h-full overflow-y-auto px-4 py-8">
             <!-- Header -->
             <header class="mb-8">
                 <div class="bg-gray-900 border border-gray-800 rounded-lg shadow-2xl p-8 backdrop-blur-sm">
@@ -249,17 +249,17 @@
             </div>
         </div>
 
-        <!-- Full Height Right Sidebar -->
+        <!-- Full Height Right Console -->
         <aside :class="['fixed top-0 right-0 h-screen bg-gray-900 border-l border-gray-800 shadow-2xl transition-all duration-300 z-40', sidebarCollapsed ? 'w-16' : 'w-80']">
-            <!-- Sidebar Header with Hamburger Toggle -->
+            <!-- Console Header with Hamburger Toggle -->
             <div class="flex items-center justify-between p-4 border-b border-gray-800 bg-gray-800/50">
                 <h2 v-if="!sidebarCollapsed" class="text-sm font-bold font-mono text-curator-500 uppercase">
-                    > navigation
+                    > console
                 </h2>
                 <button 
                     @click="toggleSidebarCollapse"
                     class="p-2 rounded border border-gray-700 bg-gray-800 hover:border-curator-500 transition-colors duration-200"
-                    :title="sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'"
+                    :title="sidebarCollapsed ? 'Expand console' : 'Collapse console'"
                 >
                     <span class="text-curator-500 font-bold text-lg">{{ sidebarCollapsed ? '☰' : '✕' }}</span>
                 </button>

@@ -11,7 +11,6 @@ import (
 
 	"github.com/iillmaticc/rss-curator/internal/client"
 	"github.com/iillmaticc/rss-curator/internal/storage"
-	"github.com/iillmaticc/rss-curator/pkg/models"
 	"go.uber.org/zap"
 )
 
@@ -555,45 +554,32 @@ func (s *Server) handleFeedStream(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Get all torrents (all statuses) sorted by ID descending (newest first)
-	allTorrents := []models.StagedTorrent{}
+	// Get raw feed items (unfiltered torrents pulled from RSS feeds)
+	rawItems, err := s.store.GetRawFeedItems(limit)
+	if err != nil {
+		s.logger.Error("failed to get raw feed items", zap.Error(err))
+		http.Error(w, "Failed to fetch feed stream", http.StatusInternalServerError)
+		return
+	}
 
-	// Fetch from all statuses
-	for _, status := range []string{"pending", "approved", "rejected"} {
-		torrents, err := s.store.List(status)
-		if err != nil {
-			s.logger.Error("failed to list torrents for feed stream", zap.String("status", status), zap.Error(err))
-			continue
+	// Clean up expired items in background
+	go func() {
+		if err := s.store.CleanupExpiredRawFeedItems(); err != nil {
+			s.logger.Error("failed to cleanup expired raw feed items", zap.Error(err))
 		}
-		allTorrents = append(allTorrents, torrents...)
-	}
-
-	// Sort by ID descending (assuming higher ID = more recent)
-	// Note: In production you'd want a proper timestamp field
-	for i := 0; i < len(allTorrents); i++ {
-		for j := i + 1; j < len(allTorrents); j++ {
-			if allTorrents[i].ID < allTorrents[j].ID {
-				allTorrents[i], allTorrents[j] = allTorrents[j], allTorrents[i]
-			}
-		}
-	}
-
-	// Limit results
-	if len(allTorrents) > limit {
-		allTorrents = allTorrents[:limit]
-	}
+	}()
 
 	// Convert to response format
-	items := make([]FeedStreamItem, len(allTorrents))
-	for i, t := range allTorrents {
+	items := make([]FeedStreamItem, len(rawItems))
+	for i, r := range rawItems {
 		items[i] = FeedStreamItem{
-			ID:           t.ID,
-			Title:        t.FeedItem.Title,
-			Size:         t.FeedItem.Size,
-			MatchReason:  t.MatchReason,
-			Status:       t.Status,
-			Link:         t.FeedItem.Link,
-			DiscoveredAt: time.Now().Add(-time.Duration(i) * time.Minute).Format(time.RFC3339), // Simulate discovery time
+			ID:           r.ID,
+			Title:        r.FeedItem.Title,
+			Size:         r.FeedItem.Size,
+			MatchReason:  "",           // Raw feed items don't have match reasons
+			Status:       "discovered", // Mark as discovered (not matched/approved/rejected yet)
+			Link:         r.FeedItem.Link,
+			DiscoveredAt: r.PulledAt.Format(time.RFC3339),
 		}
 	}
 

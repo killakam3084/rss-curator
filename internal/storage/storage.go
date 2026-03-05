@@ -57,10 +57,19 @@ func (s *Storage) migrate() error {
 		FOREIGN KEY (torrent_id) REFERENCES staged_torrents(id)
 	);
 
+	CREATE TABLE IF NOT EXISTS raw_feed_items (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		feed_item TEXT NOT NULL,
+		pulled_at DATETIME NOT NULL,
+		expires_at DATETIME NOT NULL
+	);
+
 	CREATE INDEX IF NOT EXISTS idx_status ON staged_torrents(status);
 	CREATE INDEX IF NOT EXISTS idx_link ON staged_torrents(link);
 	CREATE INDEX IF NOT EXISTS idx_activity_action_at ON activity_log(action_at DESC);
 	CREATE INDEX IF NOT EXISTS idx_activity_action ON activity_log(action);
+	CREATE INDEX IF NOT EXISTS idx_raw_feed_pulled_at ON raw_feed_items(pulled_at DESC);
+	CREATE INDEX IF NOT EXISTS idx_raw_feed_expires_at ON raw_feed_items(expires_at);
 	`
 
 	_, err := s.db.Exec(schema)
@@ -312,4 +321,63 @@ func (s *Storage) GetActivityCount(action string) (int, error) {
 	var count int
 	err := s.db.QueryRow(query, args...).Scan(&count)
 	return count, err
+}
+
+// AddRawFeedItem stores a raw feed item pulled from RSS (with TTL)
+func (s *Storage) AddRawFeedItem(item models.RawFeedItem) error {
+	feedItemJSON, err := json.Marshal(item.FeedItem)
+	if err != nil {
+		return fmt.Errorf("failed to marshal feed item: %w", err)
+	}
+
+	_, err = s.db.Exec(`
+		INSERT INTO raw_feed_items (feed_item, pulled_at, expires_at)
+		VALUES (?, ?, ?)
+	`, feedItemJSON, item.PulledAt, item.ExpiresAt)
+
+	return err
+}
+
+// GetRawFeedItems returns recent raw feed items (non-expired)
+func (s *Storage) GetRawFeedItems(limit int) ([]models.RawFeedItem, error) {
+	rows, err := s.db.Query(`
+		SELECT id, feed_item, pulled_at, expires_at
+		FROM raw_feed_items
+		WHERE expires_at > datetime('now')
+		ORDER BY pulled_at DESC
+		LIMIT ?
+	`, limit)
+
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var items []models.RawFeedItem
+	for rows.Next() {
+		var item models.RawFeedItem
+		var feedItemJSON string
+
+		err := rows.Scan(&item.ID, &feedItemJSON, &item.PulledAt, &item.ExpiresAt)
+		if err != nil {
+			return nil, err
+		}
+
+		if err := json.Unmarshal([]byte(feedItemJSON), &item.FeedItem); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal feed item: %w", err)
+		}
+
+		items = append(items, item)
+	}
+
+	return items, rows.Err()
+}
+
+// CleanupExpiredRawFeedItems removes expired raw feed items
+func (s *Storage) CleanupExpiredRawFeedItems() error {
+	_, err := s.db.Exec(`
+		DELETE FROM raw_feed_items
+		WHERE expires_at <= datetime('now')
+	`)
+	return err
 }
