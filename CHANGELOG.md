@@ -5,6 +5,33 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.0] - 2026-03-05
+
+### Added
+- **Tollgate Review State**: Approval now leads to review/config modal, not direct download
+- Individual review modal for per-torrent configuration (savePath, tags, category)
+- Bulk review modal for configuring multiple torrents at once
+- `deferReview()` to skip config and queue later
+- `bulkQueue()` to queue multiple torrents with defaults (quick batch mode)
+- `submitBulkReview()` to queue multiple torrents with custom config (configured batch mode)
+
+### Changed
+- **Semantic state transitions**: pending → approved (tollgate) → queued/downloading
+- Approval no longer directly triggers download; review/config is mandatory by default
+- `submitReview()` now calls `/api/torrents/{id}/queue` endpoint
+- Layout precision: console and main content stay tightly aligned with px-based widths
+- Enhanced bulk operations: users can choose between quick or configured batch queuing
+
+### Technical
+- New state: `bulkReviewModalOpen`, `bulkReviewForm` for bulk configuration
+- Three queue endpoints: individual review → queue, quick bulk → queue, configured bulk → queue
+- Decoupled approval from download queueing for better UX control
+
+### UX Improvements
+- Users can approve without immediate config burden (defer)
+- Batch operations support both speed (quick queue) and control (configured queue)
+- Flexible approval workflow: immediate config OR defer for later batch processing
+
 ## [0.8.2] - 2026-03-05
 
 ### Added
