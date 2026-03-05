@@ -4,6 +4,7 @@ const app = createApp({
     setup() {
         const torrents = ref([]);
         const activities = ref([]);
+        const feedStream = ref([]);
         const loading = ref(false);
         const bulkLoading = ref(false);
         const activeTab = ref('pending');
@@ -79,6 +80,16 @@ const app = createApp({
                 activities.value = data.activities || [];
             } catch (error) {
                 console.error('Failed to fetch activities:', error);
+            }
+        };
+
+        const fetchFeedStream = async () => {
+            try {
+                const response = await fetch(`/api/feed/stream?limit=50`);
+                const data = await response.json();
+                feedStream.value = data.items || [];
+            } catch (error) {
+                console.error('Failed to fetch feed stream:', error);
             }
         };
 
@@ -251,10 +262,12 @@ const app = createApp({
             
             fetchAllTorrents();
             fetchActivities();
+            fetchFeedStream();
             // Auto-refresh every 30 seconds
             setInterval(() => {
                 fetchAllTorrents();
                 fetchActivities();
+                fetchFeedStream();
             }, 30000);
         });
 
@@ -280,6 +293,7 @@ const app = createApp({
         return {
             torrents,
             activities,
+            feedStream,
             loading,
             bulkLoading,
             activeTab,
@@ -299,6 +313,7 @@ const app = createApp({
             fetchTorrents,
             fetchAllTorrents,
             fetchActivities,
+            fetchFeedStream,
             approveTorrent,
             rejectTorrent,
             retryQBittorrent,
