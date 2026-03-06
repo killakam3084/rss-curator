@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>RSS Curator</title>
     <!-- Favicon -->
-    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect fill='%23667eea' width='100' height='100'/><text x='50' y='65' font-size='70' text-anchor='middle' dominant-baseline='middle'>📡</text></svg>">
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0%25' stop-color='%2322c55e'/%3E%3Cstop offset='100%25' stop-color='%2316a34a'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='64' height='64' rx='14' fill='url(%23g)'/%3E%3Ccircle cx='20' cy='44' r='4' fill='white'/%3E%3Cpath d='M20%2034a10%2010%200%200%201%2010%2010' fill='none' stroke='white' stroke-width='4' stroke-linecap='round'/%3E%3Cpath d='M20%2024a20%2020%200%200%201%2020%2020' fill='none' stroke='white' stroke-width='4' stroke-linecap='round'/%3E%3C/svg%3E">
     <!-- Tailwind CSS via CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
@@ -161,8 +161,9 @@
                     </div>
 
                     <!-- Empty State -->
-                    <div v-else-if="displayedTorrents.length === 0" class="bg-white dark:bg-slate-900 rounded-2xl shadow-lg p-16 text-center">
-                        <p class="text-slate-500 dark:text-slate-400 text-lg">No {{ activeTab }} torrents</p>
+                    <div v-else-if="displayedTorrents.length === 0" class="bg-gradient-to-br from-slate-50 via-white to-emerald-50/40 dark:from-slate-900 dark:via-slate-900 dark:to-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-lg p-16 text-center">
+                        <p class="text-slate-700 dark:text-slate-400 text-lg font-medium">No {{ activeTab }} torrents</p>
+                        <p class="mt-2 text-sm text-slate-500 dark:text-slate-500">Queue is clear for now — new matches will show up here.</p>
                     </div>
 
                     <!-- Torrents Grid -->
