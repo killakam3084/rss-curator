@@ -26,12 +26,14 @@ type ErrorResponse struct {
 }
 
 type TorrentResponse struct {
-	ID          int    `json:"id"`
-	Title       string `json:"title"`
-	Size        int64  `json:"size"`
-	MatchReason string `json:"match_reason"`
-	Status      string `json:"status"`
-	Link        string `json:"link"`
+	ID          int     `json:"id"`
+	Title       string  `json:"title"`
+	Size        int64   `json:"size"`
+	MatchReason string  `json:"match_reason"`
+	Status      string  `json:"status"`
+	Link        string  `json:"link"`
+	AIScore     float64 `json:"ai_score"`
+	AIReason    string  `json:"ai_reason"`
 }
 
 type ListResponse struct {
@@ -178,6 +180,8 @@ func (s *Server) handleList(w http.ResponseWriter, r *http.Request) {
 			MatchReason: t.MatchReason,
 			Status:      t.Status,
 			Link:        t.FeedItem.Link,
+			AIScore:     t.AIScore,
+			AIReason:    t.AIReason,
 		})
 	}
 
@@ -268,6 +272,11 @@ func (s *Server) handleApprove(w http.ResponseWriter, r *http.Request, id int) {
 		w.WriteHeader(http.StatusInternalServerError)
 		json.NewEncoder(w).Encode(ErrorResponse{Error: err.Error()})
 		return
+	}
+
+	// Log the approve action so it is available as training data for the AI scorer.
+	if err := s.store.LogActivity(id, torrent.FeedItem.Title, "approve", torrent.MatchReason); err != nil {
+		s.logger.Warn("failed to log approve activity", zap.Int("id", id), zap.Error(err))
 	}
 
 	s.logger.Info("torrent accepted and awaiting queue decision", zap.Int("id", id), zap.String("title", torrent.FeedItem.Title))

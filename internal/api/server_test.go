@@ -112,6 +112,11 @@ func (m *mockStorage) CleanupExpiredRawFeedItems() error {
 	return nil
 }
 
+// UpdateAIScore updates the AI score for a torrent
+func (m *mockStorage) UpdateAIScore(id int, score float64, reason string) error {
+	return nil
+}
+
 // setupTestServer creates a test server instance
 func setupTestServer(t *testing.T) (*Server, *mockStorage) {
 	logger, _ := zap.NewProduction()
