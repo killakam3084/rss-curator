@@ -244,14 +244,14 @@
                                             {{ bulkLoading ? 'queuing bulk...' : 'queue selected' }}
                                         </button>
                                         <button 
-                                            @click="retryQBittorrent(torrent.id)" 
+                                            @click="queueForDownload(torrent.id)" 
                                             :disabled="operatingIds.has(torrent.id)"
-                                            class="flex-1 px-4 py-2 bg-amber-600 hover:bg-amber-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded font-mono font-bold text-sm transition-colors duration-200 flex items-center justify-center gap-2 uppercase"
-                                            title="Manually retry adding this torrent to qBittorrent"
+                                            class="flex-1 px-4 py-2 bg-curator-500 hover:bg-curator-600 disabled:opacity-50 disabled:cursor-not-allowed text-gray-900 rounded font-mono font-bold text-sm transition-colors duration-200 flex items-center justify-center gap-2 uppercase"
+                                            title="Queue this torrent for download"
                                         >
-                                            <span v-if="operatingIds.has(torrent.id)" class="inline-block w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
-                                            <span v-else>⟲</span>
-                                            {{ operatingIds.has(torrent.id) ? 'retrying...' : 'retry qbittorrent' }}
+                                            <span v-if="operatingIds.has(torrent.id)" class="inline-block w-4 h-4 border-2 border-gray-900 border-t-transparent rounded-full animate-spin"></span>
+                                            <span v-else>⬇</span>
+                                            {{ operatingIds.has(torrent.id) ? 'queuing...' : 'queue for dl' }}
                                         </button>
                                     </div>
                                 </div>

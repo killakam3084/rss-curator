@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.11.2] - 2026-03-05
+
+### Changed
+- **Accepted tab**: Replaced "retry qbittorrent" with "queue for dl" button
+- **Modal UX**: "Queue for download" button now opens configuration modal for consistency
+- `queueForDownload()` opens review modal instead of directly queuing
+- Button styling changed from amber (retry) to curator-green (queue)
+- Both "accept" and "queue for dl" paths now lead to modal for configuration
+
+### Technical
+- Renamed `retryQBittorrent()` to `queueForDownload()` in frontend
+- Backend `handleQueue` now parses request body for savePath, tags, category
+- Configuration options passed to qBittorrent AddTorrent call
+- Fixed retry-qbittorrent endpoint to validate 'accepted' status instead of 'approved'
+
 ## [0.11.1] - 2026-03-05
 
 ### Fixed

@@ -279,11 +279,22 @@ func (s *Server) handleApprove(w http.ResponseWriter, r *http.Request, id int) {
 	})
 }
 
-// handleQueue queues an approved torrent for download to qBittorrent
+// handleQueue queues an accepted torrent for download to qBittorrent
 func (s *Server) handleQueue(w http.ResponseWriter, r *http.Request, id int) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
+	}
+
+	// Parse queue configuration from request body
+	var queueConfig struct {
+		SavePath string `json:"savePath"`
+		Tags     string `json:"tags"`
+		Category string `json:"category"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&queueConfig); err != nil {
+		// Configuration is optional, so don't fail if body is empty
+		s.logger.Debug("no queue configuration provided", zap.Error(err))
 	}
 
 	torrent, err := s.store.Get(id)
@@ -320,7 +331,12 @@ func (s *Server) handleQueue(w http.ResponseWriter, r *http.Request, id int) {
 		return
 	}
 
-	if err := s.client.AddTorrent(torrent.FeedItem.Link, nil); err != nil {
+	if err := s.client.AddTorrent(torrent.FeedItem.Link, map[string]string{
+		"title":    torrent.FeedItem.Title,
+		"savePath": queueConfig.SavePath,
+		"tags":     queueConfig.Tags,
+		"category": queueConfig.Category,
+	}); err != nil {
 		s.logger.Error("failed to add torrent to qBittorrent", zap.Int("id", id), zap.Error(err))
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusInternalServerError)
@@ -399,7 +415,7 @@ func (s *Server) handleReject(w http.ResponseWriter, r *http.Request, id int) {
 	})
 }
 
-// handleRetryQBittorrent manually retries adding an approved torrent to qBittorrent
+// handleRetryQBittorrent manually retries adding an accepted torrent to qBittorrent
 func (s *Server) handleRetryQBittorrent(w http.ResponseWriter, r *http.Request, id int) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
@@ -431,11 +447,11 @@ func (s *Server) handleRetryQBittorrent(w http.ResponseWriter, r *http.Request, 
 		return
 	}
 
-	if torrent.Status != "approved" {
-		s.logger.Warn("can only retry approved torrents", zap.Int("id", id), zap.String("status", torrent.Status))
+	if torrent.Status != "accepted" {
+		s.logger.Warn("can only retry accepted torrents", zap.Int("id", id), zap.String("status", torrent.Status))
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(ErrorResponse{Error: fmt.Sprintf("Can only retry approved torrents, this one is %s", torrent.Status)})
+		json.NewEncoder(w).Encode(ErrorResponse{Error: fmt.Sprintf("Can only retry accepted torrents, this one is %s", torrent.Status)})
 		return
 	}
 

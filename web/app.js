@@ -227,26 +227,11 @@ const app = createApp({
             }
         };
 
-        const retryQBittorrent = async (id) => {
-            operatingIds.value.add(id);
-            try {
-                const response = await fetch(`/api/torrents/${id}/retry-qb`, {
-                    method: 'POST'
-                });
-                if (response.ok) {
-                    showToast('Retrying torrent add to qBittorrent...', 'success');
-                    await fetchAllTorrents();
-                    await fetchActivities();
-                } else {
-                    const data = await response.json();
-                    showToast(`Retry failed: ${data.error || 'Unknown error'}`, 'error');
-                }
-            } catch (error) {
-                console.error('Error retrying torrent:', error);
-                showToast('Error retrying torrent', 'error');
-            } finally {
-                operatingIds.value.delete(id);
-            }
+        const queueForDownload = async (id) => {
+            // Get the torrent and open the configuration modal
+            const torrent = torrents.value.find(t => t.id === id);
+            if (!torrent) return;
+            openReviewModal(torrent);
         };
 
         const bulkApprove = async () => {
@@ -502,7 +487,7 @@ const app = createApp({
             openBulkReviewModal,
             closeBulkReviewModal,
             submitBulkReview,
-            retryQBittorrent,
+            queueForDownload,
             bulkApprove,
             bulkReject,
             bulkQueue,
