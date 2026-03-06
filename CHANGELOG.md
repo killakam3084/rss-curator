@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.13.1] - 2026-03-05
+
+### Added
+- **Contribution Workflow Skill**: Added reusable Copilot skill defining contribution, testing, linting, formatting, changelog, tagging, and push flow
+- Repository-level Copilot instructions to enforce the contribution workflow skill for commit/release tasks
+
+### Changed
+- CI orchestration now gates container build/push on passing `test` and `lint` phases via job dependencies
+- Consolidated pipeline logic into a single workflow path to avoid duplicate test/lint executions
+
 ## [0.13.0] - 2026-03-05
 
 ### Added
