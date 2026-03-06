@@ -216,6 +216,8 @@ func (s *Server) handleTorrentAction(w http.ResponseWriter, r *http.Request) {
 		s.handleApprove(w, r, id)
 	case "reject":
 		s.handleReject(w, r, id)
+	case "queue":
+		s.handleQueue(w, r, id)
 	case "retry-qb":
 		s.handleRetryQBittorrent(w, r, id)
 	default:
@@ -226,7 +228,8 @@ func (s *Server) handleTorrentAction(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// handleApprove approves a torrent and adds it to qBittorrent
+// handleApprove marks a torrent as approved (tollgate entry)
+// Does NOT queue to qBittorrent - that happens in handleQueue
 func (s *Server) handleApprove(w http.ResponseWriter, r *http.Request, id int) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
@@ -258,7 +261,7 @@ func (s *Server) handleApprove(w http.ResponseWriter, r *http.Request, id int) {
 		return
 	}
 
-	// Update status to approved (approval decision made - this always succeeds)
+	// Update status to approved (tollgate entry - doesn't queue yet)
 	if err := s.store.UpdateStatus(id, "approved"); err != nil {
 		s.logger.Error("failed to update torrent status", zap.Int("id", id), zap.Error(err))
 		w.Header().Set("Content-Type", "application/json")
@@ -267,37 +270,77 @@ func (s *Server) handleApprove(w http.ResponseWriter, r *http.Request, id int) {
 		return
 	}
 
-	// Log the activity
-	if err := s.store.LogActivity(id, torrent.FeedItem.Title, "approve", torrent.MatchReason); err != nil {
-		s.logger.Error("failed to log activity", zap.Int("id", id), zap.Error(err))
-		// Don't fail the request, just log the error
-	}
-
-	// Try to add to qBittorrent asynchronously (non-blocking)
-	go func() {
-		if s.client == nil {
-			s.logger.Warn("qBittorrent client unavailable, torrent approved but not added", zap.Int("torrent_id", id), zap.String("title", torrent.FeedItem.Title))
-			return
-		}
-
-		s.logger.Info("attempting to add torrent to qBittorrent", zap.Int("torrent_id", id), zap.String("title", torrent.FeedItem.Title), zap.String("link", torrent.FeedItem.Link))
-		opts := map[string]string{
-			"title": torrent.FeedItem.Title,
-		}
-		if err := s.client.AddTorrent(torrent.FeedItem.Link, opts); err != nil {
-			s.logger.Error("failed to add torrent to qBittorrent (non-blocking)", zap.Int("id", id), zap.String("title", torrent.FeedItem.Title), zap.String("link", torrent.FeedItem.Link), zap.Error(err))
-			// Log this failure but don't change the approved status - could be a temporary network issue
-			return
-		}
-
-		s.logger.Info("torrent added to qBittorrent after approval", zap.Int("id", id), zap.String("title", torrent.FeedItem.Title))
-	}()
-
-	s.logger.Info("torrent approved", zap.Int("id", id), zap.String("title", torrent.FeedItem.Title))
+	s.logger.Info("torrent approved - awaiting review", zap.Int("id", id), zap.String("title", torrent.FeedItem.Title))
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(ApproveResponse{
 		ID:     id,
 		Status: "approved",
+		Title:  torrent.FeedItem.Title,
+	})
+}
+
+// handleQueue queues an approved torrent for download to qBittorrent
+func (s *Server) handleQueue(w http.ResponseWriter, r *http.Request, id int) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	torrent, err := s.store.Get(id)
+	if err != nil {
+		s.logger.Error("failed to retrieve torrent", zap.Int("id", id), zap.Error(err))
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(ErrorResponse{Error: fmt.Sprintf("Error retrieving torrent: %v", err)})
+		return
+	}
+
+	if torrent == nil {
+		s.logger.Warn("torrent not found", zap.Int("id", id))
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusNotFound)
+		json.NewEncoder(w).Encode(ErrorResponse{Error: "Torrent not found"})
+		return
+	}
+
+	if torrent.Status != "approved" {
+		s.logger.Warn("can only queue approved torrents", zap.Int("id", id), zap.String("status", torrent.Status))
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(ErrorResponse{Error: fmt.Sprintf("Torrent is %s, must be approved to queue", torrent.Status)})
+		return
+	}
+
+	// Add to qBittorrent (blocking call)
+	if s.client == nil {
+		s.logger.Error("qBittorrent client unavailable - cannot queue torrent", zap.Int("id", id))
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusServiceUnavailable)
+		json.NewEncoder(w).Encode(ErrorResponse{Error: "qBittorrent unavailable"})
+		return
+	}
+
+	if err := s.client.AddTorrent(torrent.FeedItem.Link, nil); err != nil {
+		s.logger.Error("failed to add torrent to qBittorrent", zap.Int("id", id), zap.Error(err))
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(ErrorResponse{Error: fmt.Sprintf("Failed to queue: %v", err)})
+		return
+	}
+
+	// Update status to show it's been queued
+	// Note: In production, you might track actual download state from qBittorrent
+	// For now, we'll keep it as "approved" since the source of truth is qBittorrent
+	if err := s.store.LogActivity(id, torrent.FeedItem.Title, "queue", torrent.MatchReason); err != nil {
+		s.logger.Error("failed to log activity", zap.Int("id", id), zap.Error(err))
+		// Don't fail the request
+	}
+
+	s.logger.Info("torrent queued for download", zap.Int("id", id), zap.String("title", torrent.FeedItem.Title))
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(ApproveResponse{
+		ID:     id,
+		Status: "queued",
 		Title:  torrent.FeedItem.Title,
 	})
 }
