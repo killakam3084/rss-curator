@@ -22,7 +22,6 @@ const app = createApp({
         const reviewModalOpen = ref(false);
         const reviewingTorrent = ref(null);
         const reviewForm = ref({
-            savePath: '',
             tags: '',
             category: ''
         });
@@ -173,14 +172,15 @@ const app = createApp({
         const submitReview = async () => {
             if (!reviewingTorrent.value) return;
             
-            operatingIds.value.add(reviewingTorrent.value.id);
+            // Store ID before it gets cleared by closeReviewModal
+            const torrentId = reviewingTorrent.value.id;
+            operatingIds.value.add(torrentId);
             try {
                 // Queue the approved torrent for download
-                const response = await fetch(`/api/torrents/${reviewingTorrent.value.id}/queue`, {
+                const response = await fetch(`/api/torrents/${torrentId}/queue`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
-                        savePath: reviewForm.value.savePath,
                         tags: reviewForm.value.tags,
                         category: reviewForm.value.category
                     })
@@ -197,7 +197,7 @@ const app = createApp({
                 console.error('Error queueing torrent:', error);
                 showToast('Error queueing torrent', 'error');
             } finally {
-                operatingIds.value.delete(reviewingTorrent.value.id);
+                operatingIds.value.delete(torrentId);
             }
         };
 
