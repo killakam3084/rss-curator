@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.13.7] - 2026-03-06
+
+### Added
+- `compose.dev.yml` — Podman-native local development stack with bridge networking, port mapping, and live web asset volume mounts (no rebuild needed for HTML/CSS/JS changes)
+- `local.env.sample` — simplified local dev environment template with `host.containers.internal` hint for reaching host-side qBittorrent from inside a container
+- `.gitignore` — excludes built binary, `local.env`, `.env`, `data/`, and `logs/`
+
+### Changed
+- Makefile rewritten to use Podman as default container runtime (`CTR ?= podman`, overridable with `CTR=docker`)
+- Added `dev-up`, `dev-down`, `dev-logs`, `dev-rebuild`, `dev-clean` targets for a fast local feedback loop
+- Renamed production image targets to `image-build`, `image-push`, `image-clean` for runtime-agnostic naming
+- Removed Docker-specific `docker-build`, `docker-run`, `docker-push`, `docker-clean` targets
+
 ## [0.13.6] - 2026-03-05
 
 ### Fixed
