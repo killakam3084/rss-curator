@@ -1,26 +1,39 @@
-.PHONY: build clean install test help docker-build docker-run docker-push
+.PHONY: build clean install test help run \
+        dev-up dev-down dev-logs dev-rebuild dev-clean \
+        image-build image-push image-clean
 
 BINARY_NAME=curator
 INSTALL_PATH=/usr/local/bin
-DOCKER_IMAGE_NAME=rss-curator
-DOCKER_REGISTRY=ghcr.io/iillmaticc
-DOCKER_IMAGE=$(DOCKER_REGISTRY)/$(DOCKER_IMAGE_NAME)
+IMAGE_NAME=rss-curator
+REGISTRY=ghcr.io/iillmaticc
+IMAGE=$(REGISTRY)/$(IMAGE_NAME)
+
+# Container runtime — defaults to podman, override with: make dev-up CTR=docker
+CTR ?= podman
 
 help:
 	@echo "RSS Curator - Makefile"
 	@echo ""
-	@echo "Usage:"
+	@echo "Local dev (Podman / OCI-compatible):"
+	@echo "  make dev-up        Build image and start local stack (compose.dev.yml)"
+	@echo "  make dev-down      Stop and remove local containers"
+	@echo "  make dev-logs      Tail logs from the running dev container"
+	@echo "  make dev-rebuild   Force image rebuild then restart"
+	@echo "  make dev-clean     Stop containers and remove dev image"
+	@echo ""
+	@echo "Go targets:"
 	@echo "  make build         Build the binary"
 	@echo "  make install       Build and install to $(INSTALL_PATH)"
 	@echo "  make test          Run tests"
 	@echo "  make clean         Remove built binary"
-	@echo "  make run           Build and run (requires .curator.env)"
+	@echo "  make run           Build and run (requires ~/.curator.env)"
 	@echo ""
-	@echo "Docker targets:"
-	@echo "  make docker-build  Build Docker image"
-	@echo "  make docker-run    Run Docker container (requires .env)"
-	@echo "  make docker-push   Push image to registry (requires auth)"
-	@echo "  make docker-clean  Remove Docker image"
+	@echo "Image targets (production, push to GHCR):"
+	@echo "  make image-build   Build OCI image"
+	@echo "  make image-push    Push image to registry (requires auth)"
+	@echo "  make image-clean   Remove local image"
+	@echo ""
+	@echo "Override container runtime: make dev-up CTR=docker"
 
 build:
 	@echo "Building $(BINARY_NAME)..."
@@ -50,27 +63,49 @@ run: build
 		echo "Copy curator.env.sample to ~/.curator.env and configure it"; \
 		exit 1; \
 	fi
-docker-build:
-	@echo "Building Docker image: $(DOCKER_IMAGE):latest"
-	docker build -t $(DOCKER_IMAGE):latest .
-	@echo "✓ Built Docker image: $(DOCKER_IMAGE):latest"
+# ── Local dev targets ────────────────────────────────────────────────────
 
-docker-run: docker-build
-	@if [ -f .env ]; then \
-		echo "Running Docker container with .env configuration"; \
-		docker run --rm --env-file .env --network host -v curator-data:/app/data $(DOCKER_IMAGE):latest check; \
-	else \
-		echo "Error: .env file not found"; \
-		echo "Copy curator.env.sample to .env and configure it"; \
+dev-up:
+	@if [ ! -f local.env ]; then \
+		echo "Error: local.env not found"; \
+		echo "Copy local.env.sample to local.env and configure it"; \
 		exit 1; \
 	fi
+	@if [ ! -f shows.json ]; then \
+		cp shows.json.sample shows.json; \
+		echo "info: copied shows.json.sample → shows.json"; \
+	fi
+	@mkdir -p data logs
+	$(CTR) compose -f compose.dev.yml up -d
+	@echo "✓ Dev stack running — API at http://localhost:8081"
 
-docker-push:
-	@echo "Pushing Docker image to registry: $(DOCKER_IMAGE)"
-	docker push $(DOCKER_IMAGE):latest
-	@echo "✓ Pushed Docker image"
+dev-down:
+	$(CTR) compose -f compose.dev.yml down
 
-docker-clean:
-	@echo "Removing Docker image: $(DOCKER_IMAGE):latest"
-	docker rmi $(DOCKER_IMAGE):latest
-	@echo "✓ Removed Docker image"
+dev-logs:
+	$(CTR) compose -f compose.dev.yml logs -f
+
+dev-rebuild:
+	$(CTR) compose -f compose.dev.yml up -d --build
+	@echo "✓ Rebuilt and restarted"
+
+dev-clean:
+	$(CTR) compose -f compose.dev.yml down
+	$(CTR) rmi rss-curator:dev 2>/dev/null || true
+	@echo "✓ Dev containers and image removed"
+
+# ── Production image targets ──────────────────────────────────────────────
+
+image-build:
+	@echo "Building image: $(IMAGE):latest"
+	$(CTR) build -t $(IMAGE):latest .
+	@echo "✓ Built: $(IMAGE):latest"
+
+image-push:
+	@echo "Pushing image to registry: $(IMAGE)"
+	$(CTR) push $(IMAGE):latest
+	@echo "✓ Pushed"
+
+image-clean:
+	$(CTR) rmi $(IMAGE):latest 2>/dev/null || true
+	@echo "✓ Removed $(IMAGE):latest"

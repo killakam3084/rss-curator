@@ -1,0 +1,19 @@
+# Binary
+curator
+
+# Local dev environment — never commit real credentials
+local.env
+.env
+
+# Runtime data and logs
+data/
+logs/
+
+# macOS
+.DS_Store
+
+# Editor
+.idea/
+.vscode/
+*.swp
+*.swo

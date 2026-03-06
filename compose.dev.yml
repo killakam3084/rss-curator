@@ -1,0 +1,48 @@
+# Local development compose file — use with Podman (or any OCI-compatible runtime)
+#
+# Usage:
+#   podman compose -f compose.dev.yml up -d        # start
+#   podman compose -f compose.dev.yml down          # stop
+#   podman compose -f compose.dev.yml logs -f       # tail logs
+#   podman compose -f compose.dev.yml up --build    # rebuild image then start
+#
+# Or via Make:
+#   make dev-up     make dev-down     make dev-logs     make dev-rebuild
+#
+# Prerequisites:
+#   1. Copy local.env.sample → local.env and fill in your values
+#   2. Ensure shows.json exists (copy shows.json.sample)
+
+services:
+  curator:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: rss-curator-dev
+    image: rss-curator:dev
+
+    # Bridge networking + explicit port binding so it works on macOS/Podman Desktop
+    # (host networking is Linux-only and behaves differently inside Podman's VM)
+    ports:
+      - "8081:8081"
+
+    env_file:
+      - local.env
+
+    environment:
+      - CURATOR_API_PORT=8081
+      - STORAGE_PATH=/app/data/curator.db
+      - LOG_FILE=/app/logs/curator.log
+
+    volumes:
+      # Persistent DB across restarts
+      - ./data:/app/data
+      # Log output to host for easy tailing
+      - ./logs:/app/logs
+      # shows.json live-reload (no rebuild needed when you edit show rules)
+      - ./shows.json:/app/shows.json:ro
+      # Web assets mounted from host — edit HTML/CSS/JS without rebuilding the image
+      - ./web:/app/web:ro
+
+    # Don't auto-restart in dev — let it fail loudly
+    restart: "no"
