@@ -16,6 +16,12 @@ const app = createApp({
         // Initialize sidebar collapse state from localStorage
         const sidebarCollapsed = ref(JSON.parse(localStorage.getItem('rss-curator-sidebar-collapsed') || 'false'));
         const sidebarTab = ref('activity'); // 'activity' or 'feed'
+        
+        // Load dark mode preference from localStorage if available, otherwise use system preference
+        const savedDarkMode = localStorage.getItem('rss-curator-dark-mode');
+        if (savedDarkMode !== null) {
+            darkMode.value = JSON.parse(savedDarkMode);
+        }
         // Tab structure: pending → accepted → rejected
         // (torrents can be queued for download from accepted tab)
         const tabs = ['pending', 'accepted', 'rejected'];
@@ -424,6 +430,7 @@ const app = createApp({
         const toggleDarkMode = () => {
             darkMode.value = !darkMode.value;
             applyDarkMode();
+            localStorage.setItem('rss-curator-dark-mode', JSON.stringify(darkMode.value));
         };
 
         const applyDarkMode = () => {

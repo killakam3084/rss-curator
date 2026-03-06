@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.12.0] - 2026-03-05
+
+### Added
+- **Light Mode Support**: Full light/dark mode toggle with persistent user preference
+- Light mode saves to localStorage; respects system preference if not saved
+- Light mode color scheme with white background and dark text
+- Tailwind class-based dark mode for conditional styling
+
+### Changed
+- Background pattern reduced opacity for better visibility in both light and dark modes
+- Dark mode now uses localStorage to persist user preference across sessions
+
 ## [0.11.4] - 2026-03-05
 
 ### Fixed
