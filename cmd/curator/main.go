@@ -385,7 +385,7 @@ func loadConfig() (models.Config, error) {
 	fmt.Printf("[Config] PREFERRED_GROUPS: %v\n", cfg.MatchRules.PreferredGroups)
 	fmt.Println("\n--- Storage ---")
 	fmt.Printf("[Config] STORAGE_PATH: %s\n", cfg.StoragePath)
-	fmt.Println("==========================================\n")
+	fmt.Println("==========================================")
 
 	// Validate required fields
 	if cfg.FeedURLs[0] == "" {
@@ -438,7 +438,7 @@ func getEnv(key, defaultValue string) string {
 }
 
 func printUsage() {
-	fmt.Println(`rss-curator - RSS feed torrent curator
+	fmt.Print(`rss-curator - RSS feed torrent curator
 
 Usage:
   curator <command> [arguments]

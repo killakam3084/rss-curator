@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.13.0] - 2026-03-05
+
+### Added
+- **Unit Testing Infrastructure**: Comprehensive test suite for API handlers and storage layer
+- API handler tests (11 tests) covering approve, reject, queue, and state transition workflows
+- Storage layer tests (5 tests) covering CRUD operations and activity logging
+- Storage interface abstraction for better testability and dependency injection
+- Test setup with mock storage for isolated API testing
+
+### Changed
+- Server struct now accepts `storage.Store` interface instead of concrete `*storage.Storage` for improved testability
+- NewServer function signature updated to use storage.Store interface
+
+### Fixed
+- Fixed redundant newlines in fmt.Println calls for cleaner output
+
 ## [0.12.0] - 2026-03-05
 
 ### Added
