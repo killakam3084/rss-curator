@@ -87,3 +87,116 @@ input:focus-visible {
     outline: 2px solid rgb(102, 126, 234);
     outline-offset: 2px;
 }
+
+/* Light mode polish: remap dark utility classes to light surfaces */
+html:not(.dark) .bg-gray-900 {
+    background-color: rgb(255 255 255) !important;
+}
+
+html:not(.dark) .bg-gray-800 {
+    background-color: rgb(249 250 251) !important;
+}
+
+html:not(.dark) .bg-gray-800\/50 {
+    background-color: rgb(249 250 251 / 0.75) !important;
+}
+
+html:not(.dark) .bg-gray-800\/60 {
+    background-color: rgb(249 250 251 / 0.9) !important;
+}
+
+html:not(.dark) .bg-gray-800\/30 {
+    background-color: rgb(249 250 251 / 0.55) !important;
+}
+
+html:not(.dark) .border-gray-800,
+html:not(.dark) .border-gray-700 {
+    border-color: rgb(229 231 235) !important;
+}
+
+html:not(.dark) .text-gray-100 {
+    color: rgb(17 24 39) !important;
+}
+
+html:not(.dark) .text-gray-400 {
+    color: rgb(75 85 99) !important;
+}
+
+html:not(.dark) .text-gray-500,
+html:not(.dark) .text-gray-600 {
+    color: rgb(107 114 128) !important;
+}
+
+html:not(.dark) .placeholder-gray-600::placeholder {
+    color: rgb(156 163 175) !important;
+}
+
+html:not(.dark) .bg-blue-900 {
+    background-color: rgb(219 234 254) !important;
+}
+
+html:not(.dark) .text-blue-400 {
+    color: rgb(29 78 216) !important;
+}
+
+html:not(.dark) .border-blue-700 {
+    border-color: rgb(191 219 254) !important;
+}
+
+html:not(.dark) .bg-red-900 {
+    background-color: rgb(254 226 226) !important;
+}
+
+html:not(.dark) .text-red-400 {
+    color: rgb(185 28 28) !important;
+}
+
+html:not(.dark) .border-red-700 {
+    border-color: rgb(254 202 202) !important;
+}
+
+html:not(.dark) .bg-curator-900 {
+    background-color: rgb(234 250 241) !important;
+}
+
+html:not(.dark) .text-curator-500 {
+    color: rgb(22 163 74) !important;
+}
+
+html:not(.dark) .bg-curator-500 {
+    background-color: rgb(34 197 94) !important;
+}
+
+html:not(.dark) .border-curator-500 {
+    border-color: rgb(34 197 94) !important;
+}
+
+html:not(.dark) .border-t-curator-600 {
+    border-top-color: rgb(22 163 74) !important;
+}
+
+html:not(.dark) .hover\:bg-curator-600:hover {
+    background-color: rgb(22 163 74) !important;
+}
+
+html:not(.dark) .hover\:border-curator-500:hover {
+    border-color: rgb(34 197 94) !important;
+}
+
+html:not(.dark) .hover\:text-curator-500:hover {
+    color: rgb(22 163 74) !important;
+}
+
+html:not(.dark) .shadow-curator-500\/50 {
+    box-shadow: 0 10px 15px -3px rgb(34 197 94 / 0.15), 0 4px 6px -4px rgb(34 197 94 / 0.15) !important;
+}
+
+html:not(.dark) .hover\:bg-gray-700:hover {
+    background-color: rgb(243 244 246) !important;
+}
+
+/* Lighter geometric pattern for light mode */
+html:not(.dark) svg polygon[stroke="#00ff41"] {
+    stroke: rgb(156 163 175) !important;
+    opacity: 0.015 !important;
+}

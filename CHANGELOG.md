@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.13.3] - 2026-03-05
+
+### Changed
+- Refined light mode aesthetics with softer green accents (curator color palette adjusted from neon to forest green tones)
+- Reduced geometric pattern opacity in light mode for subtler visual texture
+- Improved light mode shadow effects for better depth perception without overwhelming contrast
+
 ## [0.13.2] - 2026-03-05
 
 ### Fixed
