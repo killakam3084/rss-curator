@@ -10,6 +10,24 @@ import (
 	_ "github.com/mattn/go-sqlite3"
 )
 
+// Store defines the interface for storage operations
+type Store interface {
+	Get(id int) (*models.StagedTorrent, error)
+	List(status string) ([]models.StagedTorrent, error)
+	Add(torrent models.StagedTorrent) error
+	UpdateStatus(id int, status string) error
+	LogActivity(torrentID int, title, action, matchReason string) error
+	GetActivity(limit int, offset int, action string) ([]models.Activity, error)
+	GetActivityCount(action string) (int, error)
+	DeleteOld(olderThan time.Duration) error
+	CleanupStaleLinks(patterns []string) (int64, error)
+	Close() error
+	GetByID(id int) (*models.StagedTorrent, error)
+	AddRawFeedItem(item models.RawFeedItem) error
+	GetRawFeedItems(limit int) ([]models.RawFeedItem, error)
+	CleanupExpiredRawFeedItems() error
+}
+
 // Storage handles persistent storage of staged torrents
 type Storage struct {
 	db *sql.DB

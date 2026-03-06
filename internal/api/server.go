@@ -15,7 +15,7 @@ import (
 )
 
 type Server struct {
-	store  *storage.Storage
+	store  storage.Store
 	client *client.Client // May be nil if qBittorrent is unavailable
 	logger *zap.Logger
 	port   int
@@ -90,7 +90,7 @@ type FeedStreamResponse struct {
 }
 
 // NewServer creates a new API server instance
-func NewServer(store *storage.Storage, client *client.Client, port int) *Server {
+func NewServer(store storage.Store, client *client.Client, port int) *Server {
 	// Create a production logger (use development logger in dev if preferred)
 	logger, err := zap.NewProduction()
 	if err != nil {
