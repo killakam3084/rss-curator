@@ -27,7 +27,6 @@ const app = createApp({
         });
         const bulkReviewModalOpen = ref(false);
         const bulkReviewForm = ref({
-            savePath: '',
             tags: '',
             category: ''
         });
@@ -121,7 +120,7 @@ const app = createApp({
             let torrent = torrents.value.find(t => t.id === id);
             if (!torrent) return;
             
-            // Send to approved state (tollgate before download)
+            // Send to accepted state (tollgate before download)
             operatingIds.value.add(id);
             try {
                 const response = await fetch(`/api/torrents/${id}/approve`, {
@@ -150,7 +149,6 @@ const app = createApp({
         const openReviewModal = (torrent) => {
             reviewingTorrent.value = torrent;
             reviewForm.value = {
-                savePath: '',
                 tags: '',
                 category: ''
             };
@@ -163,9 +161,9 @@ const app = createApp({
         };
 
         const deferReview = () => {
-            // Close modal without taking action - torrent stays in 'approved' state
+            // Close modal without taking action - torrent stays in 'accepted' state
             // User can configure and queue later or in bulk
-            showToast('Review deferred. Configure and queue later.', 'info');
+            showToast('Queue deferred. Configure and queue later.', 'info');
             closeReviewModal();
         };
 
@@ -176,7 +174,7 @@ const app = createApp({
             const torrentId = reviewingTorrent.value.id;
             operatingIds.value.add(torrentId);
             try {
-                // Queue the approved torrent for download
+                // Queue the accepted torrent for download
                 const response = await fetch(`/api/torrents/${torrentId}/queue`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -208,14 +206,10 @@ const app = createApp({
                     method: 'POST'
                 });
                 if (response.ok) {
-                    const result = await response.json();
-                    showToast('Torrent approved! Configure and queue for download.', 'success');
+                    await response.json();
+                    showToast('Torrent rejected.', 'info');
                     await fetchAllTorrents();
-                    // Open review modal with the approved torrent
-                    const torrent = torrents.value.find(t => t.id === id);
-                    if (torrent) {
-                        openReviewModal(torrent);
-                    }
+                    await fetchActivities();
                 } else {
                     showToast('Failed to reject torrent', 'error');
                 }
@@ -301,15 +295,14 @@ const app = createApp({
             
             bulkLoading.value = true;
             try {
-                // Queue approved torrents in bulk without custom config
-                // Uses default settings (empty savePath, tags, category)
+                // Queue accepted torrents in bulk without custom config
+                // Uses default settings (empty tags, category)
                 const results = await Promise.all(
                     Array.from(selectedIds.value).map(id =>
                         fetch(`/api/torrents/${id}/queue`, {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({
-                                savePath: '',
                                 tags: '',
                                 category: ''
                             })
@@ -339,7 +332,6 @@ const app = createApp({
                 return;
             }
             bulkReviewForm.value = {
-                savePath: '',
                 tags: '',
                 category: ''
             };
@@ -362,7 +354,6 @@ const app = createApp({
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({
-                                savePath: bulkReviewForm.value.savePath,
                                 tags: bulkReviewForm.value.tags,
                                 category: bulkReviewForm.value.category
                             })
