@@ -29,6 +29,8 @@ type StagedTorrent struct {
 	StagedAt    time.Time  `json:"staged_at"`
 	Status      string     `json:"status"`
 	ApprovedAt  *time.Time `json:"approved_at,omitempty"`
+	AIScore     float64    `json:"ai_score"`
+	AIReason    string     `json:"ai_reason"`
 }
 
 // RawFeedItem represents a raw item pulled from RSS feed (before filtering/matching)

@@ -10,6 +10,7 @@ import (
 	"text/tabwriter"
 	"time"
 
+	"github.com/iillmaticc/rss-curator/internal/ai"
 	"github.com/iillmaticc/rss-curator/internal/api"
 	"github.com/iillmaticc/rss-curator/internal/client"
 	"github.com/iillmaticc/rss-curator/internal/feed"
@@ -78,7 +79,15 @@ func main() {
 func cmdCheck(cfg models.Config, store *storage.Storage) {
 	fmt.Println("Checking RSS feeds...")
 
-	parser := feed.NewParser()
+	// Set up optional AI support.
+	aiProvider := ai.NewProvider()
+	enricher := ai.NewEnricher(aiProvider)
+	scorer := ai.NewScorer(aiProvider)
+	if aiProvider.Available() {
+		fmt.Println("AI provider available — enrichment and scoring enabled")
+	}
+
+	parser := feed.NewParser().WithEnricher(enricher)
 
 	// Create matcher with shows config or legacy rules
 	var m *matcher.Matcher
@@ -123,6 +132,12 @@ func cmdCheck(cfg models.Config, store *storage.Storage) {
 		// Match items
 		matches := m.MatchAll(items)
 		fmt.Printf("Matched %d items\n", len(matches))
+
+		// Score matches using AI (no-op if provider unavailable).
+		if aiProvider.Available() {
+			history, _ := store.GetActivity(50, 0, "")
+			matches = scorer.ScoreAll(matches, history)
+		}
 
 		// Stage matches
 		for _, match := range matches {

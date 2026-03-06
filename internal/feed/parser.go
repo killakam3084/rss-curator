@@ -10,12 +10,14 @@ import (
 	"strings"
 	"time"
 
+	"github.com/iillmaticc/rss-curator/internal/ai"
 	"github.com/iillmaticc/rss-curator/pkg/models"
 )
 
 // Parser handles RSS feed parsing
 type Parser struct {
-	client *http.Client
+	client   *http.Client
+	enricher *ai.Enricher
 }
 
 // NewParser creates a new RSS parser
@@ -25,6 +27,14 @@ func NewParser() *Parser {
 			Timeout: 30 * time.Second,
 		},
 	}
+}
+
+// WithEnricher attaches an AI enricher that fills in metadata when the regex
+// parser leaves ShowName or Season unpopulated. This is optional — if not set
+// the parser works exactly as before.
+func (p *Parser) WithEnricher(e *ai.Enricher) *Parser {
+	p.enricher = e
+	return p
 }
 
 // RSS feed structures
@@ -85,6 +95,11 @@ func (p *Parser) Parse(feedURL string) ([]models.FeedItem, error) {
 
 		// Extract metadata from title
 		extractMetadata(&item)
+
+		// Optionally enrich missing fields via AI.
+		if p.enricher != nil {
+			p.enricher.Enrich(&item)
+		}
 
 		// Log the parsed link for observability
 		if strings.Contains(item.Link, "download") {

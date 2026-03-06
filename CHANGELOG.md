@@ -5,6 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.14.0] - 2026-03-06
+
+### Added
+- `internal/ai` package with pluggable LLM provider abstraction (`Provider` interface, `OllamaProvider`, `OpenAIProvider`, `noopProvider`)
+- `Enricher` — fallback metadata filler that calls the LLM when the regex parser leaves `ShowName` or `Season` empty; fully silent on provider errors
+- `Scorer` — ranks staged torrents 0–1 against recent approve/reject history; no-ops when provider is unavailable
+- `feed.Parser.WithEnricher()` — optional method to attach an `Enricher` to the parser pipeline
+- AI scoring wired into `cmdCheck`: history fetched, `scorer.ScoreAll()` called after `MatchAll`, scores stored at insert time
+- `ai_score` and `ai_reason` columns added to `staged_torrents` (idempotent `ALTER TABLE` migrations)
+- `UpdateAIScore()` method on `Store` interface and `*Storage` implementation
+- `AIScore` / `AIReason` fields on `models.StagedTorrent` and `api.TorrentResponse`
+- UI: pending torrents sorted by `ai_score` descending when any scores are present
+- UI: `⚡ N%` score badge on each torrent card (visible only when `ai_score > 0`), tooltip shows `ai_reason`
+- AI env vars documented in `curator.env.sample` and `local.env.sample` (`CURATOR_AI_PROVIDER`, `CURATOR_AI_HOST`, `CURATOR_AI_MODEL`, `CURATOR_AI_KEY`)
+
+### Fixed
+- `handleApprove` now calls `LogActivity(action="approve")` so approvals are recorded as training signal alongside existing `queue` and `reject` events
+
 ## [0.13.7] - 2026-03-06
 
 ### Added
