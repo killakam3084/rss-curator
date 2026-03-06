@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.10.2] - 2026-03-05
+
+### Fixed
+- Backend now correctly sets status to 'review' (instead of 'approved') when approve is called
+- UI review modal now properly displays after approving a torrent
+- Frontend fetches updated torrent object before opening review modal
+- handleQueue validation now checks for 'review' status correctly
+
 ## [0.10.1] - 2026-03-05
 
 ### Fixed
