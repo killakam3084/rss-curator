@@ -16,7 +16,9 @@ const app = createApp({
         // Initialize sidebar collapse state from localStorage
         const sidebarCollapsed = ref(JSON.parse(localStorage.getItem('rss-curator-sidebar-collapsed') || 'false'));
         const sidebarTab = ref('activity'); // 'activity' or 'feed'
-        const tabs = ['pending', 'review', 'approved', 'rejected'];
+        // Tab structure: pending → accepted → rejected
+        // (torrents can be queued for download from accepted tab)
+        const tabs = ['pending', 'accepted', 'rejected'];
         const reviewModalOpen = ref(false);
         const reviewingTorrent = ref(null);
         const reviewForm = ref({
@@ -36,11 +38,8 @@ const app = createApp({
         const pendingCount = computed(() => 
             torrents.value.filter(t => t.status === 'pending').length
         );
-        const reviewCount = computed(() => 
-            torrents.value.filter(t => t.status === 'review').length
-        );
-        const approvedCount = computed(() => 
-            torrents.value.filter(t => t.status === 'approved').length
+        const acceptedCount = computed(() => 
+            torrents.value.filter(t => t.status === 'accepted').length
         );
         const rejectedCount = computed(() => 
             torrents.value.filter(t => t.status === 'rejected').length
@@ -74,16 +73,14 @@ const app = createApp({
 
         const fetchAllTorrents = async () => {
             try {
-                const [pending, review, approved, rejected] = await Promise.all([
+                const [pending, accepted, rejected] = await Promise.all([
                     fetch('/api/torrents?status=pending').then(r => r.json()),
-                    fetch('/api/torrents?status=review').then(r => r.json()),
-                    fetch('/api/torrents?status=approved').then(r => r.json()),
+                    fetch('/api/torrents?status=accepted').then(r => r.json()),
                     fetch('/api/torrents?status=rejected').then(r => r.json())
                 ]);
                 torrents.value = [
                     ...(pending.torrents || []),
-                    ...(review.torrents || []),
-                    ...(approved.torrents || []),
+                    ...(accepted.torrents || []),
                     ...(rejected.torrents || [])
                 ];
             } catch (error) {
@@ -132,12 +129,12 @@ const app = createApp({
                     method: 'POST'
                 });
                 if (response.ok) {
-                    showToast('Ready for review!', 'info');
+                    showToast('Torrent accepted! Ready to queue for download.', 'info');
                     await fetchAllTorrents();
                     // Get the updated torrent with new status
                     torrent = torrents.value.find(t => t.id === id);
                     if (torrent) {
-                        // Open the review modal
+                        // Open the queue configuration modal
                         openReviewModal(torrent);
                     }
                 } else {
