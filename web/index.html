@@ -94,8 +94,8 @@
                             <p class="text-3xl font-bold text-curator-500 font-mono mt-2">{{ pendingCount }}</p>
                         </div>
                         <div class="bg-gray-800 border border-gray-700 rounded-lg p-4 hover:border-curator-500 transition-colors duration-200">
-                            <p class="text-xs font-mono font-bold text-curator-500 uppercase tracking-widest">approved</p>
-                            <p class="text-3xl font-bold text-curator-500 font-mono mt-2">{{ approvedCount }}</p>
+                            <p class="text-xs font-mono font-bold text-curator-500 uppercase tracking-widest">accepted</p>
+                            <p class="text-3xl font-bold text-curator-500 font-mono mt-2">{{ acceptedCount }}</p>
                         </div>
                         <div class="bg-gray-800 border border-gray-700 rounded-lg p-4 hover:border-curator-500 transition-colors duration-200">
                             <p class="text-xs font-mono font-bold text-curator-500 uppercase tracking-widest">rejected</p>
@@ -138,7 +138,7 @@
                                     class="px-4 py-2 bg-curator-500 hover:bg-curator-600 disabled:opacity-50 disabled:cursor-not-allowed text-gray-900 rounded font-mono font-bold text-sm transition-colors duration-200 flex items-center gap-2 uppercase"
                                 >
                                     <span v-if="bulkLoading" class="inline-block w-4 h-4 border-2 border-gray-900 border-t-transparent rounded-full animate-spin"></span>
-                                    {{ bulkLoading ? 'approving...' : 'approve' }}
+                                    {{ bulkLoading ? 'accepting...' : 'accept' }}
                                 </button>
                                 <button 
                                     @click="bulkReject" 
@@ -185,7 +185,7 @@
                                     <span :class="[
                                         'inline-block px-2 py-1 rounded text-xs font-mono font-bold uppercase',
                                         torrent.status === 'pending' ? 'bg-blue-900 text-blue-400 border border-blue-700' :
-                                        torrent.status === 'approved' ? 'bg-curator-900 text-curator-500 border border-curator-500' :
+                                        torrent.status === 'accepted' ? 'bg-curator-900 text-curator-500 border border-curator-500' :
                                         'bg-red-900 text-red-400 border border-red-700'
                                     ]">
                                         {{ torrent.status }}
@@ -217,7 +217,7 @@
                                     >
                                         <span v-if="operatingIds.has(torrent.id)" class="inline-block w-4 h-4 border-2 border-gray-900 border-t-transparent rounded-full animate-spin"></span>
                                         <span v-else>✓</span>
-                                        {{ operatingIds.has(torrent.id) ? '' : 'approve' }}
+                                        {{ operatingIds.has(torrent.id) ? '' : 'accept' }}
                                     </button>
                                     <button 
                                         @click="rejectTorrent(torrent.id)" 
@@ -230,22 +230,105 @@
                                     </button>
                                 </div>
                                 
-                                <div v-if="activeTab === 'approved'">
-                                    <button 
-                                        @click="retryQBittorrent(torrent.id)" 
-                                        :disabled="operatingIds.has(torrent.id)"
-                                        class="w-full px-4 py-2 bg-amber-600 hover:bg-amber-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded font-mono font-bold text-sm transition-colors duration-200 flex items-center justify-center gap-2 uppercase"
-                                        title="Manually retry adding this torrent to qBittorrent"
-                                    >
-                                        <span v-if="operatingIds.has(torrent.id)" class="inline-block w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
-                                        <span v-else>⟲</span>
-                                        {{ operatingIds.has(torrent.id) ? 'retrying...' : 'retry qbittorrent' }}
-                                    </button>
+                                <div v-if="activeTab === 'accepted'">
+                                    <!-- Action buttons for accepted torrents -->
+                                    <div class="flex gap-2">
+                                        <button 
+                                            @click="bulkQueue"
+                                            :disabled="bulkLoading || selectedCount === 0"
+                                            v-if="selectedCount > 0"
+                                            class="flex-1 px-4 py-2 bg-curator-500 hover:bg-curator-600 disabled:opacity-50 disabled:cursor-not-allowed text-gray-900 rounded font-mono font-bold text-sm transition-colors duration-200 flex items-center justify-center gap-2 uppercase"
+                                        >
+                                            <span v-if="bulkLoading" class="inline-block w-4 h-4 border-2 border-gray-900 border-t-transparent rounded-full animate-spin"></span>
+                                            <span v-else>⬇</span>
+                                            {{ bulkLoading ? 'queuing bulk...' : 'queue selected' }}
+                                        </button>
+                                        <button 
+                                            @click="retryQBittorrent(torrent.id)" 
+                                            :disabled="operatingIds.has(torrent.id)"
+                                            class="flex-1 px-4 py-2 bg-amber-600 hover:bg-amber-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded font-mono font-bold text-sm transition-colors duration-200 flex items-center justify-center gap-2 uppercase"
+                                            title="Manually retry adding this torrent to qBittorrent"
+                                        >
+                                            <span v-if="operatingIds.has(torrent.id)" class="inline-block w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
+                                            <span v-else>⟲</span>
+                                            {{ operatingIds.has(torrent.id) ? 'retrying...' : 'retry qbittorrent' }}
+                                        </button>
+                                    </div>
                                 </div>
                             </div>
                         </div>
                     </div>
                 </main>
+            </div>
+        </div>
+
+        <!-- Review Modal -->
+        <div v-if="reviewModalOpen" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div class="bg-gray-900 border border-gray-800 rounded-lg shadow-2xl max-w-md w-full mx-4 p-6">
+                <h2 class="text-xl font-bold text-curator-500 font-mono mb-4">Queue for Download</h2>
+                
+                <div v-if="reviewingTorrent" class="mb-6 pb-4 border-b border-gray-800">
+                    <p class="text-sm text-gray-400 mb-2">Torrent:</p>
+                    <p class="text-gray-100 font-mono text-sm break-words line-clamp-3">{{ reviewingTorrent.title }}</p>
+                </div>
+
+                <form @submit.prevent="submitReview" class="space-y-4 mb-6">
+                    <div>
+                        <label class="block text-sm font-mono font-bold text-curator-500 mb-2">Save Path</label>
+                        <input 
+                            v-model="reviewForm.savePath"
+                            type="text" 
+                            placeholder="/path/to/downloads"
+                            class="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded text-gray-100 placeholder-gray-600 focus:border-curator-500 focus:outline-none text-sm font-mono"
+                        >
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-mono font-bold text-curator-500 mb-2">Tags</label>
+                        <input 
+                            v-model="reviewForm.tags"
+                            type="text" 
+                            placeholder="tag1, tag2"
+                            class="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded text-gray-100 placeholder-gray-600 focus:border-curator-500 focus:outline-none text-sm font-mono"
+                        >
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-mono font-bold text-curator-500 mb-2">Category</label>
+                        <input 
+                            v-model="reviewForm.category"
+                            type="text" 
+                            placeholder="category"
+                            class="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded text-gray-100 placeholder-gray-600 focus:border-curator-500 focus:outline-none text-sm font-mono"
+                        >
+                    </div>
+
+                    <div class="flex gap-3">
+                        <button 
+                            type="submit"
+                            :disabled="operatingIds.has(reviewingTorrent?.id)"
+                            class="flex-1 px-4 py-2 bg-curator-500 hover:bg-curator-600 disabled:opacity-50 disabled:cursor-not-allowed text-gray-900 rounded font-mono font-bold text-sm transition-colors duration-200 flex items-center justify-center gap-2 uppercase"
+                        >
+                            <span v-if="operatingIds.has(reviewingTorrent?.id)" class="inline-block w-4 h-4 border-2 border-gray-900 border-t-transparent rounded-full animate-spin"></span>
+                            <span v-else>⬇</span>
+                            {{ operatingIds.has(reviewingTorrent?.id) ? 'queuing...' : 'queue' }}
+                        </button>
+                        <button 
+                            type="button"
+                            @click="deferReview"
+                            class="flex-1 px-4 py-2 bg-gray-800 hover:bg-gray-700 border border-gray-700 text-gray-100 rounded font-mono font-bold text-sm transition-colors duration-200 uppercase"
+                        >
+                            defer
+                        </button>
+                        <button 
+                            type="button"
+                            @click="closeReviewModal"
+                            class="px-4 py-2 bg-gray-800 hover:bg-gray-700 border border-gray-700 text-gray-100 rounded font-mono font-bold text-sm transition-colors duration-200 uppercase"
+                        >
+                            close
+                        </button>
+                    </div>
+                </form>
             </div>
         </div>
 
