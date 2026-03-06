@@ -122,7 +122,7 @@ const app = createApp({
 
         const approveTorrent = async (id) => {
             // Get the torrent first
-            const torrent = torrents.value.find(t => t.id === id);
+            let torrent = torrents.value.find(t => t.id === id);
             if (!torrent) return;
             
             // Send to approved state (tollgate before download)
@@ -134,8 +134,12 @@ const app = createApp({
                 if (response.ok) {
                     showToast('Ready for review!', 'info');
                     await fetchAllTorrents();
-                    // Open the review modal
-                    openReviewModal(torrent);
+                    // Get the updated torrent with new status
+                    torrent = torrents.value.find(t => t.id === id);
+                    if (torrent) {
+                        // Open the review modal
+                        openReviewModal(torrent);
+                    }
                 } else {
                     showToast('Failed to approve', 'error');
                 }

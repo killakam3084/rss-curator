@@ -261,8 +261,8 @@ func (s *Server) handleApprove(w http.ResponseWriter, r *http.Request, id int) {
 		return
 	}
 
-	// Update status to approved (tollgate entry - doesn't queue yet)
-	if err := s.store.UpdateStatus(id, "approved"); err != nil {
+	// Update status to review (tollgate passed - awaiting user review/config)
+	if err := s.store.UpdateStatus(id, "review"); err != nil {
 		s.logger.Error("failed to update torrent status", zap.Int("id", id), zap.Error(err))
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusInternalServerError)
@@ -270,11 +270,11 @@ func (s *Server) handleApprove(w http.ResponseWriter, r *http.Request, id int) {
 		return
 	}
 
-	s.logger.Info("torrent approved - awaiting review", zap.Int("id", id), zap.String("title", torrent.FeedItem.Title))
+	s.logger.Info("torrent approved and sent to review", zap.Int("id", id), zap.String("title", torrent.FeedItem.Title))
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(ApproveResponse{
 		ID:     id,
-		Status: "approved",
+		Status: "review",
 		Title:  torrent.FeedItem.Title,
 	})
 }
@@ -303,11 +303,11 @@ func (s *Server) handleQueue(w http.ResponseWriter, r *http.Request, id int) {
 		return
 	}
 
-	if torrent.Status != "approved" {
-		s.logger.Warn("can only queue approved torrents", zap.Int("id", id), zap.String("status", torrent.Status))
+	if torrent.Status != "review" {
+		s.logger.Warn("can only queue torrents in review state", zap.Int("id", id), zap.String("status", torrent.Status))
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(ErrorResponse{Error: fmt.Sprintf("Torrent is %s, must be approved to queue", torrent.Status)})
+		json.NewEncoder(w).Encode(ErrorResponse{Error: fmt.Sprintf("Torrent is %s, must be in review to queue", torrent.Status)})
 		return
 	}
 
