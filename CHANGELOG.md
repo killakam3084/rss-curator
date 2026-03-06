@@ -5,6 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.10.0] - 2026-03-05
+
+### Added
+- Backend support for two-step torrent queueing workflow
+- New `/api/torrents/{id}/queue` endpoint for explicit queueing
+- State validation: only approved torrents can be queued
+
+### Changed
+- **Breaking**: `approve` action no longer automatically queues to qBittorrent
+- Approve now only marks torrents as approved (tollgate entry)
+- Queue action must be called separately to send torrents to qBittorrent
+- Improved error handling for qBittorrent client availability
+
+### Technical
+- New `handleQueue()` function for explicit torrent queueing
+- Queue validates torrent status before attempting to add to qBittorrent
+- Better separation of concerns: approval decision vs. download execution
+
 ## [0.9.0] - 2026-03-05
 
 ### Added
