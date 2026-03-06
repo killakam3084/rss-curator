@@ -125,10 +125,10 @@ const app = createApp({
             const torrent = torrents.value.find(t => t.id === id);
             if (!torrent) return;
             
-            // Send to review state (tollgate before download)
+            // Send to approved state (tollgate before download)
             operatingIds.value.add(id);
             try {
-                const response = await fetch(`/api/torrents/${id}/review`, {
+                const response = await fetch(`/api/torrents/${id}/approve`, {
                     method: 'POST'
                 });
                 if (response.ok) {
@@ -137,11 +137,11 @@ const app = createApp({
                     // Open the review modal
                     openReviewModal(torrent);
                 } else {
-                    showToast('Failed to send to review', 'error');
+                    showToast('Failed to approve', 'error');
                 }
             } catch (error) {
-                console.error('Error sending to review:', error);
-                showToast('Error sending to review', 'error');
+                console.error('Error approving torrent:', error);
+                showToast('Error approving torrent', 'error');
             } finally {
                 operatingIds.value.delete(id);
             }
