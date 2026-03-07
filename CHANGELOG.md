@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.15.1] - 2026-03-07
+
+### Added
+- Stats mini-panel: bar chart icon + `stats` label heading above the tile grid (expanded state only)
+- Log drawer: drag handle now functional — mousedown/mousemove/mouseup resizes drawer height dynamically, clamped between 80px and 92vh; CSS transition suppressed during active drag for zero-lag feel
+- Log drawer: `↓ new / ↑ old` sort toggle button — defaults to newest-first; auto-scroll direction tracks sort order (top when descending, bottom when ascending)
+
 ## [0.15.0] - 2026-03-07
 
 ### Added
