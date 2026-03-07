@@ -10,8 +10,10 @@ A complete, production-ready Go application for semi-automated torrent managemen
 
 ```
 rss-curator/
-├── 📖 Documentation (4 guides)
-├── 💻 Source Code (5 modules, ~1000 LOC)
+├── 📖 Documentation (docs/ + root)
+├── 💻 Source Code (7 packages)
+├── 🌐 Web UI (Vue.js dashboard)
+├── 🤖 AI Subsystem (Ollama / OpenAI)
 ├── 🔧 Build Tools (Makefile, Docker)
 └── ⚙️  Configuration (samples & templates)
 ```
@@ -33,7 +35,7 @@ source ~/.curator.env
 
 ### Path 2: TrueNAS Deployment
 ```bash
-# See TRUENAS_DEPLOYMENT.md
+# See docs/TRUENAS_DEPLOYMENT.md
 scp -r rss-curator user@truenas:/mnt/cell_block_d/apps/
 # Then follow Docker Compose setup
 ```
@@ -50,27 +52,40 @@ scp -r rss-curator user@truenas:/mnt/cell_block_d/apps/
 
 | Document | Purpose | Read When |
 |----------|---------|-----------|
-| **QUICKSTART.md** | Get running in 5 minutes | Start here |
 | **README.md** | Complete reference guide | Building & using |
-| **PROJECT_SUMMARY.md** | Technical overview | Understanding internals |
-| **TRUENAS_DEPLOYMENT.md** | Deploy on TrueNAS | Production deployment |
+| **docs/QUICKSTART.md** | Get running in 5 minutes | Start here |
+| **docs/ARCHITECTURE.md** | System topology, state machine, ER diagrams | Understanding internals |
+| **docs/PROJECT_SUMMARY.md** | Technical deep-dive, all components | Understanding internals |
+| **docs/CONTAINER_GUIDE.md** | Docker/Compose/GHCR reference | Container deployment |
+| **docs/TRUENAS_DEPLOYMENT.md** | Deploy on TrueNAS SCALE | Production deployment |
 
 ---
 
 ## 🏗️ What's Included
 
-### Documentation (1,500+ lines)
+### Documentation
 - ✅ Quick start guide
 - ✅ Comprehensive README
-- ✅ Technical architecture doc
+- ✅ Architecture diagrams (Mermaid — topology, state machine, ER)
 - ✅ TrueNAS deployment guide
+- ✅ Container guide
 
-### Source Code (~1,000 lines)
+### Source Code
 - ✅ RSS feed parser with metadata extraction
 - ✅ Rule-based matcher engine
-- ✅ SQLite storage layer
+- ✅ SQLite storage layer with idempotent migrations
 - ✅ qBittorrent API client
+- ✅ HTTP API server (REST)
 - ✅ Full-featured CLI application
+
+### AI Subsystem
+- ✅ Pluggable LLM provider (Ollama · OpenAI · disabled)
+- ✅ Metadata enricher (fills ShowName/Season when regex fails)
+- ✅ Approval probability scorer (0–100%) against approve/reject history
+
+### Web UI
+- ✅ Vue.js dashboard served at `http://localhost:8081`
+- ✅ AI score badges, dark/light mode, activity log, feed stream
 
 ### Configuration
 - ✅ Sample environment file
@@ -83,11 +98,12 @@ scp -r rss-curator user@truenas:/mnt/cell_block_d/apps/
 ## ⚡ Features
 
 - **Smart Parsing**: Extracts show name, season, episode, quality, codec, release group
-- **Rule-Based Filtering**: Match by show names, quality, codec, release groups
-- **Human-in-the-Loop**: Review and approve before downloading
-- **qBittorrent Integration**: Seamless torrent addition
-- **SQLite Storage**: Persistent staging with status tracking
-- **Interactive CLI**: Batch operations or step-by-step review
+- **Rule-Based Filtering**: Match by show names, quality, codec, release groups; `shows.json` for per-show config
+- **AI Scoring**: Optional LLM-based approval probability (Ollama/OpenAI), learns from approve/reject history
+- **Human-in-the-Loop**: Review and approve via CLI or Web UI before downloading
+- **qBittorrent Integration**: Seamless torrent addition on approval
+- **SQLite Storage**: Persistent staging with status tracking and activity log
+- **Web Dashboard**: `curator serve` → `http://localhost:8081` for browser-based management
 - **Automation Ready**: Cron or systemd timer support
 
 ---
@@ -186,20 +202,25 @@ curator list pending          # See what would match
 
 ```
 rss-curator/
-├── cmd/curator/main.go              # CLI application
+├── cmd/curator/main.go              # CLI entry point, all command dispatch
 ├── internal/
-│   ├── feed/parser.go               # RSS parsing
+│   ├── ai/                          # Provider interface, Enricher, Scorer
+│   ├── api/                         # HTTP API server + Web UI handler
+│   ├── client/qbittorrent.go        # qBit integration
+│   ├── feed/parser.go               # RSS parsing + metadata extraction
 │   ├── matcher/matcher.go           # Rule matching
-│   ├── storage/storage.go           # SQLite ops
-│   └── client/qbittorrent.go        # qBit integration
+│   └── storage/storage.go           # SQLite ops + migrations
 ├── pkg/models/types.go              # Data structures
-├── README.md                        # Main docs
-├── QUICKSTART.md                    # 5-min guide
-├── PROJECT_SUMMARY.md               # Technical overview
-├── TRUENAS_DEPLOYMENT.md            # TrueNAS guide
-├── curator.env.sample               # Config template
-├── Makefile                         # Build automation
-└── go.mod                           # Dependencies
+├── web/                             # Vue.js dashboard
+├── docs/                            # Reference documentation
+│   ├── ARCHITECTURE.md             # Mermaid diagrams
+│   ├── PROJECT_SUMMARY.md
+│   ├── QUICKSTART.md
+│   ├── CONTAINER_GUIDE.md
+│   └── TRUENAS_DEPLOYMENT.md
+├── README.md
+├── CHANGELOG.md
+└── START_HERE.md
 ```
 
 ---
@@ -214,13 +235,14 @@ rss-curator/
 5. Start using it!
 
 ### Want to Understand It?
-1. Read `PROJECT_SUMMARY.md` for architecture
-2. Browse source code in `internal/` and `cmd/`
-3. Check out the matching logic in `matcher.go`
-4. Look at CLI commands in `main.go`
+1. Read `docs/ARCHITECTURE.md` for diagrams
+2. Read `docs/PROJECT_SUMMARY.md` for component deep-dive
+3. Browse source code in `internal/` and `cmd/`
+4. Check out the matching logic in `matcher.go`
+5. Look at CLI commands in `main.go`
 
 ### Want to Deploy on TrueNAS?
-1. Read `TRUENAS_DEPLOYMENT.md`
+1. Read `docs/TRUENAS_DEPLOYMENT.md`
 2. Choose deployment method (Docker Compose recommended)
 3. Follow step-by-step guide
 4. Integrate with existing qBittorrent setup
@@ -275,11 +297,10 @@ rss-curator/
 ## 📊 Stats
 
 - **Language**: Go 1.22
-- **Lines of Code**: ~1,000 (source) + 1,500 (docs)
-- **Dependencies**: 2 (qBittorrent client + SQLite driver)
-- **Files**: 13 (code) + 4 (docs)
-- **Build Time**: <5 seconds
-- **Memory**: ~10 MB runtime
+- **Lines of Code**: ~2,000+ (source)
+- **Dependencies**: 3 (qBittorrent client, SQLite driver, zap logger)
+- **Build Time**: <10 seconds
+- **Memory**: ~15 MB runtime
 - **Status**: ✅ Production ready
 
 ---
@@ -309,10 +330,11 @@ rss-curator/
 ## 📞 Need Help?
 
 1. Check the relevant doc:
-   - Getting started? → `QUICKSTART.md`
+   - Getting started? → `docs/QUICKSTART.md`
    - Configuration issues? → `README.md`
-   - TrueNAS deployment? → `TRUENAS_DEPLOYMENT.md`
-   - Technical details? → `PROJECT_SUMMARY.md`
+   - TrueNAS deployment? → `docs/TRUENAS_DEPLOYMENT.md`
+   - Architecture/internals? → `docs/ARCHITECTURE.md`
+   - Technical details? → `docs/PROJECT_SUMMARY.md`
 
 2. Common issues are in `README.md` → Troubleshooting
 
@@ -324,10 +346,11 @@ rss-curator/
 
 Everything you need is in this directory. Pick your path:
 
-- **Quick Test**: `QUICKSTART.md` → 5 minutes
-- **Full Setup**: `README.md` → 15 minutes  
-- **Production Deploy**: `TRUENAS_DEPLOYMENT.md` → 30 minutes
-- **Deep Dive**: `PROJECT_SUMMARY.md` → Understanding
+- **Quick Test**: `docs/QUICKSTART.md` → 5 minutes
+- **Full Setup**: `README.md` → reference guide
+- **Architecture**: `docs/ARCHITECTURE.md` → diagrams
+- **Production Deploy**: `docs/TRUENAS_DEPLOYMENT.md` → 30 minutes
+- **Deep Dive**: `docs/PROJECT_SUMMARY.md` → all components
 
 **Most Important**: Just start! Build it, test it, use it.
 
