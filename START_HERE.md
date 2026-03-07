@@ -42,8 +42,7 @@ scp -r rss-curator user@truenas:/mnt/cell_block_d/apps/
 
 ### Path 3: Just Read First
 ```bash
-# Start with QUICKSTART.md for 5-minute overview
-# Then README.md for comprehensive guide
+# Start with README.md — installation, configuration, and usage all in one place
 ```
 
 ---
@@ -52,8 +51,7 @@ scp -r rss-curator user@truenas:/mnt/cell_block_d/apps/
 
 | Document | Purpose | Read When |
 |----------|---------|-----------|
-| **README.md** | Complete reference guide | Building & using |
-| **docs/QUICKSTART.md** | Get running in 5 minutes | Start here |
+| **README.md** | Complete reference guide — install, configure, use | Start here |
 | **docs/ARCHITECTURE.md** | System topology, state machine, ER diagrams | Understanding internals |
 | **docs/PROJECT_SUMMARY.md** | Technical deep-dive, all components | Understanding internals |
 | **docs/CONTAINER_GUIDE.md** | Docker/Compose/GHCR reference | Container deployment |
@@ -215,7 +213,6 @@ rss-curator/
 ├── docs/                            # Reference documentation
 │   ├── ARCHITECTURE.md             # Mermaid diagrams
 │   ├── PROJECT_SUMMARY.md
-│   ├── QUICKSTART.md
 │   ├── CONTAINER_GUIDE.md
 │   └── TRUENAS_DEPLOYMENT.md
 ├── README.md
@@ -228,7 +225,7 @@ rss-curator/
 ## 🎓 Learning Path
 
 ### Just Want It Working?
-1. Read `QUICKSTART.md` (5 minutes)
+1. Read `README.md` — Installation + Configuration + Usage
 2. Copy `curator.env.sample` to `~/.curator.env`
 3. Configure your settings
 4. Run `make build && ./curator test`
@@ -308,8 +305,8 @@ rss-curator/
 ## 🎯 Next Steps
 
 ### Right Now
-1. Open `QUICKSTART.md`
-2. Follow the 5-minute setup
+1. Open `README.md` — Installation and Configuration sections
+2. Follow the build and setup steps
 3. Run your first check
 4. Approve your first torrent
 
@@ -330,8 +327,8 @@ rss-curator/
 ## 📞 Need Help?
 
 1. Check the relevant doc:
-   - Getting started? → `docs/QUICKSTART.md`
-   - Configuration issues? → `README.md`
+   - Getting started? → `README.md` — Installation & Configuration
+   - Configuration issues? → `README.md` → Troubleshooting
    - TrueNAS deployment? → `docs/TRUENAS_DEPLOYMENT.md`
    - Architecture/internals? → `docs/ARCHITECTURE.md`
    - Technical details? → `docs/PROJECT_SUMMARY.md`
@@ -346,8 +343,8 @@ rss-curator/
 
 Everything you need is in this directory. Pick your path:
 
-- **Quick Test**: `docs/QUICKSTART.md` → 5 minutes
-- **Full Setup**: `README.md` → reference guide
+- **Quick Start**: `README.md` → Installation & Configuration
+- **Full Reference**: `README.md` → complete guide
 - **Architecture**: `docs/ARCHITECTURE.md` → diagrams
 - **Production Deploy**: `docs/TRUENAS_DEPLOYMENT.md` → 30 minutes
 - **Deep Dive**: `docs/PROJECT_SUMMARY.md` → all components

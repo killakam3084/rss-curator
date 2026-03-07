@@ -4,7 +4,7 @@ This document outlines deployment strategies for RSS Curator.
 
 ## Quick Links
 
-- **Local Development**: See [docs/QUICKSTART.md](../docs/QUICKSTART.md)
+- **Local Development**: See [README.md](../README.md)
 - **Container Guide**: See [docs/CONTAINER_GUIDE.md](../docs/CONTAINER_GUIDE.md)
 - **TrueNAS Deployment**: See [docs/TRUENAS_DEPLOYMENT.md](../docs/TRUENAS_DEPLOYMENT.md)
 
@@ -206,7 +206,7 @@ Use the TrueNAS UI to schedule periodic execution of the container.
 
 ### Systemd Timer (Linux)
 
-See [QUICKSTART.md](../QUICKSTART.md) for detailed instructions.
+See [README.md](../README.md) — Automation section for detailed instructions.
 
 ## Monitoring and Logging
 

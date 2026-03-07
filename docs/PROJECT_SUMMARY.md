@@ -165,7 +165,6 @@ rss-curator/
 ├── docs/
 │   ├── ARCHITECTURE.md      System topology, state machine, ER diagram (Mermaid)
 │   ├── PROJECT_SUMMARY.md   This file
-│   ├── QUICKSTART.md        5-minute setup guide
 │   ├── CONTAINER_GUIDE.md   Docker/Compose/GHCR reference
 │   └── TRUENAS_DEPLOYMENT.md  TrueNAS SCALE deploy guide
 ├── scripts/

@@ -111,7 +111,7 @@ erDiagram
 
     raw_feed_items {
         int      id         PK
-        json     feed_item
+        json     feed_item  "FeedItem struct serialised"
         datetime pulled_at
         datetime expires_at "24h TTL — auto-cleaned"
     }
