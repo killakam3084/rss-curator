@@ -111,6 +111,8 @@ func (s *Storage) migrate() error {
 		// Migration 2: Add AI score columns
 		`ALTER TABLE staged_torrents ADD COLUMN ai_score REAL DEFAULT 0`,
 		`ALTER TABLE staged_torrents ADD COLUMN ai_reason TEXT DEFAULT ''`,
+		// Migration 3: Add ai_scored flag to distinguish "never scored" from "scored with low confidence"
+		`ALTER TABLE staged_torrents ADD COLUMN ai_scored INTEGER DEFAULT 0`,
 	}
 
 	for _, migration := range migrations {
@@ -133,9 +135,9 @@ func (s *Storage) Add(torrent models.StagedTorrent) error {
 	torrent.StagedAt = time.Now()
 
 	_, err = s.db.Exec(`
-		INSERT OR IGNORE INTO staged_torrents (link, feed_item, match_reason, staged_at, status, ai_score, ai_reason)
-		VALUES (?, ?, ?, ?, ?, ?, ?)
-	`, torrent.FeedItem.Link, feedItemJSON, torrent.MatchReason, torrent.StagedAt, torrent.Status, torrent.AIScore, torrent.AIReason)
+		INSERT OR IGNORE INTO staged_torrents (link, feed_item, match_reason, staged_at, status, ai_score, ai_reason, ai_scored)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+	`, torrent.FeedItem.Link, feedItemJSON, torrent.MatchReason, torrent.StagedAt, torrent.Status, torrent.AIScore, torrent.AIReason, torrent.AIScored)
 
 	return err
 }
@@ -147,13 +149,13 @@ func (s *Storage) List(status string) ([]models.StagedTorrent, error) {
 
 	if status == "" {
 		rows, err = s.db.Query(`
-			SELECT id, link, feed_item, match_reason, staged_at, status, approved_at, ai_score, ai_reason
+			SELECT id, link, feed_item, match_reason, staged_at, status, approved_at, ai_score, ai_reason, ai_scored
 			FROM staged_torrents
 			ORDER BY staged_at DESC
 		`)
 	} else {
 		rows, err = s.db.Query(`
-			SELECT id, link, feed_item, match_reason, staged_at, status, approved_at, ai_score, ai_reason
+			SELECT id, link, feed_item, match_reason, staged_at, status, approved_at, ai_score, ai_reason, ai_scored
 			FROM staged_torrents
 			WHERE status = ?
 			ORDER BY staged_at DESC
@@ -172,7 +174,7 @@ func (s *Storage) List(status string) ([]models.StagedTorrent, error) {
 		var link string
 		var approvedAt sql.NullTime
 
-		err := rows.Scan(&t.ID, &link, &feedItemJSON, &t.MatchReason, &t.StagedAt, &t.Status, &approvedAt, &t.AIScore, &t.AIReason)
+		err := rows.Scan(&t.ID, &link, &feedItemJSON, &t.MatchReason, &t.StagedAt, &t.Status, &approvedAt, &t.AIScore, &t.AIReason, &t.AIScored)
 		if err != nil {
 			return nil, err
 		}
@@ -199,10 +201,10 @@ func (s *Storage) Get(id int) (*models.StagedTorrent, error) {
 	var approvedAt sql.NullTime
 
 	err := s.db.QueryRow(`
-		SELECT id, link, feed_item, match_reason, staged_at, status, approved_at, ai_score, ai_reason
+		SELECT id, link, feed_item, match_reason, staged_at, status, approved_at, ai_score, ai_reason, ai_scored
 		FROM staged_torrents
 		WHERE id = ?
-	`, id).Scan(&t.ID, &link, &feedItemJSON, &t.MatchReason, &t.StagedAt, &t.Status, &approvedAt, &t.AIScore, &t.AIReason)
+	`, id).Scan(&t.ID, &link, &feedItemJSON, &t.MatchReason, &t.StagedAt, &t.Status, &approvedAt, &t.AIScore, &t.AIReason, &t.AIScored)
 
 	if err == sql.ErrNoRows {
 		return nil, fmt.Errorf("torrent not found")
@@ -288,10 +290,10 @@ func (s *Storage) GetByID(id int) (*models.StagedTorrent, error) {
 	var approvedAt sql.NullTime
 
 	err := s.db.QueryRow(`
-		SELECT id, feed_item, match_reason, staged_at, status, approved_at, ai_score, ai_reason
+		SELECT id, feed_item, match_reason, staged_at, status, approved_at, ai_score, ai_reason, ai_scored
 		FROM staged_torrents
 		WHERE id = ?
-	`, id).Scan(&t.ID, &feedItemJSON, &t.MatchReason, &t.StagedAt, &t.Status, &approvedAt, &t.AIScore, &t.AIReason)
+	`, id).Scan(&t.ID, &feedItemJSON, &t.MatchReason, &t.StagedAt, &t.Status, &approvedAt, &t.AIScore, &t.AIReason, &t.AIScored)
 
 	if err == sql.ErrNoRows {
 		return nil, nil
@@ -433,7 +435,7 @@ func (s *Storage) CleanupExpiredRawFeedItems() error {
 func (s *Storage) UpdateAIScore(id int, score float64, reason string) error {
 	_, err := s.db.Exec(`
 		UPDATE staged_torrents
-		SET ai_score = ?, ai_reason = ?
+		SET ai_score = ?, ai_reason = ?, ai_scored = 1
 		WHERE id = ?
 	`, score, reason, id)
 	return err

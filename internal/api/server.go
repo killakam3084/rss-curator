@@ -34,6 +34,7 @@ type TorrentResponse struct {
 	Link        string  `json:"link"`
 	AIScore     float64 `json:"ai_score"`
 	AIReason    string  `json:"ai_reason"`
+	AIScored    bool    `json:"ai_scored"`
 }
 
 type ListResponse struct {
@@ -182,6 +183,7 @@ func (s *Server) handleList(w http.ResponseWriter, r *http.Request) {
 			Link:        t.FeedItem.Link,
 			AIScore:     t.AIScore,
 			AIReason:    t.AIReason,
+			AIScored:    t.AIScored,
 		})
 	}
 
