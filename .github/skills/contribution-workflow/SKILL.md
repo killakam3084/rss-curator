@@ -36,6 +36,7 @@ Phase 6: docs + CHANGELOG   — user-facing summary + release tag
    - Keep diffs small and task-focused.
    - Preserve existing naming/style patterns.
    - One logical concern per commit — do not mix unrelated files.
+   - **File creation/corruption recovery:** If a newly created or inserted file ends up with mangled content (reversed lines, duplicate declarations, encoding artifacts), do NOT attempt to fix it in-place with large string replacements or HEREDOC terminal commands — both approaches are brittle on large files. Instead: `rm` the file, then recreate it from scratch with the `create_file` tool. Verify with a targeted `read_file` after creation before running quality gates.
 
 3. **Run local quality gates before each commit**
    - Format: `gofmt -w .`
