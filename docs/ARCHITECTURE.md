@@ -8,33 +8,33 @@ This document describes the system topology, data model, and state machine for R
 
 ```mermaid
 flowchart LR
-    RSS["RSS Feeds\n(private tracker)"]
-    Parser["Parser\ninternal/feed"]
-    Enricher["AI Enricher\ninternal/ai"]
-    Matcher["Matcher\ninternal/matcher"]
-    Scorer["AI Scorer\ninternal/ai"]
-    DB[("SQLite\nstorage")]
-    API["API Server\ninternal/api"]
-    CLI["CLI Commands\ncmd/curator"]
-    UI["Web UI\nbrowser :8081"]
-    QB["qBittorrent\nWeb API"]
-    LLM["LLM Provider\nOllama · OpenAI"]
-    Activity["activity_log\n(training signal)"]
+    RSS["RSS Feeds<br/>(private tracker)"]
+    Parser["Parser<br/>internal/feed"]
+    Enricher["AI Enricher<br/>internal/ai"]
+    Matcher["Matcher<br/>internal/matcher"]
+    Scorer["AI Scorer<br/>internal/ai"]
+    DB[("SQLite<br/>storage")]
+    API["API Server<br/>internal/api"]
+    CLI["CLI Commands<br/>cmd/curator"]
+    UI["Web UI<br/>browser :8081"]
+    QB["qBittorrent<br/>Web API"]
+    LLM["LLM Provider<br/>Ollama · OpenAI"]
+    Activity["activity_log<br/>(training signal)"]
 
     RSS --> Parser
-    Parser -->|"regex miss on\nShowName or Season"| Enricher
+    Parser -->|"regex miss on<br/>ShowName or Season"| Enricher
     Enricher -.->|"filled metadata"| Parser
     Parser --> Matcher
     Matcher -->|"matched items"| Scorer
     Scorer -->|"scored items"| DB
     DB -->|"staged_torrents"| API
     DB --- Activity
-    Activity -->|"approve/reject history\n(last 20 entries)"| Scorer
+    Activity -->|"approve/reject history<br/>(last 20 entries)"| Scorer
     API --> UI
     API -->|"approve → add torrent"| QB
-    CLI -->|"check · list · review\napprove · reject · cleanup"| DB
+    CLI -->|"check · list · review<br/>approve · reject · cleanup"| DB
     CLI -->|"approve · resume · pause"| QB
-    Enricher & Scorer -.->|"CURATOR_AI_PROVIDER\n(ollama / openai / disabled)"| LLM
+    Enricher & Scorer -.->|"CURATOR_AI_PROVIDER<br/>(ollama / openai / disabled)"| LLM
 ```
 
 **Key design decisions:**
@@ -51,20 +51,20 @@ flowchart LR
 ```mermaid
 stateDiagram-v2
     direction LR
-    [*] --> pending : store.Add()\nfeed match found
+    [*] --> pending : store.Add() — feed match found
 
     state pending {
         direction LR
         [*] --> unscored : ai_scored = false
-        unscored --> scored : AI Scorer runs\nai_scored = true
-        scored --> scored : ai_score ∈ [0.0, 1.0]\n(0% = low confidence,\nnot "never scored")
+        unscored --> scored : AI Scorer runs — ai_scored = true
+        scored --> scored : ai_score 0.0–1.0 (0% = low confidence)
     }
 
-    pending --> approved : human approves\n(CLI or Web UI)
-    pending --> rejected : human rejects\n(CLI or Web UI)
+    pending --> approved : human approves (CLI or Web UI)
+    pending --> rejected : human rejects (CLI or Web UI)
 
-    approved --> [*] : LogActivity("approve")\n+ qBittorrent.Add()
-    rejected --> [*] : LogActivity("reject")
+    approved --> [*] : LogActivity(approve) + qBittorrent.Add()
+    rejected --> [*] : LogActivity(reject)
 ```
 
 **State semantics:**

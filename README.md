@@ -356,7 +356,7 @@ flowchart LR
     API --> UI["Web UI :8081"]
     API --> QB["qBittorrent"]
     CLI --> QB
-    Enricher & Scorer -.->|"CURATOR_AI_PROVIDER"| LLM["LLM\nOllama / OpenAI"]
+    Enricher & Scorer -.->|"CURATOR_AI_PROVIDER"| LLM["LLM<br/>Ollama / OpenAI"]
 ```
 
 Full diagrams (state machine, ER model, component map): [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md)
