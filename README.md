@@ -2,8 +2,8 @@
 
 A semi-automated torrent curator for private tracker RSS feeds with human-in-the-loop approval.
 
-[![Build and Push to GHCR](https://github.com/iillmaticc/rss-curator/actions/workflows/build-and-push.yml/badge.svg)](https://github.com/iillmaticc/rss-curator/actions/workflows/build-and-push.yml)
-[![Container Image](https://img.shields.io/badge/container-ghcr.io-blue)](https://github.com/iillmaticc/rss-curator/pkgs/container/rss-curator)
+[![Build and Push to GHCR](https://github.com/killakam3084/rss-curator/actions/workflows/build-and-push.yml/badge.svg)](https://github.com/killakam3084/rss-curator/actions/workflows/build-and-push.yml)
+[![Container Image](https://img.shields.io/badge/container-ghcr.io-blue)](https://github.com/killakam3084/rss-curator/pkgs/container/rss-curator)
 [![Go](https://img.shields.io/badge/Go-1.22-blue)](https://golang.org)
 
 ## Features
@@ -32,7 +32,7 @@ A semi-automated torrent curator for private tracker RSS feeds with human-in-the
 ### Build from source
 
 ```bash
-git clone https://github.com/iillmaticc/rss-curator
+git clone https://github.com/killakam3084/rss-curator
 cd rss-curator
 go build -o curator ./cmd/curator
 ```
@@ -80,14 +80,14 @@ docker run --rm \
 
 ```bash
 # Pull the image
-docker pull ghcr.io/iillmaticc/rss-curator:latest
+docker pull ghcr.io/killakam3084/rss-curator:latest
 
 # Run with your configuration
 docker run --rm \
   --env-file .env \
   --network host \
   -v curator-data:/app/data \
-  ghcr.io/iillmaticc/rss-curator:latest check
+  ghcr.io/killakam3084/rss-curator:latest check
 ```
 
 For more details, see [Container Guide](./docs/CONTAINER_GUIDE.md).

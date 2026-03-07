@@ -20,7 +20,7 @@ This guide covers how to build, run, and deploy RSS Curator in Docker containers
 
 ```bash
 # Pull the latest image from GitHub Container Registry
-docker pull ghcr.io/iillmaticc/rss-curator:latest
+docker pull ghcr.io/killakam3084/rss-curator:latest
 
 # Create your configuration (copy from sample)
 cp curator.env.sample .env
@@ -33,7 +33,7 @@ docker run --rm \
   --env-file .env \
   --network host \
   -v curator-data:/app/data \
-  ghcr.io/iillmaticc/rss-curator:latest check
+  ghcr.io/killakam3084/rss-curator:latest check
 ```
 
 ### Using Docker Compose (Recommended for local development)
@@ -246,7 +246,7 @@ Images are automatically tagged with:
 echo $GITHUB_TOKEN | docker login ghcr.io -u USERNAME --password-stdin
 
 # Pull the image
-docker pull ghcr.io/iillmaticc/rss-curator:latest
+docker pull ghcr.io/killakam3084/rss-curator:latest
 ```
 
 ### Authentication for Private Repositories
@@ -268,7 +268,7 @@ echo $CR_PAT | docker login ghcr.io -u USERNAME --password-stdin
 
 1. **Pull the image in TrueNAS**:
    - Go to Apps > Discover > Container Images
-   - Search for `ghcr.io/iillmaticc/rss-curator`
+   - Search for `ghcr.io/killakam3084/rss-curator`
    - Pull the desired version
 
 2. **Create a new App**:
@@ -298,7 +298,7 @@ metadata:
 spec:
   containers:
   - name: rss-curator
-    image: ghcr.io/iillmaticc/rss-curator:latest
+    image: ghcr.io/killakam3084/rss-curator:latest
     env:
     - name: RSS_FEED_URL
       valueFrom:

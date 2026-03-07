@@ -5,7 +5,7 @@
 BINARY_NAME=curator
 INSTALL_PATH=/usr/local/bin
 IMAGE_NAME=rss-curator
-REGISTRY=ghcr.io/iillmaticc
+REGISTRY=ghcr.io/killakam3084
 IMAGE=$(REGISTRY)/$(IMAGE_NAME)
 
 # Container runtime — defaults to podman, override with: make dev-up CTR=docker

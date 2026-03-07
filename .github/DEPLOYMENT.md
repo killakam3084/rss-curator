@@ -16,7 +16,7 @@ Best for: Development, simple setups
 
 ```bash
 # Build from source
-git clone https://github.com/iillmaticc/rss-curator
+git clone https://github.com/killakam3084/rss-curator
 cd rss-curator
 go build -o curator ./cmd/curator
 
@@ -146,12 +146,12 @@ docker login ghcr.io
 docker build -t rss-curator:v0.1.0 .
 
 # Tag for GHCR
-docker tag rss-curator:v0.1.0 ghcr.io/iillmaticc/rss-curator:v0.1.0
-docker tag rss-curator:v0.1.0 ghcr.io/iillmaticc/rss-curator:latest
+docker tag rss-curator:v0.1.0 ghcr.io/killakam3084/rss-curator:v0.1.0
+docker tag rss-curator:v0.1.0 ghcr.io/killakam3084/rss-curator:latest
 
 # Push
-docker push ghcr.io/iillmaticc/rss-curator:v0.1.0
-docker push ghcr.io/iillmaticc/rss-curator:latest
+docker push ghcr.io/killakam3084/rss-curator:v0.1.0
+docker push ghcr.io/killakam3084/rss-curator:latest
 ```
 
 ### Automatic Publishing (GitHub Actions)
@@ -190,7 +190,7 @@ crontab -e
 0 0,6,12,18 * * * source ~/.curator.env && /usr/local/bin/curator check
 
 # Or with docker
-0 0,6,12,18 * * * docker run --rm --env-file /path/to/.env --network host -v curator-data:/app/data ghcr.io/iillmaticc/rss-curator:latest check
+0 0,6,12,18 * * * docker run --rm --env-file /path/to/.env --network host -v curator-data:/app/data ghcr.io/killakam3084/rss-curator:latest check
 ```
 
 **Docker Compose:**
@@ -259,7 +259,7 @@ sudo systemctl restart curator.service
 
 ```bash
 # Pull latest
-docker pull ghcr.io/iillmaticc/rss-curator:latest
+docker pull ghcr.io/killakam3084/rss-curator:latest
 
 # Rebuild locally
 docker build -t rss-curator:latest . --no-cache
