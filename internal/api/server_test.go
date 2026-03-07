@@ -132,11 +132,13 @@ func setupTestServer(t *testing.T) (*Server, *mockStorage) {
 	}
 
 	return &Server{
-		store:     store,
-		client:    nil, // No qBittorrent client for testing
-		logger:    logger,
-		logBuffer: nil,
-		port:      8081,
+		store:      store,
+		client:     nil, // No qBittorrent client for testing
+		logger:     logger,
+		logBuffer:  nil,
+		scorer:     nil, // AI scoring not exercised in unit tests
+		aiProvider: nil,
+		port:       8081,
 	}, store
 }
 

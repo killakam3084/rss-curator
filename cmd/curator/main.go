@@ -628,6 +628,13 @@ func cmdPause(cfg models.Config, store *storage.Storage, args []string) {
 }
 
 func cmdServe(cfg models.Config, store *storage.Storage, buf *logbuffer.Buffer) {
+	// Initialise AI provider and scorer (available even during serve — used for on-demand rescore).
+	aiProvider := ai.NewProvider()
+	scorer := ai.NewScorer(aiProvider)
+	if aiProvider.Available() {
+		fmt.Println("[Serve] AI provider available — on-demand rescore enabled")
+	}
+
 	// Try to initialize qBittorrent client, but don't fail if unavailable
 	var qb *client.Client
 	qb, err := client.New(cfg.QBittorrent)
@@ -649,7 +656,7 @@ func cmdServe(cfg models.Config, store *storage.Storage, buf *logbuffer.Buffer) 
 	}
 
 	// Create and start API server (even if qBittorrent is unavailable)
-	server := api.NewServer(store, qb, port, buf)
+	server := api.NewServer(store, qb, port, buf, scorer, aiProvider)
 	fmt.Printf("[Serve] Starting API server on port %d\n", port)
 	if err := server.Start(); err != nil {
 		fmt.Fprintf(os.Stderr, "Error starting API server: %v\n", err)

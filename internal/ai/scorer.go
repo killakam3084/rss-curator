@@ -4,6 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
+	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -24,12 +27,20 @@ type scoreResult struct {
 
 // Scorer ranks matched StagedTorrents using the LLM and the user's activity history.
 type Scorer struct {
-	provider Provider
+	provider    Provider
+	historySize int // number of activity entries to sample into the prompt context
 }
 
 // NewScorer creates a Scorer backed by the given Provider.
+// The history window size is read from CURATOR_AI_HISTORY_SIZE (default 40).
 func NewScorer(p Provider) *Scorer {
-	return &Scorer{provider: p}
+	size := 40
+	if v := os.Getenv("CURATOR_AI_HISTORY_SIZE"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			size = n
+		}
+	}
+	return &Scorer{provider: p, historySize: size}
 }
 
 // ScoreAll attaches AI scores to each staged torrent.
@@ -40,7 +51,7 @@ func (s *Scorer) ScoreAll(staged []models.StagedTorrent, history []models.Activi
 		return staged
 	}
 
-	histCtx := buildHistoryContext(history)
+	histCtx := buildHistoryContext(history, s.historySize)
 	for i := range staged {
 		t := &staged[i]
 		t.AIScore, t.AIReason = s.scoreOne(t, histCtx)
@@ -90,18 +101,83 @@ func (s *Scorer) scoreOne(t *models.StagedTorrent, histCtx string) (float64, str
 	return result.Score, result.Reason
 }
 
-// buildHistoryContext produces a compact text summary of recent activity for
-// inclusion in the scoring prompt. Capped at the 20 most recent entries.
-func buildHistoryContext(history []models.Activity) string {
+// buildHistoryContext produces a compact text summary of activity history for
+// inclusion in the scoring prompt. Uses stratified sampling via sampleHistory.
+func buildHistoryContext(history []models.Activity, size int) string {
 	if len(history) == 0 {
 		return "No history yet."
 	}
-	if len(history) > 20 {
-		history = history[len(history)-20:]
-	}
+	history = sampleHistory(history, size)
 	var sb strings.Builder
 	for _, h := range history {
 		sb.WriteString(fmt.Sprintf("[%s] %s\n", strings.ToUpper(h.Action), h.TorrentTitle))
 	}
 	return sb.String()
+}
+
+// sampleHistory returns a balanced, deduplicated sample of activity history
+// for use as scoring context. It draws up to size/2 entries from each of the
+// approve and reject pools (deduplicated by title, most recent retained), then
+// returns the combined slice sorted chronologically for temporal coherence.
+// If one pool is smaller, remaining slots are filled from the other.
+func sampleHistory(history []models.Activity, size int) []models.Activity {
+	if len(history) == 0 || size <= 0 {
+		return history
+	}
+
+	var approves, rejects []models.Activity
+	for _, h := range history {
+		switch strings.ToUpper(h.Action) {
+		case "REJECT", "REJECTED":
+			rejects = append(rejects, h)
+		default: // approve, queue, etc. — positive signal
+			approves = append(approves, h)
+		}
+	}
+
+	// Dedup by title, keeping most recent occurrence.
+	dedup := func(entries []models.Activity) []models.Activity {
+		seen := make(map[string]struct{}, len(entries))
+		out := make([]models.Activity, 0, len(entries))
+		for i := len(entries) - 1; i >= 0; i-- {
+			e := entries[i]
+			if _, ok := seen[e.TorrentTitle]; !ok {
+				seen[e.TorrentTitle] = struct{}{}
+				out = append(out, e)
+			}
+		}
+		// Reverse to restore chronological order within pool.
+		for l, r := 0, len(out)-1; l < r; l, r = l+1, r-1 {
+			out[l], out[r] = out[r], out[l]
+		}
+		return out
+	}
+	approves = dedup(approves)
+	rejects = dedup(rejects)
+
+	half := size / 2
+	aCount := half
+	rCount := size - half
+	if len(approves) < aCount {
+		aCount = len(approves)
+		rCount = size - aCount
+	}
+	if len(rejects) < rCount {
+		rCount = len(rejects)
+	}
+
+	// Take most recent aCount/rCount from each pool.
+	if aCount < len(approves) {
+		approves = approves[len(approves)-aCount:]
+	}
+	if rCount < len(rejects) {
+		rejects = rejects[len(rejects)-rCount:]
+	}
+
+	out := append(approves, rejects...)
+	// Sort combined slice by ActionAt ascending so the model sees a temporal narrative.
+	sort.Slice(out, func(i, j int) bool {
+		return out[i].ActionAt.Before(out[j].ActionAt)
+	})
+	return out
 }

@@ -9,19 +9,23 @@ import (
 	"strings"
 	"time"
 
+	"github.com/killakam3084/rss-curator/internal/ai"
 	"github.com/killakam3084/rss-curator/internal/client"
 	"github.com/killakam3084/rss-curator/internal/logbuffer"
 	"github.com/killakam3084/rss-curator/internal/storage"
+	"github.com/killakam3084/rss-curator/pkg/models"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 )
 
 type Server struct {
-	store     storage.Store
-	client    *client.Client // May be nil if qBittorrent is unavailable
-	logger    *zap.Logger
-	logBuffer *logbuffer.Buffer
-	port      int
+	store      storage.Store
+	client     *client.Client // May be nil if qBittorrent is unavailable
+	logger     *zap.Logger
+	logBuffer  *logbuffer.Buffer
+	scorer     *ai.Scorer  // May be nil if AI is disabled
+	aiProvider ai.Provider // May be nil if AI is disabled
+	port       int
 }
 
 type ErrorResponse struct {
@@ -84,6 +88,15 @@ type StatsResponse struct {
 	Queued   int `json:"queued"`
 }
 
+type RescoreRequest struct {
+	IDs []int `json:"ids"`
+}
+
+type RescoreResponse struct {
+	Rescored int               `json:"rescored"`
+	Torrents []TorrentResponse `json:"torrents"`
+}
+
 type FeedStreamItem struct {
 	ID           int    `json:"id"`
 	Title        string `json:"title"`
@@ -101,7 +114,8 @@ type FeedStreamResponse struct {
 
 // NewServer creates a new API server instance.
 // buf may be nil; when provided, logs are tee'd into it for /api/logs streaming.
-func NewServer(store storage.Store, client *client.Client, port int, buf *logbuffer.Buffer) *Server {
+// scorer and aiProvider may be nil when AI is disabled.
+func NewServer(store storage.Store, client *client.Client, port int, buf *logbuffer.Buffer, scorer *ai.Scorer, aiProvider ai.Provider) *Server {
 	prodCore, err := zap.NewProduction()
 	if err != nil {
 		panic(fmt.Sprintf("failed to create logger: %v", err))
@@ -116,11 +130,13 @@ func NewServer(store storage.Store, client *client.Client, port int, buf *logbuf
 	}
 
 	return &Server{
-		store:     store,
-		client:    client,
-		logger:    logger,
-		logBuffer: buf,
-		port:      port,
+		store:      store,
+		client:     client,
+		logger:     logger,
+		logBuffer:  buf,
+		scorer:     scorer,
+		aiProvider: aiProvider,
+		port:       port,
 	}
 }
 
@@ -130,6 +146,7 @@ func (s *Server) Start() error {
 
 	// API endpoints
 	mux.HandleFunc("/api/torrents", s.handleList)
+	mux.HandleFunc("/api/torrents/rescore", s.handleRescore)
 	mux.HandleFunc("/api/torrents/", s.handleTorrentAction)
 	mux.HandleFunc("/api/health", s.handleHealth)
 	mux.HandleFunc("/api/activity", s.handleActivity)
@@ -746,5 +763,65 @@ func (s *Server) handleFeedStream(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(FeedStreamResponse{
 		Items: items,
 		Total: len(items),
+	})
+}
+
+// handleRescore force re-scores a specific set of torrents on demand,
+// bypassing the ai_scored gate used by the background backfill.
+// POST /api/torrents/rescore  body: {"ids":[1,2,3]}
+func (s *Server) handleRescore(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+
+	if s.aiProvider == nil || !s.aiProvider.Available() {
+		w.WriteHeader(http.StatusServiceUnavailable)
+		json.NewEncoder(w).Encode(ErrorResponse{Error: "AI provider unavailable"})
+		return
+	}
+
+	var req RescoreRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || len(req.IDs) == 0 {
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(ErrorResponse{Error: "request body must include at least one id"})
+		return
+	}
+
+	history, _ := s.store.GetActivity(50, 0, "")
+
+	var updated []TorrentResponse
+	for _, id := range req.IDs {
+		t, err := s.store.GetByID(id)
+		if err != nil || t == nil {
+			continue
+		}
+		scored := s.scorer.ScoreAll([]models.StagedTorrent{*t}, history)
+		if len(scored) == 0 {
+			continue
+		}
+		result := scored[0]
+		if err := s.store.UpdateAIScore(t.ID, result.AIScore, result.AIReason); err != nil {
+			s.logger.Error("failed to update AI score", zap.Int("id", t.ID), zap.Error(err))
+			continue
+		}
+		updated = append(updated, TorrentResponse{
+			ID:          result.ID,
+			Title:       result.FeedItem.Title,
+			Size:        result.FeedItem.Size,
+			MatchReason: result.MatchReason,
+			Status:      result.Status,
+			Link:        result.FeedItem.Link,
+			AIScore:     result.AIScore,
+			AIReason:    result.AIReason,
+			AIScored:    true,
+		})
+	}
+
+	s.logger.Info("torrents rescored", zap.Int("count", len(updated)))
+	json.NewEncoder(w).Encode(RescoreResponse{
+		Rescored: len(updated),
+		Torrents: updated,
 	})
 }
