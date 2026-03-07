@@ -95,8 +95,10 @@ Started with `curator serve`. Serves both the REST API and the Web UI static fil
 | `POST` | `/api/torrents/{id}/reject` | Reject → LogActivity |
 | `GET` | `/api/health` | Health check |
 | `GET` | `/api/activity` | Approve/reject history with pagination |
-| `GET` | `/api/stats` | Counts by status (pending/approved/rejected) |
+| `GET` | `/api/stats` | 24h windowed counts: seen, staged, approved, rejected, queued, pending |
 | `GET` | `/api/feed/stream` | Raw RSS feed items (last 24h, pre-filter) |
+| `GET` | `/api/logs` | Buffered log entries as JSON; accepts `?since=<id>` |
+| `GET` | `/api/logs/stream` | Live log stream via Server-Sent Events (`text/event-stream`) |
 | `GET` | `/` | Serves Web UI (`web/index.html`) |
 
 Port configured via `CURATOR_API_PORT` (default `8081`). qBittorrent connection is optional at startup.
@@ -108,7 +110,10 @@ Vue.js 3 single-page application served directly by the API server.
 - Pending torrent queue with approve/reject buttons
 - AI score badge `⚡ N%` on each card (shown when `ai_scored=true`; tooltip shows `ai_reason`)
 - Torrents sorted by `ai_score` descending when any scores are present
-- Activity log view, stats panel, feed stream view
+- Activity log view, feed stream view
+- Stats mini-panel in sidebar: 6 live tiles (pending + 5 × 24h windowed counts)
+- Log drawer: DevTools-style bottom panel streaming live application logs over SSE;
+  level badges (INFO/WARN/ERROR), text filter, auto-scroll toggle
 - Dark mode / light mode
 
 ### 7. qBittorrent Client (`internal/client/qbittorrent.go`)

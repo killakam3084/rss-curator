@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.15.0] - 2026-03-07
+
+### Added
+- **Stats mini-panel** — persistent 6-tile grid in the right sidebar (below dark mode toggle): Pending (live), Seen 24h, Staged 24h, Approved 24h, Rejected 24h, Queued 24h; collapsed sidebar shows pending count badge
+- **Live log drawer** — DevTools-style bottom panel triggered from sidebar; slides up to 60vh; streams application logs in real-time over SSE (`GET /api/logs/stream`); backfills from ring buffer on open (`GET /api/logs`); INFO/WARN/ERROR level badge filters, text search, auto-scroll toggle, clear button
+- `internal/logbuffer` package — thread-safe ring buffer (cap 500), `zapcore.Core` tee integration; all zap log entries captured in-memory for SSE delivery
+- `GET /api/logs` — returns buffered log entries as JSON; accepts `?since=<id>` for incremental polling
+- `GET /api/logs/stream` — SSE endpoint, fans out live entries to all connected browsers
+- `storage.GetWindowStats(hours int)` — new `Store` interface method; 5 SQLite windowed COUNT queries on indexed timestamp columns
+
+### Changed
+- `GET /api/stats` — now returns 7 fields (Hours, Seen, Staged, Approved, Rejected, Queued, Pending) from `GetWindowStats(24)` instead of 3 all-time totals
+- Header stats grid removed; stats moved to sidebar panel and sourced from API
+- Go module path renamed `github.com/iillmaticc/rss-curator` → `github.com/killakam3084/rss-curator` (reconciles with public GitHub/GHCR identity)
+- Compiled binary `curator` purged from git history and gitignore anchored to repo root (`/curator`)
+
 ## [0.14.2] - 2026-03-07
 
 ### Added
