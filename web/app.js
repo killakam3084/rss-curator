@@ -1,4 +1,4 @@
-const { createApp, ref, computed, onMounted } = Vue;
+const { createApp, ref, computed, onMounted, nextTick } = Vue;
 
 const app = createApp({
     setup() {
@@ -19,6 +19,14 @@ const app = createApp({
 
         // Stats from API (/api/stats) — 24h windowed counts
         const stats = ref({ hours: 24, pending: 0, seen: 0, staged: 0, approved: 0, rejected: 0, queued: 0 });
+
+        // Log drawer state
+        const logsDrawerOpen = ref(false);
+        const logEntries = ref([]);
+        const logFilter = ref('');
+        const logLevelFilter = ref(['INFO', 'WARN', 'ERROR', 'DEBUG', 'FATAL']);
+        const logAutoScroll = ref(true);
+        let logEventSource = null;
         
         // Load dark mode preference from localStorage if available, otherwise use system preference
         const savedDarkMode = localStorage.getItem('rss-curator-dark-mode');
@@ -53,6 +61,14 @@ const app = createApp({
             torrents.value.filter(t => t.status === 'rejected').length
         );
         const selectedCount = computed(() => selectedIds.value.size);
+        const filteredLogs = computed(() => {
+            return logEntries.value.filter(e => {
+                const levelMatch = logLevelFilter.value.includes(e.level);
+                const textMatch = !logFilter.value ||
+                    e.message.toLowerCase().includes(logFilter.value.toLowerCase());
+                return levelMatch && textMatch;
+            });
+        });
         const displayedTorrents = computed(() => {
             const filtered = torrents.value.filter(t => t.status === activeTab.value);
             const hasScores = filtered.some(t => t.ai_scored);
@@ -126,6 +142,62 @@ const app = createApp({
                 stats.value = { ...stats.value, ...data };
             } catch (error) {
                 console.error('Failed to fetch stats:', error);
+            }
+        };
+
+        const openLogsDrawer = async () => {
+            logsDrawerOpen.value = true;
+            // Backfill with buffered history
+            try {
+                const res = await fetch('/api/logs');
+                const data = await res.json();
+                if (Array.isArray(data)) {
+                    logEntries.value = data;
+                }
+            } catch (e) {
+                console.error('Failed to fetch initial logs:', e);
+            }
+            // Start live SSE stream
+            if (logEventSource) logEventSource.close();
+            logEventSource = new EventSource('/api/logs/stream');
+            logEventSource.onmessage = (event) => {
+                try {
+                    const entry = JSON.parse(event.data);
+                    logEntries.value.push(entry);
+                    if (logEntries.value.length > 500) {
+                        logEntries.value = logEntries.value.slice(-500);
+                    }
+                    if (logAutoScroll.value) {
+                        nextTick(() => {
+                            const el = document.getElementById('log-drawer-body');
+                            if (el) el.scrollTop = el.scrollHeight;
+                        });
+                    }
+                } catch (e) {
+                    // ignore parse errors
+                }
+            };
+            logEventSource.onerror = (e) => {
+                console.warn('Log SSE stream error:', e);
+            };
+        };
+
+        const closeLogsDrawer = () => {
+            logsDrawerOpen.value = false;
+            if (logEventSource) {
+                logEventSource.close();
+                logEventSource = null;
+            }
+        };
+
+        const clearLogs = () => { logEntries.value = []; };
+
+        const toggleLevelFilter = (level) => {
+            const idx = logLevelFilter.value.indexOf(level);
+            if (idx === -1) {
+                logLevelFilter.value.push(level);
+            } else if (logLevelFilter.value.length > 1) {
+                logLevelFilter.value.splice(idx, 1);
             }
         };
 
@@ -471,6 +543,12 @@ const app = createApp({
             activities,
             feedStream,
             stats,
+            logsDrawerOpen,
+            logEntries,
+            logFilter,
+            logLevelFilter,
+            logAutoScroll,
+            filteredLogs,
             loading,
             bulkLoading,
             activeTab,
@@ -492,6 +570,10 @@ const app = createApp({
             fetchActivities,
             fetchFeedStream,
             fetchStats,
+            openLogsDrawer,
+            closeLogsDrawer,
+            clearLogs,
+            toggleLevelFilter,
             approveTorrent,
             rejectTorrent,
             openReviewModal,
