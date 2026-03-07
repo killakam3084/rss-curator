@@ -67,6 +67,17 @@ stateDiagram-v2
     rejected --> [*] : LogActivity(reject)
 ```
 
+**Diagram legend:**
+
+| Symbol | Meaning |
+|---|---|
+| `[*] →` | Entry point — where the state machine starts |
+| `→ [*]` | Terminal point — where the state machine ends |
+| Rounded rectangle | State |
+| Nested block | Composite state — contains its own internal sub-states and transitions |
+| `→ label` | Transition — event or action that moves between states |
+| Self-loop `↺` | Internal transition — state remains the same, value changes |
+
 **State semantics:**
 
 | State | `ai_scored` | `ai_score` | Meaning |
