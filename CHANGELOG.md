@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.16.0] - 2026-03-07
+
+### Added
+- `POST /api/torrents/rescore` — on-demand AI re-score for any set of torrents regardless of status; accepts `{"ids":[...]}`, returns `{"rescored":N, "torrents":[...]}` with fresh `ai_score`/`ai_reason`; returns `503` when AI provider is unreachable
+- `Server` wired with `ai.Scorer` and `ai.Provider` at startup; `cmdServe` logs provider availability; scorer is now available during `serve` (not just `check`)
+- UI: checkboxes on all three torrent tabs (pending, accepted, rejected) — previously only pending had them
+- UI: `⚡ re-score` button in bulk action bar — always visible when items are selected across any tab; merges returned scores into the torrent list in-place without a full refresh; accept/reject bulk actions remain gated to the pending tab only
+- `CURATOR_AI_HISTORY_SIZE` env var — configures the activity history window fed to the scoring prompt (default `40`, was hard-coded `20`)
+
+### Changed
+- `internal/ai.Scorer`: replaced naive tail-cut-20 history with stratified sampling (`sampleHistory`): approve and reject pools are deduplicated by title (most recent retained), balanced up to `size/2` each with overflow fill, then recombined sorted by `ActionAt` ascending so the model sees a temporal narrative — prevents a burst of one action type from dominating the prompt context as history grows
+
 ## [0.15.1] - 2026-03-07
 
 ### Added
