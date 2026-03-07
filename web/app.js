@@ -7,6 +7,7 @@ const app = createApp({
         const feedStream = ref([]);
         const loading = ref(false);
         const bulkLoading = ref(false);
+        const rescoreLoading = ref(false);
         const activeTab = ref('pending');
         const selectedIds = ref(new Set());
         const operatingIds = ref(new Set());
@@ -509,6 +510,39 @@ const app = createApp({
 
         const isSelected = (id) => selectedIds.value.has(id);
 
+        const rescoreSelected = async () => {
+            rescoreLoading.value = true;
+            const ids = [...selectedIds.value];
+            try {
+                const response = await fetch('/api/torrents/rescore', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ ids })
+                });
+                const data = await response.json();
+                if (response.ok) {
+                    // Merge updated scores back into torrents in-place
+                    if (Array.isArray(data.torrents)) {
+                        data.torrents.forEach(updated => {
+                            const idx = torrents.value.findIndex(t => t.id === updated.id);
+                            if (idx !== -1) {
+                                torrents.value[idx] = { ...torrents.value[idx], ...updated };
+                            }
+                        });
+                    }
+                    showToast(`Re-scored ${data.rescored} torrent${data.rescored !== 1 ? 's' : ''}`, 'success');
+                    selectedIds.value = new Set();
+                } else {
+                    showToast(data.error || 'Re-score failed', 'error');
+                }
+            } catch (error) {
+                console.error('Error during rescore:', error);
+                showToast('Error during re-score', 'error');
+            } finally {
+                rescoreLoading.value = false;
+            }
+        };
+
         const formatSize = (bytes) => {
             const units = ['B', 'KB', 'MB', 'GB'];
             let size = bytes;
@@ -581,6 +615,7 @@ const app = createApp({
             filteredLogs,
             loading,
             bulkLoading,
+            rescoreLoading,
             activeTab,
             selectedIds,
             operatingIds,
@@ -624,6 +659,7 @@ const app = createApp({
             bulkQueue,
             toggleSelection,
             isSelected,
+            rescoreSelected,
             formatSize,
             showToast,
             toggleDarkMode,

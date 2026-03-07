@@ -116,6 +116,7 @@
                         <div v-if="selectedCount > 0" class="flex items-center gap-4 p-4 bg-gray-800 border border-gray-700 rounded-lg mb-6">
                             <span class="text-sm font-mono font-bold text-curator-500">// {{ selectedCount }} selected</span>
                             <div class="flex gap-2 ml-auto">
+                                <template v-if="activeTab === 'pending'">
                                 <button 
                                     @click="bulkApprove" 
                                     :disabled="bulkLoading"
@@ -131,6 +132,16 @@
                                 >
                                     <span v-if="bulkLoading" class="inline-block w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
                                     {{ bulkLoading ? 'rejecting...' : 'reject' }}
+                                </button>
+                                </template>
+                                <button 
+                                    @click="rescoreSelected" 
+                                    :disabled="rescoreLoading"
+                                    class="px-4 py-2 bg-blue-700 hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded font-mono font-bold text-sm transition-colors duration-200 flex items-center gap-2 uppercase"
+                                    title="Re-run AI scoring on selected torrents"
+                                >
+                                    <span v-if="rescoreLoading" class="inline-block w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
+                                    {{ rescoreLoading ? 'scoring...' : '&#9889; re-score' }}
                                 </button>
                             </div>
                         </div>
@@ -161,7 +172,6 @@
                             <div class="flex items-center justify-between p-4 border-b border-gray-800 bg-gray-800/50">
                                 <div class="flex items-center gap-3">
                                     <input 
-                                        v-if="activeTab === 'pending'"
                                         type="checkbox" 
                                         :checked="isSelected(torrent.id)"
                                         @change="toggleSelection(torrent.id)"
