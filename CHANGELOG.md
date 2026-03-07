@@ -5,6 +5,31 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.14.2] - 2026-03-07
+
+### Added
+- `docs/ARCHITECTURE.md` — three Mermaid diagrams: system topology (`flowchart LR`), torrent state machine (`stateDiagram-v2`), and data model (`erDiagram`); includes state semantics table and package map
+- `docs/` directory hierarchy — all reference docs moved out of root
+
+### Changed
+- `README.md` — architecture section replaced with condensed Mermaid diagram + link to `docs/ARCHITECTURE.md`; added AI configuration variables (`CURATOR_AI_PROVIDER`, `CURATOR_AI_HOST`, `CURATOR_AI_MODEL`, `CURATOR_AI_KEY`); added Web UI and `curator serve` to Usage; added missing features (Web UI, AI scoring, `shows.json`); updated project structure; fixed roadmap (removed shipped items `Web UI for approvals`, `Statistics and reporting`, `Duplicate detection`)
+- `docs/PROJECT_SUMMARY.md` — full rewrite: v0.14.2, all 7 components documented (AI subsystem, API server, Web UI), complete CLI command table, updated project structure + dependencies, removed stale roadmap items
+- `START_HERE.md` — updated doc table with `docs/` paths and new `docs/ARCHITECTURE.md` entry; updated features, project structure, stats, and all doc cross-references
+- `.github/DEPLOYMENT.md` — updated Quick Links to `docs/` paths
+- `cmd/curator/main.go` — `version` constant corrected to `0.14.2` (was stale at `0.5.1`)
+
+### Removed
+- `CONTAINER_IMPLEMENTATION.md` — post-implementation work notes, fully superseded by `docs/CONTAINER_GUIDE.md`
+- `CONTAINER_SETUP.md` — same
+- `CONTAINER_QUICKREF.md` — same
+- `OVERVIEW.txt` — stale ASCII stats panel duplicating `docs/PROJECT_SUMMARY.md`
+
+### Moved
+- `PROJECT_SUMMARY.md` → `docs/PROJECT_SUMMARY.md`
+- `QUICKSTART.md` → `docs/QUICKSTART.md`
+- `CONTAINER_GUIDE.md` → `docs/CONTAINER_GUIDE.md`
+- `TRUENAS_DEPLOYMENT.md` → `docs/TRUENAS_DEPLOYMENT.md`
+
 ## [0.14.1] - 2026-03-07
 
 ### Fixed

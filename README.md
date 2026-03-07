@@ -17,6 +17,9 @@ A semi-automated torrent curator for private tracker RSS feeds with human-in-the
 - ✅ Batch operations support
 - ✅ Docker containerization for easy deployment
 - ✅ TrueNAS compatible setup
+- ✅ Web UI dashboard (approve/reject queue, activity log, feed stream, AI score badges)
+- ✅ AI-assisted scoring and metadata enrichment (Ollama / OpenAI / disabled)
+- ✅ Per-show rule configuration via `shows.json`
 
 ## Installation
 
@@ -87,7 +90,7 @@ docker run --rm \
   ghcr.io/iillmaticc/rss-curator:latest check
 ```
 
-For more details, see [CONTAINER_GUIDE.md](./CONTAINER_GUIDE.md).
+For more details, see [Container Guide](./docs/CONTAINER_GUIDE.md).
 
 ## Configuration
 
@@ -118,6 +121,15 @@ export PREFERRED_GROUPS="NTb,FLUX,HMAX"               # Comma-separated
 
 # Storage
 export STORAGE_PATH="$HOME/.curator.db"               # Default
+
+# API server
+export CURATOR_API_PORT=8081                          # Default
+
+# AI provider (optional — omit to disable)
+export CURATOR_AI_PROVIDER=ollama                     # ollama | openai | disabled
+export CURATOR_AI_HOST=http://localhost:11434          # Ollama default
+export CURATOR_AI_MODEL=llama3.2                      # Model name
+export CURATOR_AI_KEY=                                # API key (OpenAI-compatible)
 ```
 
 ### Create a config script
@@ -258,6 +270,16 @@ Skipped
 Review complete!
 ```
 
+### Web UI
+
+Start the HTTP API server and access the dashboard in your browser:
+
+```bash
+curator serve
+```
+
+Open `http://localhost:8081` to approve/reject torrents, view the activity log, check stats, and browse the raw feed stream. AI score badges (`⚡ N%`) appear on each card when scoring is enabled. Port is configurable via `CURATOR_API_PORT`.
+
 ## Automation
 
 ### Cron Job
@@ -320,38 +342,35 @@ journalctl -u curator.service
 
 ## Architecture
 
+```mermaid
+flowchart LR
+    RSS["RSS Feeds"] --> Parser["Parser"]
+    Parser -->|"regex miss"| Enricher["AI Enricher"]
+    Enricher -.->|"filled metadata"| Parser
+    Parser --> Matcher["Matcher"]
+    Matcher --> Scorer["AI Scorer"]
+    Scorer --> DB[("SQLite")]
+    DB -->|"activity history"| Scorer
+    DB --> API["API Server"]
+    DB --> CLI["CLI"]
+    API --> UI["Web UI :8081"]
+    API --> QB["qBittorrent"]
+    CLI --> QB
+    Enricher & Scorer -.->|"CURATOR_AI_PROVIDER"| LLM["LLM\nOllama / OpenAI"]
 ```
-┌─────────────┐
-│  RSS Feeds  │
-└──────┬──────┘
-       │
-       ▼
-┌─────────────┐      ┌──────────────┐
-│   Parser    │─────▶│   Matcher    │
-└─────────────┘      └──────┬───────┘
-                            │
-                            ▼
-                     ┌──────────────┐
-                     │   Storage    │
-                     │  (SQLite)    │
-                     └──────┬───────┘
-                            │
-                    ┌───────┴────────┐
-                    │                │
-                    ▼                ▼
-              ┌──────────┐     ┌──────────┐
-              │   CLI    │     │  qBit    │
-              │ Commands │     │  Client  │
-              └──────────┘     └──────────┘
-```
+
+Full diagrams (state machine, ER model, component map): [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md)
 
 ### Components
 
-- **Parser**: Fetches and parses RSS feeds, extracts metadata
-- **Matcher**: Applies rules to filter items
-- **Storage**: SQLite database for staging torrents
-- **CLI**: User interface for management
-- **qBittorrent Client**: Wrapper around qBittorrent Web API
+- **Parser** (`internal/feed`): Fetches and parses RSS feeds, extracts metadata via regex
+- **AI Enricher** (`internal/ai`): LLM fallback to fill `ShowName`/`Season` when regex fails — silent no-op when unavailable
+- **Matcher** (`internal/matcher`): Applies show/quality/codec/group rules
+- **AI Scorer** (`internal/ai`): Scores matches 0–1 against approve/reject history — silent no-op when unavailable
+- **Storage** (`internal/storage`): SQLite staging queue + activity log + raw feed stream
+- **API Server** (`internal/api`): REST API + serves Web UI; started with `curator serve`
+- **Web UI** (`web/`): Vue.js dashboard for approvals, activity, stats, feed stream
+- **qBittorrent Client** (`internal/client`): Wrapper around qBittorrent Web API
 
 ## Development
 
@@ -359,21 +378,18 @@ journalctl -u curator.service
 
 ```
 rss-curator/
-├── cmd/
-│   └── curator/
-│       └── main.go           # CLI application
+├── cmd/curator/main.go        # CLI entry point, all command dispatch
 ├── internal/
-│   ├── feed/
-│   │   └── parser.go         # RSS parsing
-│   ├── matcher/
-│   │   └── matcher.go        # Rule matching
-│   ├── storage/
-│   │   └── storage.go        # SQLite storage
-│   └── client/
-│       └── qbittorrent.go    # qBittorrent API client
-├── pkg/
-│   └── models/
-│       └── types.go          # Shared types
+│   ├── ai/                    # Provider interface, Enricher, Scorer
+│   ├── api/                   # HTTP API server + Web UI handler
+│   ├── client/                # qBittorrent Web API client
+│   ├── feed/                  # RSS fetch + regex metadata extraction
+│   ├── matcher/               # Rule-based matching
+│   └── storage/               # Store interface + SQLite implementation
+├── pkg/models/types.go        # Shared value types
+├── web/                       # Vue.js dashboard (index.html, app.js, style.css)
+├── docs/                      # Reference documentation
+├── scripts/                   # Container entrypoint + scheduler
 ├── go.mod
 └── README.md
 ```
@@ -403,13 +419,10 @@ GOOS=darwin GOARCH=arm64 go build -o curator-darwin-arm64 ./cmd/curator
 ## Roadmap
 
 - [ ] YAML configuration file support
-- [ ] Web UI for approvals
-- [ ] Webhook notifications
+- [ ] Webhook notifications (on approve/stage)
 - [ ] Season pack handling
-- [ ] Duplicate detection
 - [ ] Custom metadata extraction patterns
-- [ ] Multi-tracker support
-- [ ] Statistics and reporting
+- [ ] Multi-tracker aggregate feed support
 
 ## Troubleshooting
 

@@ -4,9 +4,9 @@ This document outlines deployment strategies for RSS Curator.
 
 ## Quick Links
 
-- **Local Development**: See [QUICKSTART.md](../QUICKSTART.md)
-- **Container Guide**: See [CONTAINER_GUIDE.md](../CONTAINER_GUIDE.md)
-- **TrueNAS Deployment**: See [TRUENAS_DEPLOYMENT.md](../TRUENAS_DEPLOYMENT.md)
+- **Local Development**: See [docs/QUICKSTART.md](../docs/QUICKSTART.md)
+- **Container Guide**: See [docs/CONTAINER_GUIDE.md](../docs/CONTAINER_GUIDE.md)
+- **TrueNAS Deployment**: See [docs/TRUENAS_DEPLOYMENT.md](../docs/TRUENAS_DEPLOYMENT.md)
 
 ## Deployment Options
 
