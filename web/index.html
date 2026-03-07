@@ -81,26 +81,10 @@
             <!-- Header -->
             <header class="mb-8">
                 <div class="bg-gray-900 border border-gray-800 rounded-lg shadow-2xl p-8 backdrop-blur-sm">
-                    <div class="mb-6">
+                    <div class="mb-2">
                         <h1 class="text-4xl font-bold font-mono text-curator-500">
                             > rss-curator
                         </h1>
-                    </div>
-                    
-                    <!-- Stats Grid -->
-                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                        <div class="bg-gray-800 border border-gray-700 rounded-lg p-4 hover:border-curator-500 transition-colors duration-200">
-                            <p class="text-xs font-mono font-bold text-curator-500 uppercase tracking-widest">pending</p>
-                            <p class="text-3xl font-bold text-curator-500 font-mono mt-2">{{ pendingCount }}</p>
-                        </div>
-                        <div class="bg-gray-800 border border-gray-700 rounded-lg p-4 hover:border-curator-500 transition-colors duration-200">
-                            <p class="text-xs font-mono font-bold text-curator-500 uppercase tracking-widest">accepted</p>
-                            <p class="text-3xl font-bold text-curator-500 font-mono mt-2">{{ acceptedCount }}</p>
-                        </div>
-                        <div class="bg-gray-800 border border-gray-700 rounded-lg p-4 hover:border-curator-500 transition-colors duration-200">
-                            <p class="text-xs font-mono font-bold text-curator-500 uppercase tracking-widest">rejected</p>
-                            <p class="text-3xl font-bold text-curator-500 font-mono mt-2">{{ rejectedCount }}</p>
-                        </div>
                     </div>
                 </div>
             </header>
@@ -355,6 +339,42 @@
                 </button>
             </div>
 
+            <!-- Stats Mini-Panel -->
+            <div class="border-b border-gray-800">
+                <!-- Collapsed: pending badge only -->
+                <div v-if="sidebarCollapsed" class="p-3 flex flex-col items-center gap-1">
+                    <span class="text-xs font-mono text-gray-600 uppercase">q</span>
+                    <span class="text-sm font-bold font-mono text-curator-500">{{ stats.pending }}</span>
+                </div>
+                <!-- Expanded: 6-tile grid -->
+                <div v-else class="p-3 grid grid-cols-2 gap-2">
+                    <div class="bg-gray-800 rounded p-2 text-center">
+                        <p class="text-xs font-mono text-gray-500 uppercase leading-none mb-1">pending</p>
+                        <p class="text-lg font-bold font-mono text-curator-500">{{ stats.pending }}</p>
+                    </div>
+                    <div class="bg-gray-800 rounded p-2 text-center">
+                        <p class="text-xs font-mono text-gray-500 uppercase leading-none mb-1">seen 24h</p>
+                        <p class="text-lg font-bold font-mono text-curator-500">{{ stats.seen }}</p>
+                    </div>
+                    <div class="bg-gray-800 rounded p-2 text-center">
+                        <p class="text-xs font-mono text-gray-500 uppercase leading-none mb-1">staged 24h</p>
+                        <p class="text-lg font-bold font-mono text-curator-500">{{ stats.staged }}</p>
+                    </div>
+                    <div class="bg-gray-800 rounded p-2 text-center">
+                        <p class="text-xs font-mono text-gray-500 uppercase leading-none mb-1">approved 24h</p>
+                        <p class="text-lg font-bold font-mono text-curator-500">{{ stats.approved }}</p>
+                    </div>
+                    <div class="bg-gray-800 rounded p-2 text-center">
+                        <p class="text-xs font-mono text-gray-500 uppercase leading-none mb-1">rejected 24h</p>
+                        <p class="text-lg font-bold font-mono text-curator-500">{{ stats.rejected }}</p>
+                    </div>
+                    <div class="bg-gray-800 rounded p-2 text-center">
+                        <p class="text-xs font-mono text-gray-500 uppercase leading-none mb-1">queued 24h</p>
+                        <p class="text-lg font-bold font-mono text-curator-500">{{ stats.queued }}</p>
+                    </div>
+                </div>
+            </div>
+
             <!-- Tab Switcher -->
             <div v-if="!sidebarCollapsed" class="flex gap-1 p-3 border-b border-gray-800 bg-gray-800/30">
                 <button 
@@ -382,7 +402,7 @@
             </div>
 
             <!-- Content -->
-            <div v-if="!sidebarCollapsed" class="p-4 overflow-y-auto" style="height: calc(100vh - 200px)">
+            <div v-if="!sidebarCollapsed" class="p-4 overflow-y-auto" style="height: calc(100vh - 360px)">
                 <!-- Activity Log Tab -->
                 <div v-if="sidebarTab === 'activity'">
                     <div v-if="activities.length === 0" class="text-center py-8">

@@ -16,6 +16,9 @@ const app = createApp({
         // Initialize sidebar collapse state from localStorage
         const sidebarCollapsed = ref(JSON.parse(localStorage.getItem('rss-curator-sidebar-collapsed') || 'false'));
         const sidebarTab = ref('activity'); // 'activity' or 'feed'
+
+        // Stats from API (/api/stats) — 24h windowed counts
+        const stats = ref({ hours: 24, pending: 0, seen: 0, staged: 0, approved: 0, rejected: 0, queued: 0 });
         
         // Load dark mode preference from localStorage if available, otherwise use system preference
         const savedDarkMode = localStorage.getItem('rss-curator-dark-mode');
@@ -39,13 +42,14 @@ const app = createApp({
         let toastCounter = 0;
 
         // Computed properties
-        const pendingCount = computed(() => 
+        // pendingCount kept for collapsed sidebar badge
+        const pendingCount = computed(() =>
             torrents.value.filter(t => t.status === 'pending').length
         );
-        const acceptedCount = computed(() => 
+        const acceptedCount = computed(() =>
             torrents.value.filter(t => t.status === 'accepted').length
         );
-        const rejectedCount = computed(() => 
+        const rejectedCount = computed(() =>
             torrents.value.filter(t => t.status === 'rejected').length
         );
         const selectedCount = computed(() => selectedIds.value.size);
@@ -112,6 +116,16 @@ const app = createApp({
                 feedStream.value = data.items || [];
             } catch (error) {
                 console.error('Failed to fetch feed stream:', error);
+            }
+        };
+
+        const fetchStats = async () => {
+            try {
+                const response = await fetch('/api/stats');
+                const data = await response.json();
+                stats.value = { ...stats.value, ...data };
+            } catch (error) {
+                console.error('Failed to fetch stats:', error);
             }
         };
 
@@ -422,11 +436,13 @@ const app = createApp({
             fetchAllTorrents();
             fetchActivities();
             fetchFeedStream();
+            fetchStats();
             // Auto-refresh every 30 seconds
             setInterval(() => {
                 fetchAllTorrents();
                 fetchActivities();
                 fetchFeedStream();
+                fetchStats();
             }, 30000);
         });
 
@@ -454,6 +470,7 @@ const app = createApp({
             torrents,
             activities,
             feedStream,
+            stats,
             loading,
             bulkLoading,
             activeTab,
@@ -474,6 +491,7 @@ const app = createApp({
             fetchAllTorrents,
             fetchActivities,
             fetchFeedStream,
+            fetchStats,
             approveTorrent,
             rejectTorrent,
             openReviewModal,
