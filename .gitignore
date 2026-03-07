@@ -1,5 +1,5 @@
-# Binary
-curator
+# Compiled binary (root-level only)
+/curator
 
 # Local dev environment — never commit real credentials
 local.env
