@@ -10,6 +10,17 @@ import (
 	_ "github.com/mattn/go-sqlite3"
 )
 
+// WindowStats holds counts for a rolling time window.
+type WindowStats struct {
+	Hours    int `json:"hours"`
+	Seen     int `json:"seen"`     // raw feed items pulled within window
+	Staged   int `json:"staged"`   // torrents staged within window
+	Approved int `json:"approved"` // activity_log approve actions within window
+	Rejected int `json:"rejected"` // activity_log reject actions within window
+	Queued   int `json:"queued"`   // activity_log queue actions within window
+	Pending  int `json:"pending"`  // current staged_torrents with status='pending'
+}
+
 // Store defines the interface for storage operations
 type Store interface {
 	Get(id int) (*models.StagedTorrent, error)
@@ -19,6 +30,7 @@ type Store interface {
 	LogActivity(torrentID int, title, action, matchReason string) error
 	GetActivity(limit int, offset int, action string) ([]models.Activity, error)
 	GetActivityCount(action string) (int, error)
+	GetWindowStats(hours int) (*WindowStats, error)
 	DeleteOld(olderThan time.Duration) error
 	CleanupStaleLinks(patterns []string) (int64, error)
 	Close() error
@@ -439,4 +451,61 @@ func (s *Storage) UpdateAIScore(id int, score float64, reason string) error {
 		WHERE id = ?
 	`, score, reason, id)
 	return err
+}
+
+// GetWindowStats returns activity counts for a rolling window of the given hours,
+// plus the current pending queue depth (no time filter).
+func (s *Storage) GetWindowStats(hours int) (*WindowStats, error) {
+	ws := &WindowStats{Hours: hours}
+
+	countQuery := func(query string, args ...any) (int, error) {
+		var n int
+		if err := s.db.QueryRow(query, args...).Scan(&n); err != nil {
+			return 0, err
+		}
+		return n, nil
+	}
+
+	var err error
+
+	ws.Seen, err = countQuery(
+		`SELECT COUNT(*) FROM raw_feed_items WHERE pulled_at >= datetime('now', ? || ' hours')`,
+		fmt.Sprintf("-%d", hours),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("window stats seen: %w", err)
+	}
+
+	ws.Staged, err = countQuery(
+		`SELECT COUNT(*) FROM staged_torrents WHERE staged_at >= datetime('now', ? || ' hours')`,
+		fmt.Sprintf("-%d", hours),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("window stats staged: %w", err)
+	}
+
+	for _, pair := range []struct {
+		dest   *int
+		action string
+	}{
+		{&ws.Approved, "approve"},
+		{&ws.Rejected, "reject"},
+		{&ws.Queued, "queue"},
+	} {
+		*pair.dest, err = countQuery(
+			`SELECT COUNT(*) FROM activity_log WHERE action = ? AND action_at >= datetime('now', ? || ' hours')`,
+			pair.action,
+			fmt.Sprintf("-%d", hours),
+		)
+		if err != nil {
+			return nil, fmt.Errorf("window stats %s: %w", pair.action, err)
+		}
+	}
+
+	ws.Pending, err = countQuery(`SELECT COUNT(*) FROM staged_torrents WHERE status = 'pending'`)
+	if err != nil {
+		return nil, fmt.Errorf("window stats pending: %w", err)
+	}
+
+	return ws, nil
 }
