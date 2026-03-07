@@ -207,7 +207,7 @@
                                         <span class="text-gray-500 font-mono">match:</span>
                                         <span class="text-curator-500 font-mono font-bold px-2 py-1 bg-gray-800 rounded">{{ torrent.match_reason }}</span>
                                     </div>
-                                    <div v-if="torrent.ai_score > 0" class="flex items-center justify-between">
+                                    <div v-if="torrent.ai_scored" class="flex items-center justify-between">
                                         <span class="text-gray-500 font-mono">ai score:</span>
                                         <span class="font-mono font-bold px-2 py-1 rounded text-xs bg-emerald-900/40 text-emerald-400 border border-emerald-700/50" :title="torrent.ai_reason">&#9889; {{ Math.round(torrent.ai_score * 100) }}%</span>
                                     </div>

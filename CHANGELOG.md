@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.14.1] - 2026-03-07
+
+### Fixed
+- `ai_scored` boolean column added to `staged_torrents` (idempotent `ALTER TABLE` migration); distinguishes "never scored" (`ai_scored=false`) from "scored with zero confidence" (`ai_scored=true, ai_score=0.0`)
+- `UpdateAIScore()` now sets `ai_scored = 1` so every scoring attempt is recorded regardless of the resulting score value
+- `Add()` INSERT and all `SELECT`/`Scan` call-sites updated to include `ai_scored`
+- `AIScored bool` field added to `models.StagedTorrent` and `api.TorrentResponse`
+- Backfill in `cmdCheck` now covers **all statuses** (not just `pending`) and filters on `ai_scored=false` instead of `ai_score==0`; always calls `UpdateAIScore` after scoring (even a 0.0 result marks the row as scored)
+- UI score badge condition changed from `ai_score > 0` to `ai_scored` so that a genuinely low-confidence score (`⚡ 0%`) is shown rather than hidden
+- UI sort guard (`hasScores`) updated to match the same `ai_scored` condition
+
 ## [0.14.0] - 2026-03-06
 
 ### Added

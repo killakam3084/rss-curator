@@ -158,6 +158,31 @@ func cmdCheck(cfg models.Config, store *storage.Storage) {
 	} else {
 		fmt.Println("\nNo new matches found")
 	}
+
+	// Backfill AI scores for any torrents that were staged before the provider
+	// was available (ai_scored=false). Covers all statuses so approved/rejected
+	// history is also enriched for trend tracking.
+	if aiProvider.Available() {
+		all, err := store.List("")
+		if err == nil {
+			history, _ := store.GetActivity(50, 0, "")
+			backfilled := 0
+			for _, t := range all {
+				if t.AIScored {
+					continue
+				}
+				scored := scorer.ScoreAll([]models.StagedTorrent{t}, history)
+				if len(scored) > 0 {
+					if err := store.UpdateAIScore(t.ID, scored[0].AIScore, scored[0].AIReason); err == nil {
+						backfilled++
+					}
+				}
+			}
+			if backfilled > 0 {
+				fmt.Printf("✓ Backfilled AI scores for %d torrents\n", backfilled)
+			}
+		}
+	}
 }
 
 func cmdList(store *storage.Storage) {

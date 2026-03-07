@@ -51,7 +51,7 @@ const app = createApp({
         const selectedCount = computed(() => selectedIds.value.size);
         const displayedTorrents = computed(() => {
             const filtered = torrents.value.filter(t => t.status === activeTab.value);
-            const hasScores = filtered.some(t => t.ai_score > 0);
+            const hasScores = filtered.some(t => t.ai_scored);
             if (hasScores) return filtered.slice().sort((a, b) => (b.ai_score || 0) - (a.ai_score || 0));
             return filtered;
         });
