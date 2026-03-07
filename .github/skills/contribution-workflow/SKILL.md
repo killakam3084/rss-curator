@@ -6,32 +6,62 @@ Use this skill for any code contribution that may be committed and released.
 ## Scope
 Applies to changes in backend, frontend, infrastructure, and docs.
 
+## Phased Delivery (default for multi-step features)
+When a feature spans multiple logical layers (e.g., storage → API → UI), implement and commit each phase as a self-contained unit rather than one large diff.
+
+**Phase definition rules:**
+- Each phase must compile and pass all tests on its own.
+- Phases should follow dependency order (lower layers first: storage → API → frontend → docs).
+- Each phase gets its own commit with a clear, scoped message.
+- Only the final phase of a release milestone updates `CHANGELOG.md` and receives the release tag.
+- Intermediate phases are committed to `main` without a release tag.
+
+**Example phase breakdown for a feature:**
+```
+Phase 1: internal/logbuffer — new package, no external deps
+Phase 2: internal/storage   — new interface methods + implementation
+Phase 3: internal/api       — wire new package + expose endpoints
+Phase 4: cmd/               — update entrypoint wiring
+Phase 5: web/               — frontend consuming new API
+Phase 6: docs + CHANGELOG   — user-facing summary + release tag
+```
+
 ## Required Flow
 1. **Understand scope first**
    - Confirm requested behavior and impacted files.
    - Avoid unrelated refactors.
+   - Identify phase breakdown before starting.
 
 2. **Implement changes**
    - Keep diffs small and task-focused.
    - Preserve existing naming/style patterns.
+   - One logical concern per commit — do not mix unrelated files.
 
-3. **Run local quality gates**
+3. **Run local quality gates before each commit**
    - Format: `gofmt -w .`
    - Lint/static checks: `go vet ./...`
    - Unit tests: `go test ./... -v`
    - Build verification: `go build -o curator ./cmd/curator`
 
-4. **Update changelog before commit**
+4. **Update changelog before final commit only**
    - Add a new version section at top of `CHANGELOG.md`.
    - Use Keep a Changelog sections (`Added`, `Changed`, `Fixed`, etc.).
    - Keep entries concise and user-facing.
+   - Intermediate phase commits do NOT touch `CHANGELOG.md`.
 
 5. **Commit with clear message**
-   - Stage only relevant files.
-   - Use imperative, specific commit subject.
+   - Stage only the files belonging to that phase.
+   - Use imperative, scoped commit subject: `feat(scope): description`
    - Include short bullet summary in commit body for multi-file changes.
+   - Example subjects:
+     - `feat(logbuffer): add ring buffer + zapcore integration`
+     - `feat(storage): add GetWindowStats for 24h windowed counts`
+     - `feat(api): expose /api/stats window fields and /api/logs SSE stream`
+     - `feat(ui): stats mini-panel and log drawer`
+     - `chore: CHANGELOG and version bump for v0.15.0`
 
 6. **Tag release when requested**
+   - Apply tag only on the final phase commit (changelog + version bump).
    - Use semantic version tags: `vMAJOR.MINOR.PATCH`.
    - Annotated tag format:
      - `git tag -a vX.Y.Z -m "Release vX.Y.Z: <summary>"`
