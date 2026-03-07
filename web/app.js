@@ -26,6 +26,9 @@ const app = createApp({
         const logFilter = ref('');
         const logLevelFilter = ref(['INFO', 'WARN', 'ERROR', 'DEBUG', 'FATAL']);
         const logAutoScroll = ref(true);
+        const logSortDesc = ref(true); // true = newest first (default)
+        const logsDrawerHeight = ref('60vh');
+        const logsDrawerResizing = ref(false);
         let logEventSource = null;
         
         // Load dark mode preference from localStorage if available, otherwise use system preference
@@ -62,12 +65,15 @@ const app = createApp({
         );
         const selectedCount = computed(() => selectedIds.value.size);
         const filteredLogs = computed(() => {
-            return logEntries.value.filter(e => {
+            const filtered = logEntries.value.filter(e => {
                 const levelMatch = logLevelFilter.value.includes(e.level);
                 const textMatch = !logFilter.value ||
                     e.message.toLowerCase().includes(logFilter.value.toLowerCase());
                 return levelMatch && textMatch;
             });
+            return logSortDesc.value
+                ? filtered.slice().sort((a, b) => b.id - a.id)
+                : filtered.slice().sort((a, b) => a.id - b.id);
         });
         const displayedTorrents = computed(() => {
             const filtered = torrents.value.filter(t => t.status === activeTab.value);
@@ -170,7 +176,7 @@ const app = createApp({
                     if (logAutoScroll.value) {
                         nextTick(() => {
                             const el = document.getElementById('log-drawer-body');
-                            if (el) el.scrollTop = el.scrollHeight;
+                            if (el) el.scrollTop = logSortDesc.value ? 0 : el.scrollHeight;
                         });
                     }
                 } catch (e) {
@@ -199,6 +205,26 @@ const app = createApp({
             } else if (logLevelFilter.value.length > 1) {
                 logLevelFilter.value.splice(idx, 1);
             }
+        };
+
+        const startDrawerResize = (e) => {
+            e.preventDefault();
+            const drawerEl = document.getElementById('log-drawer');
+            const startY = e.clientY;
+            const startHeight = drawerEl ? drawerEl.offsetHeight : window.innerHeight * 0.6;
+            logsDrawerResizing.value = true;
+            const onMove = (mv) => {
+                const delta = startY - mv.clientY; // drag up = taller
+                const clamped = Math.max(80, Math.min(window.innerHeight * 0.92, startHeight + delta));
+                logsDrawerHeight.value = clamped + 'px';
+            };
+            const onUp = () => {
+                logsDrawerResizing.value = false;
+                document.removeEventListener('mousemove', onMove);
+                document.removeEventListener('mouseup', onUp);
+            };
+            document.addEventListener('mousemove', onMove);
+            document.addEventListener('mouseup', onUp);
         };
 
         const showToast = (message, type = 'info', duration = 5000) => {
@@ -548,6 +574,10 @@ const app = createApp({
             logFilter,
             logLevelFilter,
             logAutoScroll,
+            logSortDesc,
+            logsDrawerHeight,
+            logsDrawerResizing,
+            startDrawerResize,
             filteredLogs,
             loading,
             bulkLoading,
