@@ -9,16 +9,19 @@ import (
 	"strings"
 	"time"
 
-	"github.com/iillmaticc/rss-curator/internal/client"
-	"github.com/iillmaticc/rss-curator/internal/storage"
+	"github.com/killakam3084/rss-curator/internal/client"
+	"github.com/killakam3084/rss-curator/internal/logbuffer"
+	"github.com/killakam3084/rss-curator/internal/storage"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 )
 
 type Server struct {
-	store  storage.Store
-	client *client.Client // May be nil if qBittorrent is unavailable
-	logger *zap.Logger
-	port   int
+	store     storage.Store
+	client    *client.Client // May be nil if qBittorrent is unavailable
+	logger    *zap.Logger
+	logBuffer *logbuffer.Buffer
+	port      int
 }
 
 type ErrorResponse struct {
@@ -72,9 +75,13 @@ type ActivityItem struct {
 }
 
 type StatsResponse struct {
+	Hours    int `json:"hours"`
 	Pending  int `json:"pending"`
+	Seen     int `json:"seen"`
+	Staged   int `json:"staged"`
 	Approved int `json:"approved"`
 	Rejected int `json:"rejected"`
+	Queued   int `json:"queued"`
 }
 
 type FeedStreamItem struct {
@@ -92,20 +99,28 @@ type FeedStreamResponse struct {
 	Total int              `json:"total"`
 }
 
-// NewServer creates a new API server instance
-func NewServer(store storage.Store, client *client.Client, port int) *Server {
-	// Create a production logger (use development logger in dev if preferred)
-	logger, err := zap.NewProduction()
+// NewServer creates a new API server instance.
+// buf may be nil; when provided, logs are tee'd into it for /api/logs streaming.
+func NewServer(store storage.Store, client *client.Client, port int, buf *logbuffer.Buffer) *Server {
+	prodCore, err := zap.NewProduction()
 	if err != nil {
 		panic(fmt.Sprintf("failed to create logger: %v", err))
 	}
-	defer logger.Sync() // Flush logs on shutdown
+
+	var logger *zap.Logger
+	if buf != nil {
+		core := zapcore.NewTee(prodCore.Core(), logbuffer.NewZapCore(buf))
+		logger = zap.New(core, zap.AddCaller())
+	} else {
+		logger = prodCore
+	}
 
 	return &Server{
-		store:  store,
-		client: client,
-		logger: logger,
-		port:   port,
+		store:     store,
+		client:    client,
+		logger:    logger,
+		logBuffer: buf,
+		port:      port,
 	}
 }
 
@@ -120,6 +135,8 @@ func (s *Server) Start() error {
 	mux.HandleFunc("/api/activity", s.handleActivity)
 	mux.HandleFunc("/api/stats", s.handleStats)
 	mux.HandleFunc("/api/feed/stream", s.handleFeedStream)
+	mux.HandleFunc("/api/logs", s.handleLogs)
+	mux.HandleFunc("/api/logs/stream", s.handleLogsStream)
 
 	// Static files and UI
 	mux.Handle("/style.css", http.FileServer(http.Dir("./web")))
@@ -567,45 +584,114 @@ func (s *Server) handleActivity(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// handleStats returns torrent statistics
+// handleStats returns 24-hour windowed torrent statistics.
 func (s *Server) handleStats(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
 
-	// Get counts from activity log
-	approvedCount, err := s.store.GetActivityCount("approve")
+	ws, err := s.store.GetWindowStats(24)
 	if err != nil {
-		s.logger.Error("failed to get approved count", zap.Error(err))
-		approvedCount = 0
+		s.logger.Error("failed to get window stats", zap.Error(err))
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(ErrorResponse{Error: err.Error()})
+		return
 	}
 
-	rejectedCount, err := s.store.GetActivityCount("reject")
-	if err != nil {
-		s.logger.Error("failed to get rejected count", zap.Error(err))
-		rejectedCount = 0
-	}
-
-	// Get current pending count
-	pendingTorrents, err := s.store.List("pending")
-	if err != nil {
-		s.logger.Error("failed to get pending count", zap.Error(err))
-	}
-	pendingCount := len(pendingTorrents)
-
-	s.logger.Info("stats retrieved", zap.Int("pending", pendingCount), zap.Int("approved", approvedCount), zap.Int("rejected", rejectedCount))
+	s.logger.Info("stats retrieved", zap.Int("pending", ws.Pending), zap.Int("seen_24h", ws.Seen))
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(StatsResponse{
-		Pending:  pendingCount,
-		Approved: approvedCount,
-		Rejected: rejectedCount,
+		Hours:    ws.Hours,
+		Pending:  ws.Pending,
+		Seen:     ws.Seen,
+		Staged:   ws.Staged,
+		Approved: ws.Approved,
+		Rejected: ws.Rejected,
+		Queued:   ws.Queued,
 	})
 }
 
 // getContextWithTimeout wraps a context with a 30 second timeout
 func getContextWithTimeout(baseCtx context.Context) (context.Context, context.CancelFunc) {
 	return context.WithTimeout(baseCtx, 30*time.Second)
+}
+
+// handleLogs returns buffered log entries as JSON.
+// Accepts an optional ?since=<id> query param for incremental polling.
+func (s *Server) handleLogs(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if s.logBuffer == nil {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode([]logbuffer.LogEntry{})
+		return
+	}
+	var sinceID uint64
+	if raw := r.URL.Query().Get("since"); raw != "" {
+		if v, err := strconv.ParseUint(raw, 10, 64); err == nil {
+			sinceID = v
+		}
+	}
+	entries := s.logBuffer.Entries(sinceID)
+	if entries == nil {
+		entries = []logbuffer.LogEntry{}
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(entries)
+}
+
+// handleLogsStream streams live log entries over Server-Sent Events.
+func (s *Server) handleLogsStream(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	fl, ok := w.(http.Flusher)
+	if !ok {
+		http.Error(w, "streaming unsupported", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+
+	if s.logBuffer == nil {
+		// Buffer not wired; send a single comment and close.
+		fmt.Fprintf(w, ": log buffer not available\n\n")
+		fl.Flush()
+		return
+	}
+
+	ch, unsub := s.logBuffer.Subscribe()
+	defer unsub()
+
+	// Send a keep-alive comment immediately so the browser knows the stream opened.
+	fmt.Fprintf(w, ": connected\n\n")
+	fl.Flush()
+
+	for {
+		select {
+		case entry, open := <-ch:
+			if !open {
+				return
+			}
+			data, err := json.Marshal(entry)
+			if err != nil {
+				continue
+			}
+			fmt.Fprintf(w, "data: %s\n\n", data)
+			fl.Flush()
+		case <-r.Context().Done():
+			return
+		}
+	}
 }
 
 // handleFeedStream returns recent RSS feed discoveries

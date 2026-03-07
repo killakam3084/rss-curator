@@ -1,4 +1,4 @@
-module github.com/iillmaticc/rss-curator
+module github.com/killakam3084/rss-curator
 
 go 1.22
 

@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/iillmaticc/rss-curator/pkg/models"
+	"github.com/killakam3084/rss-curator/pkg/models"
 	_ "github.com/mattn/go-sqlite3"
 )
 

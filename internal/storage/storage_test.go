@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/iillmaticc/rss-curator/pkg/models"
+	"github.com/killakam3084/rss-curator/pkg/models"
 )
 
 func setupTestDB(t *testing.T) (*Storage, string) {

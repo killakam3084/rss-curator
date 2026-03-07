@@ -7,7 +7,7 @@ import (
 	"time"
 
 	qbt "github.com/autobrr/go-qbittorrent"
-	"github.com/iillmaticc/rss-curator/pkg/models"
+	"github.com/killakam3084/rss-curator/pkg/models"
 )
 
 // Client wraps qBittorrent client

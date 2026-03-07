@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/iillmaticc/rss-curator/pkg/models"
+	"github.com/killakam3084/rss-curator/pkg/models"
 )
 
 const enrichSystemPrompt = `You are a media title parser. Given a torrent title, extract structured metadata.

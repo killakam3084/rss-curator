@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/iillmaticc/rss-curator/pkg/models"
+	"github.com/killakam3084/rss-curator/pkg/models"
 	"go.uber.org/zap"
 )
 

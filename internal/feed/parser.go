@@ -10,8 +10,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/iillmaticc/rss-curator/internal/ai"
-	"github.com/iillmaticc/rss-curator/pkg/models"
+	"github.com/killakam3084/rss-curator/internal/ai"
+	"github.com/killakam3084/rss-curator/pkg/models"
 )
 
 // Parser handles RSS feed parsing

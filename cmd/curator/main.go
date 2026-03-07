@@ -10,13 +10,13 @@ import (
 	"text/tabwriter"
 	"time"
 
-	"github.com/iillmaticc/rss-curator/internal/ai"
-	"github.com/iillmaticc/rss-curator/internal/api"
-	"github.com/iillmaticc/rss-curator/internal/client"
-	"github.com/iillmaticc/rss-curator/internal/feed"
-	"github.com/iillmaticc/rss-curator/internal/matcher"
-	"github.com/iillmaticc/rss-curator/internal/storage"
-	"github.com/iillmaticc/rss-curator/pkg/models"
+	"github.com/killakam3084/rss-curator/internal/ai"
+	"github.com/killakam3084/rss-curator/internal/api"
+	"github.com/killakam3084/rss-curator/internal/client"
+	"github.com/killakam3084/rss-curator/internal/feed"
+	"github.com/killakam3084/rss-curator/internal/matcher"
+	"github.com/killakam3084/rss-curator/internal/storage"
+	"github.com/killakam3084/rss-curator/pkg/models"
 )
 
 const (

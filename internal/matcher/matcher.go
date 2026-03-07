@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/iillmaticc/rss-curator/pkg/models"
+	"github.com/killakam3084/rss-curator/pkg/models"
 )
 
 // Matcher filters feed items based on rules

@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/iillmaticc/rss-curator/pkg/models"
+	"github.com/killakam3084/rss-curator/pkg/models"
 )
 
 const scoreSystemPrompt = `You are a torrent preference scorer. Given a candidate torrent and a user's recent approve/reject history,
