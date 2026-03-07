@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/killakam3084/rss-curator/internal/storage"
 	"github.com/killakam3084/rss-curator/pkg/models"
 	"go.uber.org/zap"
 )
@@ -117,6 +118,11 @@ func (m *mockStorage) UpdateAIScore(id int, score float64, reason string) error 
 	return nil
 }
 
+// GetWindowStats returns a zero-value WindowStats for testing
+func (m *mockStorage) GetWindowStats(hours int) (*storage.WindowStats, error) {
+	return &storage.WindowStats{Hours: hours}, nil
+}
+
 // setupTestServer creates a test server instance
 func setupTestServer(t *testing.T) (*Server, *mockStorage) {
 	logger, _ := zap.NewProduction()
@@ -126,10 +132,11 @@ func setupTestServer(t *testing.T) (*Server, *mockStorage) {
 	}
 
 	return &Server{
-		store:  store,
-		client: nil, // No qBittorrent client for testing
-		logger: logger,
-		port:   8081,
+		store:     store,
+		client:    nil, // No qBittorrent client for testing
+		logger:    logger,
+		logBuffer: nil,
+		port:      8081,
 	}, store
 }
 

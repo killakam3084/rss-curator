@@ -14,6 +14,7 @@ import (
 	"github.com/killakam3084/rss-curator/internal/api"
 	"github.com/killakam3084/rss-curator/internal/client"
 	"github.com/killakam3084/rss-curator/internal/feed"
+	"github.com/killakam3084/rss-curator/internal/logbuffer"
 	"github.com/killakam3084/rss-curator/internal/matcher"
 	"github.com/killakam3084/rss-curator/internal/storage"
 	"github.com/killakam3084/rss-curator/pkg/models"
@@ -46,6 +47,9 @@ func main() {
 	}
 	defer store.Close()
 
+	// Create the log buffer once; shared across all commands that log.
+	buf := logbuffer.NewBuffer()
+
 	switch command {
 	case "check", "scan":
 		cmdCheck(cfg, store)
@@ -58,7 +62,7 @@ func main() {
 	case "review":
 		cmdReview(cfg, store)
 	case "serve":
-		cmdServe(cfg, store)
+		cmdServe(cfg, store, buf)
 	case "test":
 		cmdTest(cfg)
 	case "resume":
@@ -623,7 +627,7 @@ func cmdPause(cfg models.Config, store *storage.Storage, args []string) {
 	}
 }
 
-func cmdServe(cfg models.Config, store *storage.Storage) {
+func cmdServe(cfg models.Config, store *storage.Storage, buf *logbuffer.Buffer) {
 	// Try to initialize qBittorrent client, but don't fail if unavailable
 	var qb *client.Client
 	qb, err := client.New(cfg.QBittorrent)
@@ -645,7 +649,7 @@ func cmdServe(cfg models.Config, store *storage.Storage) {
 	}
 
 	// Create and start API server (even if qBittorrent is unavailable)
-	server := api.NewServer(store, qb, port)
+	server := api.NewServer(store, qb, port, buf)
 	fmt.Printf("[Serve] Starting API server on port %d\n", port)
 	if err := server.Start(); err != nil {
 		fmt.Fprintf(os.Stderr, "Error starting API server: %v\n", err)
