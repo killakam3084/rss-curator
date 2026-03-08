@@ -97,6 +97,14 @@ type RescoreResponse struct {
 	Torrents []TorrentResponse `json:"torrents"`
 }
 
+// SuggestionsResponse is the shape returned by POST /api/suggestions.
+// Currently returns 501 Not Implemented — the Suggester subsystem is
+// under active development. This stub establishes the API contract.
+type SuggestionsResponse struct {
+	Suggestions []interface{} `json:"suggestions"`
+	Status      string        `json:"status"`
+}
+
 type FeedStreamItem struct {
 	ID           int    `json:"id"`
 	Title        string `json:"title"`
@@ -129,6 +137,11 @@ func NewServer(store storage.Store, client *client.Client, port int, buf *logbuf
 		logger = prodCore
 	}
 
+	// Wire the tee logger into the scorer so all LLM I/O surfaces in the log drawer.
+	if scorer != nil {
+		scorer.SetLogger(logger)
+	}
+
 	return &Server{
 		store:      store,
 		client:     client,
@@ -154,6 +167,7 @@ func (s *Server) Start() error {
 	mux.HandleFunc("/api/feed/stream", s.handleFeedStream)
 	mux.HandleFunc("/api/logs", s.handleLogs)
 	mux.HandleFunc("/api/logs/stream", s.handleLogsStream)
+	mux.HandleFunc("/api/suggestions", s.handleSuggestions)
 
 	// Static files and UI
 	mux.Handle("/style.css", http.FileServer(http.Dir("./web")))
@@ -823,5 +837,21 @@ func (s *Server) handleRescore(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(RescoreResponse{
 		Rescored: len(updated),
 		Torrents: updated,
+	})
+}
+
+// handleSuggestions is the stub for the Suggester subsystem.
+// POST /api/suggestions — returns 501 Not Implemented until the engine is live.
+// The response shape is stable: clients can integrate the endpoint now.
+func (s *Server) handleSuggestions(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusNotImplemented)
+	json.NewEncoder(w).Encode(SuggestionsResponse{
+		Suggestions: []interface{}{},
+		Status:      "not_implemented",
 	})
 }

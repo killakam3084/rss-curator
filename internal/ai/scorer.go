@@ -11,10 +11,24 @@ import (
 	"time"
 
 	"github.com/killakam3084/rss-curator/pkg/models"
+	"go.uber.org/zap"
 )
 
-const scoreSystemPrompt = `You are a torrent preference scorer. Given a candidate torrent and a user's recent approve/reject history,
-score how likely the user would want this torrent on a scale of 0.0 to 1.0.
+const scoreSystemPrompt = `You are a torrent preference scorer.
+You will receive two categories of signals about a candidate torrent release:
+
+  CONTENT SIGNALS (primary weight)
+    These reflect *what* the content is. A strong content match indicates the
+    user is likely to want this title regardless of release packaging.
+
+  TECHNICAL SIGNALS (secondary weight)
+    These reflect *how well packaged* the release is (codec, quality, group).
+    A strong technical profile improves an already good content match but
+    cannot compensate for weak content relevance.
+
+Scoring rule: a torrent that matches well on content with suboptimal technical
+specs should score higher than one with perfect technical specs but weak content match.
+
 Always respond with a single JSON object. No explanation, no markdown, just raw JSON.
 Fields:
   score   (float, 0.0-1.0)   - predicted likelihood of approval
@@ -28,11 +42,13 @@ type scoreResult struct {
 // Scorer ranks matched StagedTorrents using the LLM and the user's activity history.
 type Scorer struct {
 	provider    Provider
-	historySize int // number of activity entries to sample into the prompt context
+	historySize int         // number of activity entries to sample into the prompt context
+	logger      *zap.Logger // may be nil; set via SetLogger after construction
 }
 
 // NewScorer creates a Scorer backed by the given Provider.
 // The history window size is read from CURATOR_AI_HISTORY_SIZE (default 40).
+// Call SetLogger to enable structured LLM I/O logging.
 func NewScorer(p Provider) *Scorer {
 	size := 40
 	if v := os.Getenv("CURATOR_AI_HISTORY_SIZE"); v != "" {
@@ -42,6 +58,11 @@ func NewScorer(p Provider) *Scorer {
 	}
 	return &Scorer{provider: p, historySize: size}
 }
+
+// SetLogger wires a zap.Logger into the scorer so that all LLM requests and
+// responses are emitted as DEBUG-level structured log events. When the logger
+// is nil (the default) all I/O logging is silently skipped.
+func (s *Scorer) SetLogger(l *zap.Logger) { s.logger = l }
 
 // ScoreAll attaches AI scores to each staged torrent.
 // Torrents that fail scoring retain AIScore=0 and AIReason="".
@@ -63,22 +84,50 @@ func (s *Scorer) scoreOne(t *models.StagedTorrent, histCtx string) (float64, str
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 
+	showEp := ""
+	if t.FeedItem.ShowName != "" {
+		showEp = t.FeedItem.ShowName
+		if t.FeedItem.Season > 0 || t.FeedItem.Episode > 0 {
+			showEp += fmt.Sprintf(" S%02dE%02d", t.FeedItem.Season, t.FeedItem.Episode)
+		}
+	}
+
 	user := fmt.Sprintf(
-		"Candidate: %s\nQuality: %s | Codec: %s | Group: %s | Source: %s\nRule match: %s\n\nRecent history:\n%s",
+		"Content signals:\nTitle: %s\nShow: %s\nMatch reason: %s\n\nTechnical signals:\nQuality: %s | Codec: %s | Group: %s | Source: %s\n\nRecent history:\n%s",
 		t.FeedItem.Title,
+		showEp,
+		t.MatchReason,
 		t.FeedItem.Quality,
 		t.FeedItem.Codec,
 		t.FeedItem.ReleaseGroup,
 		t.FeedItem.Source,
-		t.MatchReason,
 		histCtx,
 	)
 
+	if s.logger != nil {
+		s.logger.Debug("scorer.request",
+			zap.Int("torrent_id", t.ID),
+			zap.String("title", t.FeedItem.Title),
+			zap.String("user_prompt", user),
+		)
+	}
+
+	start := time.Now()
 	content, err := s.provider.Complete(ctx, scoreSystemPrompt, user)
+	durationMs := time.Since(start).Milliseconds()
+
 	if err != nil {
+		if s.logger != nil {
+			s.logger.Debug("scorer.response",
+				zap.Int("torrent_id", t.ID),
+				zap.Int64("duration_ms", durationMs),
+				zap.Error(err),
+			)
+		}
 		return 0, ""
 	}
 
+	raw := content
 	content = strings.TrimSpace(content)
 	content = strings.TrimPrefix(content, "```json")
 	content = strings.TrimPrefix(content, "```")
@@ -87,6 +136,14 @@ func (s *Scorer) scoreOne(t *models.StagedTorrent, histCtx string) (float64, str
 
 	var result scoreResult
 	if err := json.Unmarshal([]byte(content), &result); err != nil {
+		if s.logger != nil {
+			s.logger.Debug("scorer.response",
+				zap.Int("torrent_id", t.ID),
+				zap.Int64("duration_ms", durationMs),
+				zap.String("raw_response", raw),
+				zap.String("parse_error", err.Error()),
+			)
+		}
 		return 0, ""
 	}
 
@@ -98,11 +155,22 @@ func (s *Scorer) scoreOne(t *models.StagedTorrent, histCtx string) (float64, str
 		result.Score = 1
 	}
 
+	if s.logger != nil {
+		s.logger.Debug("scorer.response",
+			zap.Int("torrent_id", t.ID),
+			zap.Int64("duration_ms", durationMs),
+			zap.String("raw_response", raw),
+			zap.Float64("score", result.Score),
+			zap.String("reason", result.Reason),
+		)
+	}
+
 	return result.Score, result.Reason
 }
 
 // buildHistoryContext produces a compact text summary of activity history for
 // inclusion in the scoring prompt. Uses stratified sampling via sampleHistory.
+// Each line includes the action, title, and match reason for richer signal.
 func buildHistoryContext(history []models.Activity, size int) string {
 	if len(history) == 0 {
 		return "No history yet."
@@ -110,7 +178,11 @@ func buildHistoryContext(history []models.Activity, size int) string {
 	history = sampleHistory(history, size)
 	var sb strings.Builder
 	for _, h := range history {
-		sb.WriteString(fmt.Sprintf("[%s] %s\n", strings.ToUpper(h.Action), h.TorrentTitle))
+		line := fmt.Sprintf("[%s] %s", strings.ToUpper(h.Action), h.TorrentTitle)
+		if h.MatchReason != "" {
+			line += fmt.Sprintf(" (match: %s)", h.MatchReason)
+		}
+		sb.WriteString(line + "\n")
 	}
 	return sb.String()
 }

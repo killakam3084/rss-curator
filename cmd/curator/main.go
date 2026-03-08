@@ -85,7 +85,7 @@ func cmdCheck(cfg models.Config, store *storage.Storage) {
 
 	// Set up optional AI support.
 	aiProvider := ai.NewProvider()
-	enricher := ai.NewEnricher(aiProvider)
+	enricher := ai.NewEnricher(aiProvider, nil) // nil logger: CLI stdout is the observable surface
 	scorer := ai.NewScorer(aiProvider)
 	if aiProvider.Available() {
 		fmt.Println("AI provider available — enrichment and scoring enabled")

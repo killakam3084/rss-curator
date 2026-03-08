@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/killakam3084/rss-curator/pkg/models"
+	"go.uber.org/zap"
 )
 
 const enrichSystemPrompt = `You are a media title parser. Given a torrent title, extract structured metadata.
@@ -29,11 +30,14 @@ type enrichResult struct {
 // It is intentionally a fallback - it only fires when ShowName is empty or Season is 0.
 type Enricher struct {
 	provider Provider
+	logger   *zap.Logger // may be nil; logging silently skipped when nil
 }
 
 // NewEnricher creates an Enricher backed by the given Provider.
-func NewEnricher(p Provider) *Enricher {
-	return &Enricher{provider: p}
+// Pass a non-nil logger to enable structured LLM I/O logging (e.g. for log drawer visibility).
+// Pass nil for CLI/check paths where stdout is the observable surface.
+func NewEnricher(p Provider, logger *zap.Logger) *Enricher {
+	return &Enricher{provider: p, logger: logger}
 }
 
 // Enrich attempts to fill in missing ShowName / Season / Episode using the LLM.
@@ -52,13 +56,32 @@ func (e *Enricher) Enrich(item *models.FeedItem) {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 
-	content, err := e.provider.Complete(ctx, enrichSystemPrompt,
-		fmt.Sprintf("Title: %s", item.Title))
+	userPrompt := fmt.Sprintf("Title: %s", item.Title)
+
+	if e.logger != nil {
+		e.logger.Debug("enricher.request",
+			zap.String("title", item.Title),
+			zap.String("user_prompt", userPrompt),
+		)
+	}
+
+	start := time.Now()
+	content, err := e.provider.Complete(ctx, enrichSystemPrompt, userPrompt)
+	durationMs := time.Since(start).Milliseconds()
+
 	if err != nil {
+		if e.logger != nil {
+			e.logger.Debug("enricher.response",
+				zap.String("title", item.Title),
+				zap.Int64("duration_ms", durationMs),
+				zap.Error(err),
+			)
+		}
 		return // silent fallback - item unchanged
 	}
 
 	// Strip markdown fences if the model wrapped the response.
+	raw := content
 	content = strings.TrimSpace(content)
 	content = strings.TrimPrefix(content, "```json")
 	content = strings.TrimPrefix(content, "```")
@@ -67,7 +90,26 @@ func (e *Enricher) Enrich(item *models.FeedItem) {
 
 	var result enrichResult
 	if err := json.Unmarshal([]byte(content), &result); err != nil {
+		if e.logger != nil {
+			e.logger.Debug("enricher.response",
+				zap.String("title", item.Title),
+				zap.Int64("duration_ms", durationMs),
+				zap.String("raw_response", raw),
+				zap.String("parse_error", err.Error()),
+			)
+		}
 		return // silent fallback
+	}
+
+	if e.logger != nil {
+		e.logger.Debug("enricher.response",
+			zap.String("title", item.Title),
+			zap.Int64("duration_ms", durationMs),
+			zap.String("raw_response", raw),
+			zap.String("show_name", result.ShowName),
+			zap.Int("season", result.Season),
+			zap.Int("episode", result.Episode),
+		)
 	}
 
 	if result.ShowName != "" && item.ShowName == "" {
