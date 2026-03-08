@@ -5,6 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.17.0] - 2026-03-08
+
+### Added
+- **LLM I/O observability** — all AI interactions now emit structured DEBUG log events visible in the log drawer:
+  - `scorer.request`: `torrent_id`, `title`, `user_prompt` logged before each `scoreOne` call
+  - `scorer.response`: `score`, `reason`, `raw_response`, `duration_ms`, `error` logged after completion
+  - `enricher.request`: `title`, `user_prompt` logged before each `Enrich` call
+  - `enricher.response`: `show_name`, `season`, `episode`, `raw_response`, `duration_ms` logged after completion
+- `Scorer.SetLogger(*zap.Logger)` — nil-safe method to attach a logger; wired in `NewServer` so scorer I/O surfaces in the server log drawer; CLI path (`cmdCheck`) passes `nil` (silent)
+- `internal/ai/suggester.go` — `Suggester` struct with stable `Suggest(history, existing) ([]models.ShowRule, error)` interface; returns `ErrNotImplemented` until engine is built; doc comments describe intended TVDB/TMDb metadata workflow
+- `POST /api/suggestions` — 501 stub with stable response shape `{"suggestions":[], "status":"not_implemented"}`; ready for engine implementation in a future release
+
+### Changed
+- `NewEnricher` signature updated to `NewEnricher(p Provider, logger *zap.Logger)` — logger field on `Enricher` enables I/O observability without breaking CLI callers (nil logger = no-op)
+- `scoreSystemPrompt` rewritten with explicit **CONTENT SIGNALS (primary)** / **TECHNICAL SIGNALS (secondary)** framing; instructs model to weight content match above technical packaging preferences; includes explicit 0/50/100 score rule
+- `scoreOne` user prompt restructured into two sections matching the system prompt: `Content signals` (Title, Show S##E##, Match reason) and `Technical signals` (Quality, Codec, Group, Source)
+- `buildHistoryContext` — history lines now include `MatchReason` e.g. `[APPROVE] Show S01E03 (match: preferred_group:NTb)` so the model sees why each historical item was matched
+
 ## [0.16.0] - 2026-03-07
 
 ### Added
