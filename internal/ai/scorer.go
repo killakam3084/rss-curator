@@ -43,11 +43,13 @@ type scoreResult struct {
 type Scorer struct {
 	provider    Provider
 	historySize int         // number of activity entries to sample into the prompt context
+	timeoutSecs int         // per-request LLM timeout; read from CURATOR_AI_TIMEOUT_SECS
 	logger      *zap.Logger // may be nil; set via SetLogger after construction
 }
 
 // NewScorer creates a Scorer backed by the given Provider.
 // The history window size is read from CURATOR_AI_HISTORY_SIZE (default 40).
+// The per-request LLM timeout is read from CURATOR_AI_TIMEOUT_SECS (default 60).
 // Call SetLogger to enable structured LLM I/O logging.
 func NewScorer(p Provider) *Scorer {
 	size := 40
@@ -56,7 +58,13 @@ func NewScorer(p Provider) *Scorer {
 			size = n
 		}
 	}
-	return &Scorer{provider: p, historySize: size}
+	timeout := 60
+	if v := os.Getenv("CURATOR_AI_TIMEOUT_SECS"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			timeout = n
+		}
+	}
+	return &Scorer{provider: p, historySize: size, timeoutSecs: timeout}
 }
 
 // SetLogger wires a zap.Logger into the scorer so that all LLM requests and
@@ -81,7 +89,7 @@ func (s *Scorer) ScoreAll(staged []models.StagedTorrent, history []models.Activi
 }
 
 func (s *Scorer) scoreOne(t *models.StagedTorrent, histCtx string) (float64, string) {
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(s.timeoutSecs)*time.Second)
 	defer cancel()
 
 	showEp := ""

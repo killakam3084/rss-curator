@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -29,15 +31,23 @@ type enrichResult struct {
 // Enricher uses an LLM to fill in FeedItem fields the regex parser could not determine.
 // It is intentionally a fallback - it only fires when ShowName is empty or Season is 0.
 type Enricher struct {
-	provider Provider
-	logger   *zap.Logger // may be nil; logging silently skipped when nil
+	provider    Provider
+	timeoutSecs int         // per-request LLM timeout; read from CURATOR_AI_TIMEOUT_SECS
+	logger      *zap.Logger // may be nil; logging silently skipped when nil
 }
 
 // NewEnricher creates an Enricher backed by the given Provider.
+// The per-request LLM timeout is read from CURATOR_AI_TIMEOUT_SECS (default 60).
 // Pass a non-nil logger to enable structured LLM I/O logging (e.g. for log drawer visibility).
 // Pass nil for CLI/check paths where stdout is the observable surface.
 func NewEnricher(p Provider, logger *zap.Logger) *Enricher {
-	return &Enricher{provider: p, logger: logger}
+	timeout := 60
+	if v := os.Getenv("CURATOR_AI_TIMEOUT_SECS"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			timeout = n
+		}
+	}
+	return &Enricher{provider: p, timeoutSecs: timeout, logger: logger}
 }
 
 // Enrich attempts to fill in missing ShowName / Season / Episode using the LLM.
@@ -53,7 +63,7 @@ func (e *Enricher) Enrich(item *models.FeedItem) {
 		return
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(e.timeoutSecs)*time.Second)
 	defer cancel()
 
 	userPrompt := fmt.Sprintf("Title: %s", item.Title)

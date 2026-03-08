@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.17.1] - 2026-03-07
+
+### Fixed
+- Hardcoded 15-second LLM timeout in `scoreOne` and `Enrich` caused `context deadline exceeded` errors when Ollama inference on large history prompts exceeded the limit. Both now default to 60 seconds.
+
+### Added
+- `CURATOR_AI_TIMEOUT_SECS` env var — configures the per-request inference timeout for both the scorer and enricher (default `60`). Documented in `curator.env.sample`.
+
 ## [0.17.0] - 2026-03-08
 
 ### Added
