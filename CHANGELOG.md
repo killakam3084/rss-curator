@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.18.0] - 2026-03-07
+
+### Added
+- **Per-subsystem model tiering** — each AI subsystem now resolves its model independently:
+  - `CURATOR_AI_ENRICHER_MODEL` — fast/small model for regex fallback enrichment (e.g. `llama3.2:1b`)
+  - `CURATOR_AI_SCORER_MODEL` — mid-size model for per-item history-aware scoring (e.g. `llama3.2`)
+  - `CURATOR_AI_SUGGESTER_MODEL` — reserved for the suggestion engine; use the largest available model since it runs on-demand, not per-item (e.g. `llama3.1:8b`)
+  - All three fall back to `CURATOR_AI_MODEL` if their subsystem-specific var is unset; `CURATOR_AI_MODEL` falls back to the provider's built-in default
+- `NewProviderFor(subsystem string) Provider` — new constructor in `internal/ai/provider.go`; `NewProvider()` is now an alias for `NewProviderFor("")`
+- Per-subsystem model vars documented with recommended examples in `curator.env.sample`
+
+### Changed
+- `cmdCheck` now constructs `enricherProvider` and `scorerProvider` separately via `NewProviderFor` instead of sharing a single provider
+- `cmdServe` constructs `scorerProvider` via `NewProviderFor("scorer")` for the on-demand rescore endpoint
+
 ## [0.17.2] - 2026-03-07
 
 ### Fixed

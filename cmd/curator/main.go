@@ -21,7 +21,7 @@ import (
 )
 
 const (
-	version = "0.17.2"
+	version = "0.18.0"
 )
 
 func main() {
@@ -83,11 +83,12 @@ func main() {
 func cmdCheck(cfg models.Config, store *storage.Storage) {
 	fmt.Println("Checking RSS feeds...")
 
-	// Set up optional AI support.
-	aiProvider := ai.NewProvider()
-	enricher := ai.NewEnricher(aiProvider, nil) // nil logger: CLI stdout is the observable surface
-	scorer := ai.NewScorer(aiProvider)
-	if aiProvider.Available() {
+	// Set up optional AI support — each subsystem uses its own model config.
+	enricherProvider := ai.NewProviderFor("enricher")
+	scorerProvider := ai.NewProviderFor("scorer")
+	enricher := ai.NewEnricher(enricherProvider, nil) // nil logger: CLI stdout is the observable surface
+	scorer := ai.NewScorer(scorerProvider)
+	if enricherProvider.Available() || scorerProvider.Available() {
 		fmt.Println("AI provider available — enrichment and scoring enabled")
 	}
 
@@ -138,7 +139,7 @@ func cmdCheck(cfg models.Config, store *storage.Storage) {
 		fmt.Printf("Matched %d items\n", len(matches))
 
 		// Score matches using AI (no-op if provider unavailable).
-		if aiProvider.Available() {
+		if scorerProvider.Available() {
 			history, _ := store.GetActivity(50, 0, "")
 			matches = scorer.ScoreAll(matches, history)
 		}
@@ -166,7 +167,7 @@ func cmdCheck(cfg models.Config, store *storage.Storage) {
 	// Backfill AI scores for any torrents that were staged before the provider
 	// was available (ai_scored=false). Covers all statuses so approved/rejected
 	// history is also enriched for trend tracking.
-	if aiProvider.Available() {
+	if scorerProvider.Available() {
 		all, err := store.List("")
 		if err == nil {
 			history, _ := store.GetActivity(50, 0, "")
@@ -628,10 +629,11 @@ func cmdPause(cfg models.Config, store *storage.Storage, args []string) {
 }
 
 func cmdServe(cfg models.Config, store *storage.Storage, buf *logbuffer.Buffer) {
-	// Initialise AI provider and scorer (available even during serve — used for on-demand rescore).
-	aiProvider := ai.NewProvider()
-	scorer := ai.NewScorer(aiProvider)
-	if aiProvider.Available() {
+	// Initialise AI scorer (available even during serve — used for on-demand rescore).
+	// Uses CURATOR_AI_SCORER_MODEL if set, falls back to CURATOR_AI_MODEL.
+	scorerProvider := ai.NewProviderFor("scorer")
+	scorer := ai.NewScorer(scorerProvider)
+	if scorerProvider.Available() {
 		fmt.Println("[Serve] AI provider available — on-demand rescore enabled")
 	}
 
@@ -656,7 +658,7 @@ func cmdServe(cfg models.Config, store *storage.Storage, buf *logbuffer.Buffer) 
 	}
 
 	// Create and start API server (even if qBittorrent is unavailable)
-	server := api.NewServer(store, qb, port, buf, scorer, aiProvider)
+	server := api.NewServer(store, qb, port, buf, scorer, scorerProvider)
 	fmt.Printf("[Serve] Starting API server on port %d\n", port)
 	if err := server.Start(); err != nil {
 		fmt.Fprintf(os.Stderr, "Error starting API server: %v\n", err)

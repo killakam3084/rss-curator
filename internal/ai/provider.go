@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 )
 
@@ -19,21 +20,42 @@ type Provider interface {
 	Available() bool
 }
 
-// NewProvider constructs a Provider from environment variables:
+// NewProvider constructs a Provider from environment variables using the
+// shared model setting. Equivalent to NewProviderFor("").
 //
 //	CURATOR_AI_PROVIDER   "ollama" (default) | "openai" | "disabled"
 //	CURATOR_AI_HOST       base URL, e.g. http://localhost:11434
 //	CURATOR_AI_MODEL      model name, e.g. llama3.2
 //	CURATOR_AI_KEY        API key (openai / compatible endpoints only)
 func NewProvider() Provider {
+	return NewProviderFor("")
+}
+
+// NewProviderFor constructs a Provider for a named subsystem. It resolves the
+// model name by checking CURATOR_AI_{SUBSYSTEM}_MODEL first (e.g.
+// CURATOR_AI_SCORER_MODEL), then falling back to CURATOR_AI_MODEL, then the
+// provider's built-in default. All other settings (provider type, host, key)
+// are shared across subsystems.
+//
+// Recognised subsystem names: "enricher", "scorer", "suggester".
+// Pass "" to use only the global CURATOR_AI_MODEL fallback.
+func NewProviderFor(subsystem string) Provider {
 	providerType := os.Getenv("CURATOR_AI_PROVIDER")
 	if providerType == "" {
 		providerType = "ollama"
 	}
 
 	host := os.Getenv("CURATOR_AI_HOST")
-	model := os.Getenv("CURATOR_AI_MODEL")
 	key := os.Getenv("CURATOR_AI_KEY")
+
+	// Resolve model: subsystem-specific > global > provider default.
+	model := ""
+	if subsystem != "" {
+		model = os.Getenv("CURATOR_AI_" + strings.ToUpper(subsystem) + "_MODEL")
+	}
+	if model == "" {
+		model = os.Getenv("CURATOR_AI_MODEL")
+	}
 
 	switch providerType {
 	case "openai":
