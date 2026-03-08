@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.17.2] - 2026-03-07
+
+### Fixed
+- `scorer.response` log event emitted `score=<large integer>` (raw IEEE 754 bit-pattern) instead of the actual float value. Root cause: `logbuffer/zapcore.go` `fieldValue()` returned `f.Integer` directly for `Float64Type`/`Float32Type` fields; zap packs floats into `f.Integer` via `math.Float64bits()`, so the extractor now uses `math.Float64frombits(uint64(f.Integer))` / `math.Float32frombits(uint32(f.Integer))` to recover the real value.
+
+### Changed
+- `scoreSystemPrompt` scoring rules clarified: the `Match reason` field is now declared **authoritative** — the model is explicitly instructed not to re-evaluate whether the quality, codec, or group is appropriate (the deterministic matcher already did that). Technical signals are now scoped to differentiating between candidates that share the same match reason (e.g. prefer Atmos over non-Atmos when both match equally).
+
 ## [0.17.1] - 2026-03-07
 
 ### Fixed

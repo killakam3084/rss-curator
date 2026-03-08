@@ -2,6 +2,7 @@ package logbuffer
 
 import (
 	"fmt"
+	"math"
 
 	"go.uber.org/zap/zapcore"
 )
@@ -67,8 +68,10 @@ func fieldValue(f zapcore.Field) any {
 		return uint64(f.Integer)
 	case zapcore.BoolType:
 		return f.Integer == 1
-	case zapcore.Float64Type, zapcore.Float32Type:
-		return f.Integer
+	case zapcore.Float64Type:
+		return math.Float64frombits(uint64(f.Integer))
+	case zapcore.Float32Type:
+		return math.Float32frombits(uint32(f.Integer))
 	case zapcore.ErrorType:
 		if f.Interface != nil {
 			return fmt.Sprintf("%v", f.Interface)

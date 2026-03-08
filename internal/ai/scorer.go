@@ -26,8 +26,15 @@ You will receive two categories of signals about a candidate torrent release:
     A strong technical profile improves an already good content match but
     cannot compensate for weak content relevance.
 
-Scoring rule: a torrent that matches well on content with suboptimal technical
-specs should score higher than one with perfect technical specs but weak content match.
+Scoring rules:
+  1. The "Match reason" field is AUTHORITATIVE — it was produced by a deterministic
+     matcher that already evaluated whether the title, quality, codec, and group meet
+     the user's preferences. Do NOT re-evaluate whether those specs are appropriate;
+     treat a non-empty match reason as confirmation that the technical profile is correct.
+  2. Use Technical signals only to differentiate between candidates that share the
+     same match reason (e.g. prefer Atmos over non-Atmos when both match equally).
+  3. A torrent that matches well on content with suboptimal technical specs should
+     score higher than one with perfect technical specs but weak content match.
 
 Always respond with a single JSON object. No explanation, no markdown, just raw JSON.
 Fields:
