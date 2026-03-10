@@ -5,6 +5,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.19.2] - 2026-03-09
+
+### Fixed
+- **Tab navigation clears selection** — switching tabs resets `selectedIds` and closes any open kebab menu, preventing cross-tab bulk operations (e.g. selecting a pending + rejected torrent and triggering accept/queue)
+
 ## [0.19.1] - 2026-03-09
 
 ### Fixed

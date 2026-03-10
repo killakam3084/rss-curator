@@ -1,4 +1,4 @@
-const { createApp, ref, computed, onMounted, nextTick } = Vue;
+const { createApp, ref, computed, watch, onMounted, nextTick } = Vue;
 
 const app = createApp({
     setup() {
@@ -587,6 +587,12 @@ const app = createApp({
             }
             return `${size.toFixed(2)} ${units[unitIndex]}`;
         };
+
+        // Clear selection and open menu when navigating between tabs
+        watch(activeTab, () => {
+            selectedIds.value = new Set();
+            openMenuId.value = null;
+        });
 
         // Load initial data
         onMounted(() => {
