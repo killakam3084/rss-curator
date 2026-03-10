@@ -203,8 +203,8 @@
                                         {{ torrent.status }}
                                     </span>
                                 </div>
-                                <!-- Kebab options menu -->
-                                <div class="relative" @click.stop>
+                                <!-- Kebab options menu: hidden during multi-select -->
+                                <div class="relative" @click.stop v-show="!multiSelectActive">
                                     <button
                                         @click="openMenuId = openMenuId === torrent.id ? null : torrent.id"
                                         class="p-1.5 rounded text-gray-500 hover:text-curator-500 hover:bg-gray-700 transition-colors duration-150 text-lg leading-none font-bold"
@@ -216,6 +216,7 @@
                                             class="w-full text-left px-4 py-2 text-sm font-mono text-gray-300 hover:bg-gray-700 hover:text-curator-500 transition-colors flex items-center gap-2"
                                         >&#9889; re-score</button>
                                         <button
+                                            v-if="torrent.status === 'accepted'"
                                             @click="queueForDownload(torrent.id)"
                                             class="w-full text-left px-4 py-2 text-sm font-mono text-gray-300 hover:bg-gray-700 hover:text-curator-500 transition-colors flex items-center gap-2"
                                         >&#8595; queue for dl</button>
@@ -243,7 +244,7 @@
                                 </div>
 
                                 <!-- Card Actions: visible when card is selected -->
-                                <div v-if="activeTab === 'pending'" v-show="isSelected(torrent.id)" class="flex gap-3">
+                                <div v-if="activeTab === 'pending'" v-show="isSelected(torrent.id) && !multiSelectActive" class="flex gap-3">
                                     <button 
                                         @click.stop="approveTorrent(torrent.id)" 
                                         :disabled="operatingIds.has(torrent.id)"
@@ -264,7 +265,7 @@
                                     </button>
                                 </div>
                                 
-                                <div v-if="activeTab === 'accepted'" v-show="isSelected(torrent.id)">
+                                <div v-if="activeTab === 'accepted'" v-show="isSelected(torrent.id) && !multiSelectActive">
                                     <button 
                                         @click.stop="queueForDownload(torrent.id)" 
                                         :disabled="operatingIds.has(torrent.id)"

@@ -66,6 +66,7 @@ const app = createApp({
             torrents.value.filter(t => t.status === 'rejected').length
         );
         const selectedCount = computed(() => selectedIds.value.size);
+        const multiSelectActive = computed(() => selectedIds.value.size > 1);
         const filteredLogs = computed(() => {
             const filtered = logEntries.value.filter(e => {
                 const levelMatch = logLevelFilter.value.includes(e.level);
@@ -666,6 +667,7 @@ const app = createApp({
             acceptedCount,
             rejectedCount,
             selectedCount,
+            multiSelectActive,
             displayedTorrents,
             fetchTorrents,
             fetchAllTorrents,
