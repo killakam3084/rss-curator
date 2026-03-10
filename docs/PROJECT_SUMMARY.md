@@ -216,6 +216,10 @@ rss-curator/
 - [ ] Season pack handling
 - [ ] Multi-tracker aggregate feed support
 - [ ] Custom metadata extraction patterns
+- [ ] **Scorer match-confidence signal** — currently the scorer is instructed to treat the matcher's match reason as authoritative and not re-evaluate it; this creates a blind spot where a structurally valid match (rule fired, quality met, preferred group present) is semantically wrong (e.g. a broad substring rule firing on an unrelated title)
+  - Add a separate `match_confidence` output field to the scorer response, distinct from `score`; the scorer assesses whether the matched rule plausibly describes the actual content, without overriding release-quality scoring
+  - Low `match_confidence` can surface as a UI warning, suppress auto-queue, or route to a dedicated review state — the response to it is a product decision, not baked into the scorer
+  - Keeps the scorer's role general: any rule-vs-title divergence (substring collision, regex too broad, franchise spin-off, franchise reboot with shared keywords) benefits from the same signal
 - [ ] **Suggester engine** (`POST /api/suggestions` stub already in place)
   - Analyse accept/reject history to infer franchise, genre, and creator patterns
   - Surface suggested `shows.json` rules *proactively* — before matching episodes ever appear in the feed

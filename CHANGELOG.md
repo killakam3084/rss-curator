@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Docs
 - Added Suggester engine acceptance criteria to `README.md` and `docs/PROJECT_SUMMARY.md` roadmap: exact-show rule vs franchise-broadening distinction, proactive suggestion before feed matches, confidence ranking with human-readable rationale
+- Added scorer match-confidence signal to roadmap: `match_confidence` as a distinct scorer output field for detecting rule-vs-title semantic divergence (substring collisions, overly broad regexes, franchise spin-offs); response to low confidence kept as a product-layer decision
 
 ## [0.19.1] - 2026-03-09
 
