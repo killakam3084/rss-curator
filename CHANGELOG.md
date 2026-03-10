@@ -10,6 +10,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - **Tab navigation clears selection** — switching tabs resets `selectedIds` and closes any open kebab menu, preventing cross-tab bulk operations (e.g. selecting a pending + rejected torrent and triggering accept/queue)
 
+### Docs
+- Added Suggester engine acceptance criteria to `README.md` and `docs/PROJECT_SUMMARY.md` roadmap: exact-show rule vs franchise-broadening distinction, proactive suggestion before feed matches, confidence ranking with human-readable rationale
+
 ## [0.19.1] - 2026-03-09
 
 ### Fixed

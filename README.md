@@ -423,6 +423,13 @@ GOOS=darwin GOARCH=arm64 go build -o curator-darwin-arm64 ./cmd/curator
 - [ ] Season pack handling
 - [ ] Custom metadata extraction patterns
 - [ ] Multi-tracker aggregate feed support
+- [ ] **Suggester engine** (`POST /api/suggestions` stub already in place)
+  - Analyse accept/reject history to infer franchise, genre, and creator patterns
+  - Surface suggested `shows.json` rules *proactively* — before matching episodes ever appear in the feed
+  - Distinguish between two rule-generation modes:
+    - **Exact-show rule** — new title clearly not covered by any existing rule (e.g. a spin-off whose name doesn't overlap with the parent)
+    - **Franchise broadening** — an existing rule is catching a spin-off via loose substring match (e.g. `Yellowstone` matching `Marshals: A Yellowstone Story`); suggest a dedicated rule for the spin-off rather than widening the parent regex
+  - Rank suggestions by confidence; include a human-readable rationale for each so the user can accept or dismiss with context
 
 ## Troubleshooting
 
