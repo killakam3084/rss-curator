@@ -69,7 +69,7 @@ func NewProviderFor(subsystem string) Provider {
 			host:   host,
 			model:  model,
 			key:    key,
-			client: &http.Client{Timeout: 30 * time.Second},
+			client: &http.Client{}, // no transport timeout — context deadline is the sole authority
 		}
 	case "disabled":
 		return &noopProvider{}
@@ -83,7 +83,7 @@ func NewProviderFor(subsystem string) Provider {
 		return &ollamaProvider{
 			host:   host,
 			model:  model,
-			client: &http.Client{Timeout: 60 * time.Second},
+			client: &http.Client{}, // no transport timeout — context deadline is the sole authority
 		}
 	}
 }

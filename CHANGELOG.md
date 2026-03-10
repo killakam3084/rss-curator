@@ -5,6 +5,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.18.1] - 2026-03-09
+
+### Fixed
+- `CURATOR_AI_TIMEOUT_SECS` was being overridden by a hardcoded `http.Client.Timeout` on both the Ollama (60s) and OpenAI (30s) providers. `http.Client.Timeout` is a transport-level deadline that fires independently of the `context.WithTimeout` used per-request — so even with `CURATOR_AI_TIMEOUT_SECS=120`, the HTTP client cut the connection at 60s first. Both providers now use `&http.Client{}` (no transport timeout); the context deadline set by `CURATOR_AI_TIMEOUT_SECS` is now the sole authority.
+
 ## [0.18.0] - 2026-03-07
 
 ### Added
