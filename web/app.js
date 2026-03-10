@@ -11,6 +11,7 @@ const app = createApp({
         const activeTab = ref('pending');
         const selectedIds = ref(new Set());
         const operatingIds = ref(new Set());
+        const openMenuId = ref(null); // ID of card with open kebab menu; null = all closed
         const toasts = ref([]);
         // Initialize dark mode from system preference immediately
         const darkMode = ref(window.matchMedia('(prefers-color-scheme: dark)').matches);
@@ -500,7 +501,9 @@ const app = createApp({
             }
         };
 
-        const toggleSelection = (id) => {
+        // toggleCard: unified card-click handler — toggles selection and closes any open menu
+        const toggleCard = (id) => {
+            openMenuId.value = null;
             if (selectedIds.value.has(id)) {
                 selectedIds.value.delete(id);
             } else {
@@ -509,6 +512,36 @@ const app = createApp({
         };
 
         const isSelected = (id) => selectedIds.value.has(id);
+
+        // rescoreOne: single-card re-score from the kebab menu
+        const rescoreOne = async (id) => {
+            openMenuId.value = null;
+            operatingIds.value.add(id);
+            try {
+                const response = await fetch('/api/torrents/rescore', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ ids: [id] })
+                });
+                const data = await response.json();
+                if (response.ok) {
+                    if (Array.isArray(data.torrents)) {
+                        data.torrents.forEach(updated => {
+                            const idx = torrents.value.findIndex(t => t.id === updated.id);
+                            if (idx !== -1) torrents.value[idx] = { ...torrents.value[idx], ...updated };
+                        });
+                    }
+                    showToast('Re-score complete', 'success');
+                } else {
+                    showToast(data.error || 'Re-score failed', 'error');
+                }
+            } catch (error) {
+                console.error('Error during rescore:', error);
+                showToast('Error during re-score', 'error');
+            } finally {
+                operatingIds.value.delete(id);
+            }
+        };
 
         const rescoreSelected = async () => {
             rescoreLoading.value = true;
@@ -564,6 +597,9 @@ const app = createApp({
                 darkMode.value = e.matches;
                 applyDarkMode();
             });
+
+            // Close any open kebab menu when clicking outside a card
+            document.addEventListener('click', () => { openMenuId.value = null; });
             
             fetchAllTorrents();
             fetchActivities();
@@ -619,6 +655,7 @@ const app = createApp({
             activeTab,
             selectedIds,
             operatingIds,
+            openMenuId,
             toasts,
             tabs,
             darkMode,
@@ -657,9 +694,10 @@ const app = createApp({
             bulkApprove,
             bulkReject,
             bulkQueue,
-            toggleSelection,
+            toggleCard,
             isSelected,
             rescoreSelected,
+            rescoreOne,
             formatSize,
             showToast,
             toggleDarkMode,

@@ -115,7 +115,7 @@
                         <!-- Bulk Actions -->
                         <div v-if="selectedCount > 0" class="flex items-center gap-4 p-4 bg-gray-800 border border-gray-700 rounded-lg mb-6">
                             <span class="text-sm font-mono font-bold text-curator-500">// {{ selectedCount }} selected</span>
-                            <div class="flex gap-2 ml-auto">
+                            <div class="flex gap-2 ml-auto flex-wrap">
                                 <template v-if="activeTab === 'pending'">
                                 <button 
                                     @click="bulkApprove" 
@@ -134,6 +134,15 @@
                                     {{ bulkLoading ? 'rejecting...' : 'reject' }}
                                 </button>
                                 </template>
+                                <button
+                                    v-if="activeTab === 'accepted'"
+                                    @click="bulkQueue"
+                                    :disabled="bulkLoading"
+                                    class="px-4 py-2 bg-curator-500 hover:bg-curator-600 disabled:opacity-50 disabled:cursor-not-allowed text-gray-900 rounded font-mono font-bold text-sm transition-colors duration-200 flex items-center gap-2 uppercase"
+                                >
+                                    <span v-if="bulkLoading" class="inline-block w-4 h-4 border-2 border-gray-900 border-t-transparent rounded-full animate-spin"></span>
+                                    {{ bulkLoading ? 'queuing...' : '&#8595; queue selected' }}
+                                </button>
                                 <button 
                                     @click="rescoreSelected" 
                                     :disabled="rescoreLoading"
@@ -143,6 +152,11 @@
                                     <span v-if="rescoreLoading" class="inline-block w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
                                     {{ rescoreLoading ? 'scoring...' : '&#9889; re-score' }}
                                 </button>
+                                <button
+                                    @click="selectedIds.clear()"
+                                    class="px-3 py-2 bg-gray-700 hover:bg-gray-600 text-gray-400 hover:text-gray-200 rounded font-mono font-bold text-sm transition-colors duration-200 uppercase"
+                                    title="Clear selection"
+                                >&#10005;</button>
                             </div>
                         </div>
                     </div>
@@ -166,17 +180,20 @@
                         <div 
                             v-for="torrent in displayedTorrents" 
                             :key="torrent.id"
-                            class="bg-gray-900 border border-gray-800 rounded-lg shadow-md hover:shadow-lg hover:border-curator-500 transition-all duration-300 overflow-hidden"
+                            :class="[
+                                'bg-gray-900 border rounded-lg shadow-md transition-all duration-200 overflow-hidden cursor-pointer relative',
+                                isSelected(torrent.id)
+                                    ? 'border-curator-500 bg-curator-500/5 shadow-lg shadow-curator-500/10'
+                                    : 'border-gray-800 hover:border-curator-500/60 hover:shadow-lg'
+                            ]"
+                            @click="toggleCard(torrent.id)"
                         >
                             <!-- Card Header -->
                             <div class="flex items-center justify-between p-4 border-b border-gray-800 bg-gray-800/50">
                                 <div class="flex items-center gap-3">
-                                    <input 
-                                        type="checkbox" 
-                                        :checked="isSelected(torrent.id)"
-                                        @change="toggleSelection(torrent.id)"
-                                        class="w-5 h-5 rounded border-curator-500 text-curator-500 focus:ring-2 focus:ring-curator-500 cursor-pointer bg-gray-800"
-                                    >
+                                    <!-- Selection indicator replaces checkbox -->
+                                    <span v-if="isSelected(torrent.id)" class="w-5 h-5 rounded bg-curator-500 flex items-center justify-center text-gray-900 font-bold text-xs shrink-0">&#10003;</span>
+                                    <span v-else class="w-5 h-5 rounded border border-gray-600 shrink-0"></span>
                                     <span :class="[
                                         'inline-block px-2 py-1 rounded text-xs font-mono font-bold uppercase',
                                         torrent.status === 'pending' ? 'bg-blue-900 text-blue-400 border border-blue-700' :
@@ -185,6 +202,24 @@
                                     ]">
                                         {{ torrent.status }}
                                     </span>
+                                </div>
+                                <!-- Kebab options menu -->
+                                <div class="relative" @click.stop>
+                                    <button
+                                        @click="openMenuId = openMenuId === torrent.id ? null : torrent.id"
+                                        class="p-1.5 rounded text-gray-500 hover:text-curator-500 hover:bg-gray-700 transition-colors duration-150 text-lg leading-none font-bold"
+                                        title="More options"
+                                    >&#8942;</button>
+                                    <div v-if="openMenuId === torrent.id" class="absolute right-0 top-8 z-50 bg-gray-800 border border-gray-700 rounded-lg shadow-xl py-1" style="min-width:168px">
+                                        <button
+                                            @click="rescoreOne(torrent.id)"
+                                            class="w-full text-left px-4 py-2 text-sm font-mono text-gray-300 hover:bg-gray-700 hover:text-curator-500 transition-colors flex items-center gap-2"
+                                        >&#9889; re-score</button>
+                                        <button
+                                            @click="queueForDownload(torrent.id)"
+                                            class="w-full text-left px-4 py-2 text-sm font-mono text-gray-300 hover:bg-gray-700 hover:text-curator-500 transition-colors flex items-center gap-2"
+                                        >&#8595; queue for dl</button>
+                                    </div>
                                 </div>
                             </div>
 
@@ -207,52 +242,39 @@
                                     </div>
                                 </div>
 
-                                <!-- Card Actions -->
-                                <div v-if="activeTab === 'pending'" class="flex gap-3">
+                                <!-- Card Actions: visible when card is selected -->
+                                <div v-if="activeTab === 'pending'" v-show="isSelected(torrent.id)" class="flex gap-3">
                                     <button 
-                                        @click="approveTorrent(torrent.id)" 
+                                        @click.stop="approveTorrent(torrent.id)" 
                                         :disabled="operatingIds.has(torrent.id)"
                                         class="flex-1 px-4 py-2 bg-curator-500 hover:bg-curator-600 disabled:opacity-50 disabled:cursor-not-allowed text-gray-900 rounded font-mono font-bold text-sm transition-colors duration-200 flex items-center justify-center gap-2 uppercase"
                                     >
                                         <span v-if="operatingIds.has(torrent.id)" class="inline-block w-4 h-4 border-2 border-gray-900 border-t-transparent rounded-full animate-spin"></span>
-                                        <span v-else>✓</span>
+                                        <span v-else>&#10003;</span>
                                         {{ operatingIds.has(torrent.id) ? '' : 'accept' }}
                                     </button>
                                     <button 
-                                        @click="rejectTorrent(torrent.id)" 
+                                        @click.stop="rejectTorrent(torrent.id)" 
                                         :disabled="operatingIds.has(torrent.id)"
                                         class="flex-1 px-4 py-2 bg-red-600 hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded font-mono font-bold text-sm transition-colors duration-200 flex items-center justify-center gap-2 uppercase"
                                     >
                                         <span v-if="operatingIds.has(torrent.id)" class="inline-block w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
-                                        <span v-else>✕</span>
+                                        <span v-else>&#10005;</span>
                                         {{ operatingIds.has(torrent.id) ? '' : 'reject' }}
                                     </button>
                                 </div>
                                 
-                                <div v-if="activeTab === 'accepted'">
-                                    <!-- Action buttons for accepted torrents -->
-                                    <div class="flex gap-2">
-                                        <button 
-                                            @click="bulkQueue"
-                                            :disabled="bulkLoading || selectedCount === 0"
-                                            v-if="selectedCount > 0"
-                                            class="flex-1 px-4 py-2 bg-curator-500 hover:bg-curator-600 disabled:opacity-50 disabled:cursor-not-allowed text-gray-900 rounded font-mono font-bold text-sm transition-colors duration-200 flex items-center justify-center gap-2 uppercase"
-                                        >
-                                            <span v-if="bulkLoading" class="inline-block w-4 h-4 border-2 border-gray-900 border-t-transparent rounded-full animate-spin"></span>
-                                            <span v-else>⬇</span>
-                                            {{ bulkLoading ? 'queuing bulk...' : 'queue selected' }}
-                                        </button>
-                                        <button 
-                                            @click="queueForDownload(torrent.id)" 
-                                            :disabled="operatingIds.has(torrent.id)"
-                                            class="flex-1 px-4 py-2 bg-curator-500 hover:bg-curator-600 disabled:opacity-50 disabled:cursor-not-allowed text-gray-900 rounded font-mono font-bold text-sm transition-colors duration-200 flex items-center justify-center gap-2 uppercase"
-                                            title="Queue this torrent for download"
-                                        >
-                                            <span v-if="operatingIds.has(torrent.id)" class="inline-block w-4 h-4 border-2 border-gray-900 border-t-transparent rounded-full animate-spin"></span>
-                                            <span v-else>⬇</span>
-                                            {{ operatingIds.has(torrent.id) ? 'queuing...' : 'queue for dl' }}
-                                        </button>
-                                    </div>
+                                <div v-if="activeTab === 'accepted'" v-show="isSelected(torrent.id)">
+                                    <button 
+                                        @click.stop="queueForDownload(torrent.id)" 
+                                        :disabled="operatingIds.has(torrent.id)"
+                                        class="w-full px-4 py-2 bg-curator-500 hover:bg-curator-600 disabled:opacity-50 disabled:cursor-not-allowed text-gray-900 rounded font-mono font-bold text-sm transition-colors duration-200 flex items-center justify-center gap-2 uppercase"
+                                        title="Queue this torrent for download"
+                                    >
+                                        <span v-if="operatingIds.has(torrent.id)" class="inline-block w-4 h-4 border-2 border-gray-900 border-t-transparent rounded-full animate-spin"></span>
+                                        <span v-else>&#8595;</span>
+                                        {{ operatingIds.has(torrent.id) ? 'queuing...' : 'queue for dl' }}
+                                    </button>
                                 </div>
                             </div>
                         </div>

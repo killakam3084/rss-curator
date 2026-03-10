@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.19.0] - 2026-03-09
+
+### Changed
+- **Card interaction model** — cards are now click-to-select; checkboxes removed; selection indicated by filled `✓` badge + curator-green border + subtle bg tint
+- Per-card action buttons (accept/reject on pending, queue on accepted) now appear only when the card is selected, keeping unselected cards clean
+- `⋮` kebab button in every card header opens a dropdown with **⚡ re-score** and **⬇ queue for dl** — available regardless of selection state or active tab; click outside closes
+- Bulk action bar: added **⬇ queue selected** button (accepted tab); added **✕** clear-selection button
+- `toggleCard(id)` replaces `toggleSelection` as the unified card-click handler; also closes any open kebab menu on selection change
+
+### Added
+- `rescoreOne(id)` — single-card AI re-score from the kebab menu; calls `POST /api/torrents/rescore` with `{ids:[id]}`, merges updated score in-place, shows toast
+- `openMenuId` reactive state tracks which card's kebab is open; `document` click listener closes menu on outside click
+
 ## [0.18.1] - 2026-03-09
 
 ### Fixed
