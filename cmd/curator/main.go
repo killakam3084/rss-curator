@@ -1,6 +1,7 @@
 package main
 
 import (
+	"crypto/rand"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -21,7 +22,7 @@ import (
 )
 
 const (
-	version = "0.19.2"
+	version = "0.20.0"
 )
 
 func main() {
@@ -657,8 +658,40 @@ func cmdServe(cfg models.Config, store *storage.Storage, buf *logbuffer.Buffer) 
 		}
 	}
 
+	// Auth configuration
+	// Auth is disabled when CURATOR_PASSWORD is unset (local-dev ergonomics preserved).
+	authUsername := os.Getenv("CURATOR_USERNAME")
+	if authUsername == "" {
+		authUsername = "curator"
+	}
+	authPassword := os.Getenv("CURATOR_PASSWORD")
+
+	sessionSecret := []byte(os.Getenv("CURATOR_SESSION_SECRET"))
+	if len(sessionSecret) == 0 {
+		b := make([]byte, 32)
+		rand.Read(b)
+		sessionSecret = b
+		if authPassword != "" {
+			fmt.Println("[Serve] Warning: CURATOR_SESSION_SECRET not set — sessions will not survive restarts")
+		}
+	}
+
+	sessionTTLHours := 24
+	if ttlStr := os.Getenv("CURATOR_SESSION_TTL_HOURS"); ttlStr != "" {
+		if h, err := strconv.Atoi(ttlStr); err == nil && h > 0 {
+			sessionTTLHours = h
+		}
+	}
+
+	auth := api.AuthConfig{
+		Username:      authUsername,
+		Password:      authPassword,
+		SessionSecret: sessionSecret,
+		SessionTTL:    time.Duration(sessionTTLHours) * time.Hour,
+	}
+
 	// Create and start API server (even if qBittorrent is unavailable)
-	server := api.NewServer(store, qb, port, buf, scorer, scorerProvider)
+	server := api.NewServer(store, qb, port, buf, scorer, scorerProvider, auth)
 	fmt.Printf("[Serve] Starting API server on port %d\n", port)
 	if err := server.Start(); err != nil {
 		fmt.Fprintf(os.Stderr, "Error starting API server: %v\n", err)

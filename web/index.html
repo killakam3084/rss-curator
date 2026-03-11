@@ -81,10 +81,13 @@
             <!-- Header -->
             <header class="mb-8">
                 <div class="bg-gray-900 border border-gray-800 rounded-lg shadow-2xl p-8 backdrop-blur-sm">
-                    <div class="mb-2">
+                    <div class="mb-2 flex items-center justify-between">
                         <h1 class="text-4xl font-bold font-mono text-curator-500">
-                            > rss-curator
+                            &gt; rss-curator
                         </h1>
+                        <form method="POST" action="/logout">
+                            <button type="submit" class="px-3 py-1.5 rounded font-mono text-xs text-gray-500 hover:text-red-400 hover:bg-gray-800 border border-transparent hover:border-gray-700 transition-colors duration-150 uppercase tracking-widest">logout</button>
+                        </form>
                     </div>
                 </div>
             </header>

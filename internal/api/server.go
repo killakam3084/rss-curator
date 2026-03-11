@@ -18,14 +18,29 @@ import (
 	"go.uber.org/zap/zapcore"
 )
 
+// AuthConfig holds optional in-app authentication settings.
+// When Password is empty, authentication is disabled and the app is accessible
+// without credentials (preserving local-dev ergonomics).
+type AuthConfig struct {
+	Username      string
+	Password      string
+	SessionSecret []byte
+	SessionTTL    time.Duration
+}
+
 type Server struct {
-	store      storage.Store
-	client     *client.Client // May be nil if qBittorrent is unavailable
-	logger     *zap.Logger
-	logBuffer  *logbuffer.Buffer
-	scorer     *ai.Scorer  // May be nil if AI is disabled
-	aiProvider ai.Provider // May be nil if AI is disabled
-	port       int
+	store         storage.Store
+	client        *client.Client // May be nil if qBittorrent is unavailable
+	logger        *zap.Logger
+	logBuffer     *logbuffer.Buffer
+	scorer        *ai.Scorer  // May be nil if AI is disabled
+	aiProvider    ai.Provider // May be nil if AI is disabled
+	port          int
+	authEnabled   bool
+	authUsername  string
+	authPassword  string
+	sessionSecret []byte
+	sessionTTL    time.Duration
 }
 
 type ErrorResponse struct {
@@ -123,7 +138,7 @@ type FeedStreamResponse struct {
 // NewServer creates a new API server instance.
 // buf may be nil; when provided, logs are tee'd into it for /api/logs streaming.
 // scorer and aiProvider may be nil when AI is disabled.
-func NewServer(store storage.Store, client *client.Client, port int, buf *logbuffer.Buffer, scorer *ai.Scorer, aiProvider ai.Provider) *Server {
+func NewServer(store storage.Store, client *client.Client, port int, buf *logbuffer.Buffer, scorer *ai.Scorer, aiProvider ai.Provider, auth AuthConfig) *Server {
 	prodCore, err := zap.NewProduction()
 	if err != nil {
 		panic(fmt.Sprintf("failed to create logger: %v", err))
@@ -143,13 +158,18 @@ func NewServer(store storage.Store, client *client.Client, port int, buf *logbuf
 	}
 
 	return &Server{
-		store:      store,
-		client:     client,
-		logger:     logger,
-		logBuffer:  buf,
-		scorer:     scorer,
-		aiProvider: aiProvider,
-		port:       port,
+		store:         store,
+		client:        client,
+		logger:        logger,
+		logBuffer:     buf,
+		scorer:        scorer,
+		aiProvider:    aiProvider,
+		port:          port,
+		authEnabled:   auth.Password != "",
+		authUsername:  auth.Username,
+		authPassword:  auth.Password,
+		sessionSecret: auth.SessionSecret,
+		sessionTTL:    auth.SessionTTL,
 	}
 }
 
@@ -173,13 +193,24 @@ func (s *Server) Start() error {
 	mux.Handle("/style.css", http.FileServer(http.Dir("./web")))
 	mux.Handle("/app.js", http.FileServer(http.Dir("./web")))
 
+	// Auth routes (registered unconditionally; handleLogin/handleLogout are
+	// no-ops when auth is disabled because the middleware never blocks access)
+	mux.HandleFunc("/login", s.handleLogin)
+	mux.HandleFunc("/logout", s.handleLogout)
+
 	// Root and fallback
 	mux.HandleFunc("/", s.handleRoot)
 
 	addr := fmt.Sprintf(":%d", s.port)
-	s.logger.Info("API server starting", zap.String("address", addr))
 
-	return http.ListenAndServe(addr, mux)
+	var handler http.Handler = mux
+	if s.authEnabled {
+		handler = authMiddleware(mux, s.sessionSecret)
+		s.logger.Info("Auth enabled", zap.String("username", s.authUsername))
+	}
+
+	s.logger.Info("API server starting", zap.String("address", addr))
+	return http.ListenAndServe(addr, handler)
 }
 
 // handleRoot serves the dashboard or API info

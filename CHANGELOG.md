@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.20.0] - 2026-03-10
+
+### Added
+- **In-app authentication** — set `CURATOR_PASSWORD` to enable a branded login page at `/login`; unset leaves the app open for local dev (backward-compatible)
+- `internal/api/auth.go` — HMAC-SHA256 signed session cookies (`curator_session`); `authMiddleware` wraps the mux when auth is enabled; unauthenticated `/api/*` returns `401 JSON`, UI paths redirect to `/login`
+- `GET /login` serves `web/login.html`; `POST /login` validates credentials (constant-time compare) and issues a `HttpOnly; SameSite=Strict` session cookie
+- `POST /logout` clears the session cookie and redirects to `/login`
+- `web/login.html` — on-brand login page: dark `bg-gray-950`, triangle SVG background, curator-green wordmark, mono font, error banner on `?error=1`; no Vue/JS framework, plain HTML form
+- Logout button in the app header (quiet `text-gray-500 hover:text-red-400` style, `POST /logout` form)
+- New env vars: `CURATOR_USERNAME` (default `curator`), `CURATOR_PASSWORD`, `CURATOR_SESSION_SECRET`, `CURATOR_SESSION_TTL_HOURS` (default `24`); all documented in `curator.env.sample`
+- `CURATOR_API_PORT` added to `curator.env.sample` (was read but undocumented)
+- Exempt paths requiring no auth: `/login`, `/logout`, `/api/health`
+
 ## [0.19.2] - 2026-03-09
 
 ### Fixed
