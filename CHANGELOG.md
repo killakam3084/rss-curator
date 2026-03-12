@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.20.1] - 2026-03-11
+
+### Fixed
+- **Matcher word-boundary matching** — show name rules now use `\b<name>\b` regex instead of `strings.Contains`; prevents embedded-substring false positives such as `NOVA` matching `Renovation` or `Invincible` matching `The Invincible Samurai`; applies to both `matchWithShowsConfig` and the legacy `matchesShowName` path; `regexp.QuoteMeta` ensures rule names with special characters (e.g. `Mr. Robot`) compile safely with graceful fallback to contains on error
+- **Scorer temperature = 0** — ollama and openai providers now carry a `temperature float64` field; `NewProviderFor("scorer")` sets `temperature=0` (deterministic argmax output); all other subsystems (enricher, suggester) use `temperature=1`; eliminates the non-deterministic scoring variance observed on identical release profiles (e.g. S12E02 scoring 0.2 vs S12E03 scoring 0.8 for the same show/quality/codec/group)
+
 ## [0.20.0] - 2026-03-10
 
 ### Added

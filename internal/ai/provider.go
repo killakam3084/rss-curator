@@ -57,6 +57,13 @@ func NewProviderFor(subsystem string) Provider {
 		model = os.Getenv("CURATOR_AI_MODEL")
 	}
 
+	// temperature: scorer needs deterministic output (temperature=0); all
+	// other subsystems (enricher, suggester) use temperature=1 for variety.
+	temperature := 1.0
+	if subsystem == "scorer" {
+		temperature = 0.0
+	}
+
 	switch providerType {
 	case "openai":
 		if host == "" {
@@ -66,10 +73,11 @@ func NewProviderFor(subsystem string) Provider {
 			model = "gpt-4o-mini"
 		}
 		return &openAIProvider{
-			host:   host,
-			model:  model,
-			key:    key,
-			client: &http.Client{}, // no transport timeout — context deadline is the sole authority
+			host:        host,
+			model:       model,
+			key:         key,
+			client:      &http.Client{},
+			temperature: temperature,
 		}
 	case "disabled":
 		return &noopProvider{}
@@ -81,9 +89,10 @@ func NewProviderFor(subsystem string) Provider {
 			model = "llama3.2"
 		}
 		return &ollamaProvider{
-			host:   host,
-			model:  model,
-			client: &http.Client{}, // no transport timeout — context deadline is the sole authority
+			host:        host,
+			model:       model,
+			client:      &http.Client{},
+			temperature: temperature,
 		}
 	}
 }
@@ -101,15 +110,21 @@ func (n *noopProvider) Available() bool { return false }
 // ─── Ollama ───────────────────────────────────────────────────────────────────
 
 type ollamaProvider struct {
-	host   string
-	model  string
-	client *http.Client
+	host        string
+	model       string
+	client      *http.Client
+	temperature float64
 }
 
 type ollamaRequest struct {
 	Model    string          `json:"model"`
 	Messages []ollamaMessage `json:"messages"`
 	Stream   bool            `json:"stream"`
+	Options  ollamaOptions   `json:"options"`
+}
+
+type ollamaOptions struct {
+	Temperature float64 `json:"temperature"`
 }
 
 type ollamaMessage struct {
@@ -129,7 +144,8 @@ func (o *ollamaProvider) Complete(ctx context.Context, system, user string) (str
 			{Role: "system", Content: system},
 			{Role: "user", Content: user},
 		},
-		Stream: false,
+		Stream:  false,
+		Options: ollamaOptions{Temperature: o.temperature},
 	})
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, o.host+"/api/chat", bytes.NewReader(body))
@@ -169,15 +185,17 @@ func (o *ollamaProvider) Available() bool {
 // ─── OpenAI-compatible ────────────────────────────────────────────────────────
 
 type openAIProvider struct {
-	host   string
-	model  string
-	key    string
-	client *http.Client
+	host        string
+	model       string
+	key         string
+	client      *http.Client
+	temperature float64
 }
 
 type openAIRequest struct {
-	Model    string          `json:"model"`
-	Messages []openAIMessage `json:"messages"`
+	Model       string          `json:"model"`
+	Messages    []openAIMessage `json:"messages"`
+	Temperature float64         `json:"temperature"`
 }
 
 type openAIMessage struct {
@@ -201,6 +219,7 @@ func (o *openAIProvider) Complete(ctx context.Context, system, user string) (str
 			{Role: "system", Content: system},
 			{Role: "user", Content: user},
 		},
+		Temperature: o.temperature,
 	})
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, o.host+"/v1/chat/completions", bytes.NewReader(body))

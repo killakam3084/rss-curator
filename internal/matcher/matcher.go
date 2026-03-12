@@ -2,6 +2,7 @@ package matcher
 
 import (
 	"fmt"
+	"regexp"
 	"strings"
 
 	"github.com/killakam3084/rss-curator/pkg/models"
@@ -39,7 +40,7 @@ func (m *Matcher) matchWithShowsConfig(item models.FeedItem) (bool, string) {
 	// Find matching show rule
 	var showRule *models.ShowRule
 	for i := range m.showsConfig.Shows {
-		if strings.Contains(strings.ToLower(item.ShowName), strings.ToLower(m.showsConfig.Shows[i].Name)) {
+		if matchShowName(item.ShowName, m.showsConfig.Shows[i].Name) {
 			showRule = &m.showsConfig.Shows[i]
 			break
 		}
@@ -125,15 +126,27 @@ func (m *Matcher) matchLegacy(item models.FeedItem) (bool, string) {
 	return true, strings.Join(reasons, ", ")
 }
 
-// Helper functions
+// matchShowName returns true when ruleName appears in itemShowName as a
+// complete word (word-boundary match, case-insensitive). This prevents
+// substrings like "NOVA" from matching within "Renovation".
+func matchShowName(itemShowName, ruleName string) bool {
+	pattern := `(?i)\b` + regexp.QuoteMeta(ruleName) + `\b`
+	re, err := regexp.Compile(pattern)
+	if err != nil {
+		// Fallback to plain contains if the rule name cannot be compiled
+		return strings.Contains(strings.ToLower(itemShowName), strings.ToLower(ruleName))
+	}
+	return re.MatchString(itemShowName)
+}
+
+// matchesShowName checks a show name against a list of rule names using
+// word-boundary matching.
 func matchesShowName(showName string, showNames []string) bool {
 	if len(showNames) == 0 {
 		return true
 	}
-
-	showNameLower := strings.ToLower(showName)
 	for _, name := range showNames {
-		if strings.Contains(showNameLower, strings.ToLower(name)) {
+		if matchShowName(showName, name) {
 			return true
 		}
 	}
