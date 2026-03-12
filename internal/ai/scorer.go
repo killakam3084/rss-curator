@@ -37,14 +37,13 @@ Scoring rules:
      score higher than one with perfect technical specs but weak content match.
 
 Match confidence:
-  Separately from scoring, assess whether the matched rule name plausibly identifies
-  the actual content in the title. Compare the "Show" field (the matched rule name)
-  against the full "Title". Score 1.0 when the rule name is clearly the show being
-  released. Score low when the rule name appears to be an incidental substring rather
-  than the actual content (e.g. rule "NOVA" matching a title containing "Renovation",
-  or rule "Invincible" matching "The Invincible Samurai"). This is orthogonal to
-  release quality — a perfect release of the wrong content should have high score
-  but low match_confidence.
+  Separately from scoring, assess whether the "Matched rule" field plausibly identifies
+  the actual content in the title. Compare "Matched rule" against "Parsed show" and the
+  full "Title". Score 1.0 when the matched rule is clearly the show/movie being released.
+  Score low when the rule name appears to be an incidental substring of an unrelated title
+  (e.g. rule "NOVA" firing on "Renovation"; rule "Invincible" firing on "The Invincible
+  Samurai"). This is orthogonal to release quality — a perfect release of the wrong
+  content should have high score but low match_confidence.
 
 Always respond with a single JSON object. No explanation, no markdown, just raw JSON.
 Fields:
@@ -109,6 +108,23 @@ func (s *Scorer) ScoreAll(staged []models.StagedTorrent, history []models.Activi
 	return staged
 }
 
+// extractMatchedRule parses the first "matches show: NAME" segment from a
+// match reason string (e.g. "matches show: NOVA, quality: 1080P") and returns
+// just the rule name ("NOVA"). Returns the full reason unchanged if no show
+// segment is found (e.g. quality-only or group-only match reasons).
+func extractMatchedRule(matchReason string) string {
+	const prefix = "matches show: "
+	idx := strings.Index(matchReason, prefix)
+	if idx < 0 {
+		return matchReason
+	}
+	rest := matchReason[idx+len(prefix):]
+	if comma := strings.Index(rest, ","); comma >= 0 {
+		return strings.TrimSpace(rest[:comma])
+	}
+	return strings.TrimSpace(rest)
+}
+
 func (s *Scorer) scoreOne(t *models.StagedTorrent, histCtx string) (float64, string, float64, string) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(s.timeoutSecs)*time.Second)
 	defer cancel()
@@ -122,9 +138,10 @@ func (s *Scorer) scoreOne(t *models.StagedTorrent, histCtx string) (float64, str
 	}
 
 	user := fmt.Sprintf(
-		"Content signals:\nTitle: %s\nShow: %s\nMatch reason: %s\n\nTechnical signals:\nQuality: %s | Codec: %s | Group: %s | Source: %s\n\nRecent history:\n%s",
+		"Content signals:\nTitle: %s\nParsed show (from title): %s\nMatched rule: %s\nMatch reason: %s\n\nTechnical signals:\nQuality: %s | Codec: %s | Group: %s | Source: %s\n\nRecent history:\n%s",
 		t.FeedItem.Title,
 		showEp,
+		extractMatchedRule(t.MatchReason),
 		t.MatchReason,
 		t.FeedItem.Quality,
 		t.FeedItem.Codec,
