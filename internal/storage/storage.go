@@ -38,7 +38,7 @@ type Store interface {
 	AddRawFeedItem(item models.RawFeedItem) error
 	GetRawFeedItems(limit int) ([]models.RawFeedItem, error)
 	CleanupExpiredRawFeedItems() error
-	UpdateAIScore(id int, score float64, reason string) error
+	UpdateAIScore(id int, score float64, reason string, confidence float64, confidenceReason string) error
 }
 
 // Storage handles persistent storage of staged torrents
@@ -125,6 +125,10 @@ func (s *Storage) migrate() error {
 		`ALTER TABLE staged_torrents ADD COLUMN ai_reason TEXT DEFAULT ''`,
 		// Migration 3: Add ai_scored flag to distinguish "never scored" from "scored with low confidence"
 		`ALTER TABLE staged_torrents ADD COLUMN ai_scored INTEGER DEFAULT 0`,
+		// Migration 4: Add match_confidence signal (-1 = not assessed)
+		`ALTER TABLE staged_torrents ADD COLUMN match_confidence REAL DEFAULT -1`,
+		// Migration 5: Add match_confidence_reason
+		`ALTER TABLE staged_torrents ADD COLUMN match_confidence_reason TEXT DEFAULT ''`,
 	}
 
 	for _, migration := range migrations {
@@ -147,9 +151,9 @@ func (s *Storage) Add(torrent models.StagedTorrent) error {
 	torrent.StagedAt = time.Now()
 
 	_, err = s.db.Exec(`
-		INSERT OR IGNORE INTO staged_torrents (link, feed_item, match_reason, staged_at, status, ai_score, ai_reason, ai_scored)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-	`, torrent.FeedItem.Link, feedItemJSON, torrent.MatchReason, torrent.StagedAt, torrent.Status, torrent.AIScore, torrent.AIReason, torrent.AIScored)
+		INSERT OR IGNORE INTO staged_torrents (link, feed_item, match_reason, staged_at, status, ai_score, ai_reason, ai_scored, match_confidence, match_confidence_reason)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`, torrent.FeedItem.Link, feedItemJSON, torrent.MatchReason, torrent.StagedAt, torrent.Status, torrent.AIScore, torrent.AIReason, torrent.AIScored, torrent.MatchConfidence, torrent.MatchConfidenceReason)
 
 	return err
 }
@@ -161,13 +165,13 @@ func (s *Storage) List(status string) ([]models.StagedTorrent, error) {
 
 	if status == "" {
 		rows, err = s.db.Query(`
-			SELECT id, link, feed_item, match_reason, staged_at, status, approved_at, ai_score, ai_reason, ai_scored
+			SELECT id, link, feed_item, match_reason, staged_at, status, approved_at, ai_score, ai_reason, ai_scored, match_confidence, match_confidence_reason
 			FROM staged_torrents
 			ORDER BY staged_at DESC
 		`)
 	} else {
 		rows, err = s.db.Query(`
-			SELECT id, link, feed_item, match_reason, staged_at, status, approved_at, ai_score, ai_reason, ai_scored
+			SELECT id, link, feed_item, match_reason, staged_at, status, approved_at, ai_score, ai_reason, ai_scored, match_confidence, match_confidence_reason
 			FROM staged_torrents
 			WHERE status = ?
 			ORDER BY staged_at DESC
@@ -186,7 +190,7 @@ func (s *Storage) List(status string) ([]models.StagedTorrent, error) {
 		var link string
 		var approvedAt sql.NullTime
 
-		err := rows.Scan(&t.ID, &link, &feedItemJSON, &t.MatchReason, &t.StagedAt, &t.Status, &approvedAt, &t.AIScore, &t.AIReason, &t.AIScored)
+		err := rows.Scan(&t.ID, &link, &feedItemJSON, &t.MatchReason, &t.StagedAt, &t.Status, &approvedAt, &t.AIScore, &t.AIReason, &t.AIScored, &t.MatchConfidence, &t.MatchConfidenceReason)
 		if err != nil {
 			return nil, err
 		}
@@ -213,10 +217,10 @@ func (s *Storage) Get(id int) (*models.StagedTorrent, error) {
 	var approvedAt sql.NullTime
 
 	err := s.db.QueryRow(`
-		SELECT id, link, feed_item, match_reason, staged_at, status, approved_at, ai_score, ai_reason, ai_scored
+		SELECT id, link, feed_item, match_reason, staged_at, status, approved_at, ai_score, ai_reason, ai_scored, match_confidence, match_confidence_reason
 		FROM staged_torrents
 		WHERE id = ?
-	`, id).Scan(&t.ID, &link, &feedItemJSON, &t.MatchReason, &t.StagedAt, &t.Status, &approvedAt, &t.AIScore, &t.AIReason, &t.AIScored)
+	`, id).Scan(&t.ID, &link, &feedItemJSON, &t.MatchReason, &t.StagedAt, &t.Status, &approvedAt, &t.AIScore, &t.AIReason, &t.AIScored, &t.MatchConfidence, &t.MatchConfidenceReason)
 
 	if err == sql.ErrNoRows {
 		return nil, fmt.Errorf("torrent not found")
@@ -302,10 +306,10 @@ func (s *Storage) GetByID(id int) (*models.StagedTorrent, error) {
 	var approvedAt sql.NullTime
 
 	err := s.db.QueryRow(`
-		SELECT id, feed_item, match_reason, staged_at, status, approved_at, ai_score, ai_reason, ai_scored
+		SELECT id, feed_item, match_reason, staged_at, status, approved_at, ai_score, ai_reason, ai_scored, match_confidence, match_confidence_reason
 		FROM staged_torrents
 		WHERE id = ?
-	`, id).Scan(&t.ID, &feedItemJSON, &t.MatchReason, &t.StagedAt, &t.Status, &approvedAt, &t.AIScore, &t.AIReason, &t.AIScored)
+	`, id).Scan(&t.ID, &feedItemJSON, &t.MatchReason, &t.StagedAt, &t.Status, &approvedAt, &t.AIScore, &t.AIReason, &t.AIScored, &t.MatchConfidence, &t.MatchConfidenceReason)
 
 	if err == sql.ErrNoRows {
 		return nil, nil
@@ -443,13 +447,13 @@ func (s *Storage) CleanupExpiredRawFeedItems() error {
 	return err
 }
 
-// UpdateAIScore persists the AI-generated score and reason for a staged torrent.
-func (s *Storage) UpdateAIScore(id int, score float64, reason string) error {
+// UpdateAIScore persists the AI-generated score, reason, and match confidence for a staged torrent.
+func (s *Storage) UpdateAIScore(id int, score float64, reason string, confidence float64, confidenceReason string) error {
 	_, err := s.db.Exec(`
 		UPDATE staged_torrents
-		SET ai_score = ?, ai_reason = ?, ai_scored = 1
+		SET ai_score = ?, ai_reason = ?, ai_scored = 1, match_confidence = ?, match_confidence_reason = ?
 		WHERE id = ?
-	`, score, reason, id)
+	`, score, reason, confidence, confidenceReason, id)
 	return err
 }
 

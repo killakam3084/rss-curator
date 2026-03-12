@@ -48,15 +48,17 @@ type ErrorResponse struct {
 }
 
 type TorrentResponse struct {
-	ID          int     `json:"id"`
-	Title       string  `json:"title"`
-	Size        int64   `json:"size"`
-	MatchReason string  `json:"match_reason"`
-	Status      string  `json:"status"`
-	Link        string  `json:"link"`
-	AIScore     float64 `json:"ai_score"`
-	AIReason    string  `json:"ai_reason"`
-	AIScored    bool    `json:"ai_scored"`
+	ID                    int     `json:"id"`
+	Title                 string  `json:"title"`
+	Size                  int64   `json:"size"`
+	MatchReason           string  `json:"match_reason"`
+	Status                string  `json:"status"`
+	Link                  string  `json:"link"`
+	AIScore               float64 `json:"ai_score"`
+	AIReason              string  `json:"ai_reason"`
+	AIScored              bool    `json:"ai_scored"`
+	MatchConfidence       float64 `json:"match_confidence"`
+	MatchConfidenceReason string  `json:"match_confidence_reason"`
 }
 
 type ListResponse struct {
@@ -254,15 +256,17 @@ func (s *Server) handleList(w http.ResponseWriter, r *http.Request) {
 
 	for _, t := range torrents {
 		resp.Torrents = append(resp.Torrents, TorrentResponse{
-			ID:          t.ID,
-			Title:       t.FeedItem.Title,
-			Size:        t.FeedItem.Size,
-			MatchReason: t.MatchReason,
-			Status:      t.Status,
-			Link:        t.FeedItem.Link,
-			AIScore:     t.AIScore,
-			AIReason:    t.AIReason,
-			AIScored:    t.AIScored,
+			ID:                    t.ID,
+			Title:                 t.FeedItem.Title,
+			Size:                  t.FeedItem.Size,
+			MatchReason:           t.MatchReason,
+			Status:                t.Status,
+			Link:                  t.FeedItem.Link,
+			AIScore:               t.AIScore,
+			AIReason:              t.AIReason,
+			AIScored:              t.AIScored,
+			MatchConfidence:       t.MatchConfidence,
+			MatchConfidenceReason: t.MatchConfidenceReason,
 		})
 	}
 
@@ -847,20 +851,22 @@ func (s *Server) handleRescore(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 		result := scored[0]
-		if err := s.store.UpdateAIScore(t.ID, result.AIScore, result.AIReason); err != nil {
+		if err := s.store.UpdateAIScore(t.ID, result.AIScore, result.AIReason, result.MatchConfidence, result.MatchConfidenceReason); err != nil {
 			s.logger.Error("failed to update AI score", zap.Int("id", t.ID), zap.Error(err))
 			continue
 		}
 		updated = append(updated, TorrentResponse{
-			ID:          result.ID,
-			Title:       result.FeedItem.Title,
-			Size:        result.FeedItem.Size,
-			MatchReason: result.MatchReason,
-			Status:      result.Status,
-			Link:        result.FeedItem.Link,
-			AIScore:     result.AIScore,
-			AIReason:    result.AIReason,
-			AIScored:    true,
+			ID:                    result.ID,
+			Title:                 result.FeedItem.Title,
+			Size:                  result.FeedItem.Size,
+			MatchReason:           result.MatchReason,
+			Status:                result.Status,
+			Link:                  result.FeedItem.Link,
+			AIScore:               result.AIScore,
+			AIReason:              result.AIReason,
+			AIScored:              true,
+			MatchConfidence:       result.MatchConfidence,
+			MatchConfidenceReason: result.MatchConfidenceReason,
 		})
 	}
 

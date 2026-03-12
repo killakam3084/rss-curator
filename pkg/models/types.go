@@ -32,6 +32,11 @@ type StagedTorrent struct {
 	AIScore     float64    `json:"ai_score"`
 	AIReason    string     `json:"ai_reason"`
 	AIScored    bool       `json:"ai_scored"`
+	// MatchConfidence is the scorer's assessment of whether the matched rule name
+	// plausibly describes the actual content in the title. -1 means not yet assessed.
+	// Orthogonal to AIScore: a perfect release of wrong content → high score, low confidence.
+	MatchConfidence       float64 `json:"match_confidence"`
+	MatchConfidenceReason string  `json:"match_confidence_reason"`
 }
 
 // RawFeedItem represents a raw item pulled from RSS feed (before filtering/matching)

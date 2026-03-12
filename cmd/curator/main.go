@@ -22,7 +22,7 @@ import (
 )
 
 const (
-	version = "0.20.1"
+	version = "0.20.2"
 )
 
 func main() {
@@ -179,7 +179,7 @@ func cmdCheck(cfg models.Config, store *storage.Storage) {
 				}
 				scored := scorer.ScoreAll([]models.StagedTorrent{t}, history)
 				if len(scored) > 0 {
-					if err := store.UpdateAIScore(t.ID, scored[0].AIScore, scored[0].AIReason); err == nil {
+					if err := store.UpdateAIScore(t.ID, scored[0].AIScore, scored[0].AIReason, scored[0].MatchConfidence, scored[0].MatchConfidenceReason); err == nil {
 						backfilled++
 					}
 				}

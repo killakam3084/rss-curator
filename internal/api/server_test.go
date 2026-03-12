@@ -114,7 +114,7 @@ func (m *mockStorage) CleanupExpiredRawFeedItems() error {
 }
 
 // UpdateAIScore updates the AI score for a torrent
-func (m *mockStorage) UpdateAIScore(id int, score float64, reason string) error {
+func (m *mockStorage) UpdateAIScore(id int, score float64, reason string, confidence float64, confidenceReason string) error {
 	return nil
 }
 

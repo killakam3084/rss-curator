@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.20.2] - 2026-03-11
+
+### Added
+- **`match_confidence` scorer signal** — scorer now returns two additional fields: `match_confidence` (0.0–1.0, sentinel -1 = not yet assessed) and `match_confidence_reason` (one-line explanation); orthogonal to `ai_score` — the scorer evaluates whether the matched rule name plausibly identifies the actual content in the title, independent of release quality
+- **Low-confidence UI badge** — torrent cards show an amber ⚠ `low confidence` badge (with reason tooltip) when `match_confidence >= 0 && match_confidence < 0.5`; complements the existing ⚡ AI score badge
+- `StagedTorrent.MatchConfidence` and `StagedTorrent.MatchConfidenceReason` fields in `pkg/models/types.go`
+- SQLite migrations 4 and 5: `match_confidence REAL DEFAULT -1` and `match_confidence_reason TEXT DEFAULT ''`; idempotent log-and-continue pattern
+- `TorrentResponse.MatchConfidence` / `TorrentResponse.MatchConfidenceReason` exposed on all API list and rescore endpoints
+
+### Changed
+- `Store.UpdateAIScore` signature extended: `(id int, score float64, reason string, confidence float64, confidenceReason string) error`
+- Scorer system prompt updated to request `match_confidence` and `match_confidence_reason` fields with semantic guidance (e.g. rule name vs incidental substring distinction)
+- `match_confidence` clamped to [0, 1] post-parse; -1 sentinel preserved when model omits the field
+
 ## [0.20.1] - 2026-03-11
 
 ### Fixed

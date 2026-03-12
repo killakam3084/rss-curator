@@ -244,6 +244,10 @@
                                         <span class="text-gray-500 font-mono">ai score:</span>
                                         <span class="font-mono font-bold px-2 py-1 rounded text-xs bg-emerald-900/40 text-emerald-400 border border-emerald-700/50" :title="torrent.ai_reason">&#9889; {{ Math.round(torrent.ai_score * 100) }}%</span>
                                     </div>
+                                    <div v-if="torrent.ai_scored && torrent.match_confidence >= 0 && torrent.match_confidence < 0.5" class="flex items-center justify-between">
+                                        <span class="text-gray-500 font-mono">match:</span>
+                                        <span class="font-mono font-bold px-2 py-1 rounded text-xs bg-amber-900/40 text-amber-400 border border-amber-700/50" :title="torrent.match_confidence_reason">&#9888; low confidence</span>
+                                    </div>
                                 </div>
 
                                 <!-- Card Actions: visible when card is selected -->

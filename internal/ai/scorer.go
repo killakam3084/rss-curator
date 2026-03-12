@@ -36,14 +36,28 @@ Scoring rules:
   3. A torrent that matches well on content with suboptimal technical specs should
      score higher than one with perfect technical specs but weak content match.
 
+Match confidence:
+  Separately from scoring, assess whether the matched rule name plausibly identifies
+  the actual content in the title. Compare the "Show" field (the matched rule name)
+  against the full "Title". Score 1.0 when the rule name is clearly the show being
+  released. Score low when the rule name appears to be an incidental substring rather
+  than the actual content (e.g. rule "NOVA" matching a title containing "Renovation",
+  or rule "Invincible" matching "The Invincible Samurai"). This is orthogonal to
+  release quality — a perfect release of the wrong content should have high score
+  but low match_confidence.
+
 Always respond with a single JSON object. No explanation, no markdown, just raw JSON.
 Fields:
-  score   (float, 0.0-1.0)   - predicted likelihood of approval
-  reason  (string, max 80 chars) - one-line explanation`
+  score                    (float, 0.0-1.0)   - predicted likelihood of approval
+  reason                   (string, max 80 chars) - one-line explanation of score
+  match_confidence         (float, 0.0-1.0)   - likelihood the rule name correctly identifies the content
+  match_confidence_reason  (string, max 80 chars) - one-line explanation of match confidence`
 
 type scoreResult struct {
-	Score  float64 `json:"score"`
-	Reason string  `json:"reason"`
+	Score                 float64 `json:"score"`
+	Reason                string  `json:"reason"`
+	MatchConfidence       float64 `json:"match_confidence"`
+	MatchConfidenceReason string  `json:"match_confidence_reason"`
 }
 
 // Scorer ranks matched StagedTorrents using the LLM and the user's activity history.
@@ -90,12 +104,12 @@ func (s *Scorer) ScoreAll(staged []models.StagedTorrent, history []models.Activi
 	histCtx := buildHistoryContext(history, s.historySize)
 	for i := range staged {
 		t := &staged[i]
-		t.AIScore, t.AIReason = s.scoreOne(t, histCtx)
+		t.AIScore, t.AIReason, t.MatchConfidence, t.MatchConfidenceReason = s.scoreOne(t, histCtx)
 	}
 	return staged
 }
 
-func (s *Scorer) scoreOne(t *models.StagedTorrent, histCtx string) (float64, string) {
+func (s *Scorer) scoreOne(t *models.StagedTorrent, histCtx string) (float64, string, float64, string) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(s.timeoutSecs)*time.Second)
 	defer cancel()
 
@@ -139,7 +153,7 @@ func (s *Scorer) scoreOne(t *models.StagedTorrent, histCtx string) (float64, str
 				zap.Error(err),
 			)
 		}
-		return 0, ""
+		return 0, "", -1, ""
 	}
 
 	raw := content
@@ -159,15 +173,25 @@ func (s *Scorer) scoreOne(t *models.StagedTorrent, histCtx string) (float64, str
 				zap.String("parse_error", err.Error()),
 			)
 		}
-		return 0, ""
+		return 0, "", -1, ""
 	}
 
-	// Clamp to [0, 1].
+	// Clamp score to [0, 1].
 	if result.Score < 0 {
 		result.Score = 0
 	}
 	if result.Score > 1 {
 		result.Score = 1
+	}
+
+	// Clamp match_confidence to [0, 1]; -1 sentinel means not assessed.
+	if result.MatchConfidence >= 0 {
+		if result.MatchConfidence < 0 {
+			result.MatchConfidence = 0
+		}
+		if result.MatchConfidence > 1 {
+			result.MatchConfidence = 1
+		}
 	}
 
 	if s.logger != nil {
@@ -177,10 +201,12 @@ func (s *Scorer) scoreOne(t *models.StagedTorrent, histCtx string) (float64, str
 			zap.String("raw_response", raw),
 			zap.Float64("score", result.Score),
 			zap.String("reason", result.Reason),
+			zap.Float64("match_confidence", result.MatchConfidence),
+			zap.String("match_confidence_reason", result.MatchConfidenceReason),
 		)
 	}
 
-	return result.Score, result.Reason
+	return result.Score, result.Reason, result.MatchConfidence, result.MatchConfidenceReason
 }
 
 // buildHistoryContext produces a compact text summary of activity history for
