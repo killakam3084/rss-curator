@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.20.3] - 2026-03-11
+
+### Fixed
+- **`match_confidence` prompt disambiguation** — scorer user prompt now surfaces `Matched rule` (the rule name extracted from match reason, e.g. `NOVA`) and `Parsed show (from title)` (the feed-parsed content name, e.g. `Beachfront Bargain Hunt Renovation`) as separate labeled fields; previously both were collapsed under a single ambiguous `Show:` label, causing the model to inconsistently anchor on either field and produce divergent confidence scores for identical release patterns
+- `extractMatchedRule()` helper parses `"matches show: NAME"` from the match reason string; falls back to the full reason for quality/group-only matches
+- System prompt updated to reference `"Matched rule"` and `"Parsed show"` by their correct labels
+
 ## [0.20.2] - 2026-03-11
 
 ### Added
