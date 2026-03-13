@@ -109,3 +109,24 @@ type QBConfig struct {
 	SavePath  string `yaml:"save_path"`  // Default save path
 	AddPaused bool   `yaml:"add_paused"` // Add torrents in paused state
 }
+
+// JobSummary holds per-job outcome statistics, serialized as JSON into the jobs table.
+type JobSummary struct {
+	ItemsFound   int    `json:"items_found"`
+	ItemsMatched int    `json:"items_matched"`
+	ItemsScored  int    `json:"items_scored"`
+	ItemsQueued  int    `json:"items_queued"`
+	ErrorMessage string `json:"error_message,omitempty"`
+}
+
+// JobRecord represents a tracked background operation written to the jobs table.
+// Status values: "running", "completed", "failed".
+// Type values: "feed_check", "rescore_backfill", "rescore".
+type JobRecord struct {
+	ID          int        `json:"id"`
+	Type        string     `json:"type"`
+	Status      string     `json:"status"`
+	StartedAt   time.Time  `json:"started_at"`
+	CompletedAt *time.Time `json:"completed_at,omitempty"`
+	Summary     JobSummary `json:"summary"`
+}

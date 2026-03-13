@@ -123,6 +123,15 @@ func (m *mockStorage) GetWindowStats(hours int) (*storage.WindowStats, error) {
 	return &storage.WindowStats{Hours: hours}, nil
 }
 
+// Job stubs — return sensible zero values so tests compile and pass.
+func (m *mockStorage) CreateJob(jobType string) (int, error)                  { return 1, nil }
+func (m *mockStorage) CompleteJob(id int, summary models.JobSummary) error    { return nil }
+func (m *mockStorage) FailJob(id int, errMsg string) error                    { return nil }
+func (m *mockStorage) ListJobs(limit int, statusFilter string) ([]models.JobRecord, error) {
+	return []models.JobRecord{}, nil
+}
+func (m *mockStorage) GetJob(id int) (*models.JobRecord, error) { return nil, nil }
+
 // setupTestServer creates a test server instance
 func setupTestServer(t *testing.T) (*Server, *mockStorage) {
 	logger, _ := zap.NewProduction()

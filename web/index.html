@@ -57,8 +57,95 @@
     </div>
     
     <div id="app" class="relative z-0">
+        <!-- ── Top Navigation Bar ── -->
+        <nav
+            :style="{right: sidebarCollapsed ? '64px' : '320px'}"
+            class="fixed top-0 left-0 z-40 h-14 bg-gray-950 border-b border-gray-800 flex items-center justify-between px-6 transition-all duration-300"
+        >
+            <!-- Left: wordmark -->
+            <span class="text-xl font-bold font-mono text-curator-500">&gt; rss-curator</span>
+
+            <!-- Right: jobs icon, alerts placeholder, logout -->
+            <div class="flex items-center gap-3 relative">
+                <!-- Jobs button + badge -->
+                <div class="relative">
+                    <button
+                        @click="jobsPopoverOpen = !jobsPopoverOpen"
+                        class="relative p-2 rounded hover:bg-gray-800 border border-transparent hover:border-gray-700 transition-colors duration-150"
+                        title="Jobs"
+                    >
+                        <!-- briefcase icon -->
+                        <svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24">
+                            <rect x="2" y="7" width="20" height="14" rx="2" ry="2"/>
+                            <path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/>
+                            <line x1="12" y1="12" x2="12" y2="12"/>
+                        </svg>
+                        <!-- running badge -->
+                        <span
+                            v-if="runningJobs.length > 0"
+                            class="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-curator-500 text-gray-950 text-xs font-bold flex items-center justify-center animate-pulse"
+                        >{{ runningJobs.length }}</span>
+                        <!-- failed badge (overrides running) -->
+                        <span
+                            v-else-if="failedJobs.length > 0"
+                            class="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-red-500 text-white text-xs font-bold flex items-center justify-center"
+                        >{{ failedJobs.length }}</span>
+                    </button>
+
+                    <!-- Jobs popover -->
+                    <div
+                        v-if="jobsPopoverOpen"
+                        class="absolute top-10 right-0 w-80 bg-gray-900 border border-gray-700 rounded-lg shadow-2xl z-50"
+                        @click.stop
+                    >
+                        <div class="flex items-center justify-between px-4 py-3 border-b border-gray-800">
+                            <span class="text-xs font-mono font-bold text-curator-500 uppercase">recent jobs</span>
+                            <a href="/jobs" class="text-xs font-mono text-gray-400 hover:text-curator-500 transition-colors">Go to Jobs →</a>
+                        </div>
+                        <div v-if="recentJobs.length === 0" class="px-4 py-6 text-center text-xs font-mono text-gray-600">no jobs recorded</div>
+                        <ul v-else class="divide-y divide-gray-800 max-h-72 overflow-y-auto">
+                            <li v-for="job in recentJobs" :key="job.id" class="flex items-start gap-3 px-4 py-3">
+                                <!-- status dot -->
+                                <span :class="[
+                                    'mt-0.5 w-2.5 h-2.5 rounded-full shrink-0',
+                                    job.status === 'running'   ? 'bg-curator-500 animate-pulse' :
+                                    job.status === 'completed' ? 'bg-emerald-500' : 'bg-red-500'
+                                ]"></span>
+                                <div class="min-w-0 flex-1">
+                                    <div class="flex items-center justify-between gap-2">
+                                        <span class="text-xs font-mono text-gray-300">{{ job.type }}</span>
+                                        <span class="text-xs font-mono text-gray-600 shrink-0">{{ formatRelative(job.started_at) }}</span>
+                                    </div>
+                                    <p v-if="job.summary && job.summary.error_message" class="text-xs text-red-400 truncate">{{ job.summary.error_message }}</p>
+                                    <p v-else-if="job.status === 'completed'" class="text-xs text-gray-500">
+                                        found {{ job.summary.items_found ?? '—' }} · matched {{ job.summary.items_matched ?? '—' }}
+                                    </p>
+                                </div>
+                            </li>
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Alerts placeholder (future) -->
+                <button class="p-2 rounded hover:bg-gray-800 border border-transparent hover:border-gray-700 transition-colors duration-150 opacity-30 cursor-not-allowed" title="Alerts (coming soon)" disabled>
+                    <svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24">
+                        <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
+                        <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+                    </svg>
+                </button>
+
+                <!-- Logout -->
+                <form method="POST" action="/logout">
+                    <button type="submit" class="px-3 py-1.5 rounded font-mono text-xs text-gray-500 hover:text-red-400 hover:bg-gray-800 border border-transparent hover:border-gray-700 transition-colors duration-150 uppercase tracking-widest">logout</button>
+                </form>
+            </div>
+        </nav>
+
+        <!-- Close popover on outside-click -->
+        <div v-if="jobsPopoverOpen" class="fixed inset-0 z-30" @click="jobsPopoverOpen = false"></div>
+
         <!-- Toast Notifications -->
-        <div class="fixed top-6 right-6 z-50 flex flex-col gap-3 max-w-sm pointer-events-none">
+        <div class="fixed top-20 right-6 z-50 flex flex-col gap-3 max-w-sm pointer-events-none">
             <div 
                 v-for="toast in toasts" 
                 :key="toast.id"
@@ -76,22 +163,8 @@
         <!-- Full Height Layout with Console -->
         <div class="flex min-h-screen">
             <!-- Main Content Area -->
-            <div :style="{marginRight: sidebarCollapsed ? '64px' : '320px', paddingBottom: logsDrawerOpen ? logsDrawerHeight : '0'}" class="flex-1 transition-all duration-300 overflow-hidden">
+            <div :style="{marginRight: sidebarCollapsed ? '64px' : '320px', paddingBottom: logsDrawerOpen ? logsDrawerHeight : '0', paddingTop: '56px'}" class="flex-1 transition-all duration-300 overflow-hidden">
                 <div class="w-full h-full overflow-y-auto px-4 py-8">
-            <!-- Header -->
-            <header class="mb-8">
-                <div class="bg-gray-900 border border-gray-800 rounded-lg shadow-2xl p-8 backdrop-blur-sm">
-                    <div class="mb-2 flex items-center justify-between">
-                        <h1 class="text-4xl font-bold font-mono text-curator-500">
-                            &gt; rss-curator
-                        </h1>
-                        <form method="POST" action="/logout">
-                            <button type="submit" class="px-3 py-1.5 rounded font-mono text-xs text-gray-500 hover:text-red-400 hover:bg-gray-800 border border-transparent hover:border-gray-700 transition-colors duration-150 uppercase tracking-widest">logout</button>
-                        </form>
-                    </div>
-                </div>
-            </header>
-
             <!-- Main Content Layout -->
             <div>
                 <!-- Main Content -->
@@ -352,7 +425,7 @@
         </div>
 
         <!-- Full Height Right Console -->
-        <aside :style="{width: sidebarCollapsed ? '64px' : '320px'}" class="fixed top-0 right-0 h-screen bg-gray-900 border-l border-gray-800 shadow-2xl transition-all duration-300 z-40">
+        <aside :style="{width: sidebarCollapsed ? '64px' : '320px'}" class="fixed top-14 right-0 h-[calc(100vh-3.5rem)] bg-gray-900 border-l border-gray-800 shadow-2xl transition-all duration-300 z-40">
             <!-- Console Header with Hamburger Toggle -->
             <div class="flex items-center justify-between p-4 border-b border-gray-800 bg-gray-800/50">
                 <h2 v-if="!sidebarCollapsed" class="text-sm font-bold font-mono text-curator-500 uppercase">

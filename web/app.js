@@ -22,6 +22,11 @@ const app = createApp({
         // Stats from API (/api/stats) — 24h windowed counts
         const stats = ref({ hours: 24, pending: 0, seen: 0, staged: 0, approved: 0, rejected: 0, queued: 0 });
 
+        // Jobs state
+        const jobs = ref([]);
+        const jobsPopoverOpen = ref(false);
+        let jobsEventSource = null;
+
         // Log drawer state
         const logsDrawerOpen = ref(false);
         const logEntries = ref([]);
@@ -67,6 +72,11 @@ const app = createApp({
         );
         const selectedCount = computed(() => selectedIds.value.size);
         const multiSelectActive = computed(() => selectedIds.value.size > 1);
+        // Jobs computed
+        const runningJobs = computed(() => jobs.value.filter(j => j.status === 'running'));
+        const failedJobs  = computed(() => jobs.value.filter(j => j.status === 'failed'));
+        const recentJobs  = computed(() => jobs.value.slice(0, 5));
+
         const filteredLogs = computed(() => {
             const filtered = logEntries.value.filter(e => {
                 const levelMatch = logLevelFilter.value.includes(e.level);
@@ -612,6 +622,8 @@ const app = createApp({
             fetchActivities();
             fetchFeedStream();
             fetchStats();
+            fetchJobs();
+            openJobsStream();
             // Auto-refresh every 30 seconds
             setInterval(() => {
                 fetchAllTorrents();
@@ -620,6 +632,51 @@ const app = createApp({
                 fetchStats();
             }, 30000);
         });
+
+        // Jobs helpers
+        const fetchJobs = async () => {
+            try {
+                const res = await fetch('/api/jobs?limit=20');
+                if (!res.ok) return;
+                const data = await res.json();
+                jobs.value = data || [];
+            } catch (e) {
+                // silently ignore — jobs UI is non-critical
+            }
+        };
+
+        const openJobsStream = () => {
+            if (jobsEventSource) return; // already open
+            jobsEventSource = new EventSource('/api/jobs/stream');
+            jobsEventSource.onmessage = (e) => {
+                try {
+                    const job = JSON.parse(e.data);
+                    const idx = jobs.value.findIndex(j => j.id === job.id);
+                    if (idx >= 0) {
+                        jobs.value.splice(idx, 1, job);
+                    } else {
+                        jobs.value.unshift(job);
+                    }
+                    // Keep list bounded
+                    if (jobs.value.length > 100) jobs.value.splice(100);
+                } catch (_) {}
+            };
+            jobsEventSource.onerror = () => {
+                jobsEventSource.close();
+                jobsEventSource = null;
+                // Reconnect after 5 seconds
+                setTimeout(openJobsStream, 5000);
+            };
+        };
+
+        const formatRelative = (isoStr) => {
+            if (!isoStr) return '';
+            const diff = Date.now() - new Date(isoStr).getTime();
+            if (diff < 60000)  return 'just now';
+            if (diff < 3600000) return Math.floor(diff / 60000) + 'm ago';
+            if (diff < 86400000) return Math.floor(diff / 3600000) + 'h ago';
+            return Math.floor(diff / 86400000) + 'd ago';
+        };
 
         const toggleDarkMode = () => {
             darkMode.value = !darkMode.value;
@@ -709,7 +766,14 @@ const app = createApp({
             formatSize,
             showToast,
             toggleDarkMode,
-            toggleSidebarCollapse
+            toggleSidebarCollapse,
+            jobs,
+            jobsPopoverOpen,
+            runningJobs,
+            failedJobs,
+            recentJobs,
+            fetchJobs,
+            formatRelative,
         };
     }
 });

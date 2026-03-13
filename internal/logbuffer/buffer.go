@@ -7,6 +7,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/killakam3084/rss-curator/pkg/models"
 )
 
 // Cap is the maximum number of log entries retained in memory.
@@ -32,12 +34,18 @@ type Buffer struct {
 	subsMu      sync.Mutex
 	subscribers map[uint64]chan LogEntry
 	subCounter  atomic.Uint64
+
+	// job SSE fan-out
+	jobSubsMu     sync.Mutex
+	jobSubs       map[uint64]chan models.JobRecord
+	jobSubCounter atomic.Uint64
 }
 
 // NewBuffer allocates and returns a ready-to-use Buffer.
 func NewBuffer() *Buffer {
 	return &Buffer{
 		subscribers: make(map[uint64]chan LogEntry),
+		jobSubs:     make(map[uint64]chan models.JobRecord),
 	}
 }
 
@@ -91,6 +99,39 @@ func (b *Buffer) Entries(sinceID uint64) []LogEntry {
 		}
 	}
 	return result
+}
+
+// EmitJobEvent fans a JobRecord out to all current job SSE subscribers.
+func (b *Buffer) EmitJobEvent(job models.JobRecord) {
+	b.jobSubsMu.Lock()
+	for _, ch := range b.jobSubs {
+		select {
+		case ch <- job:
+		default:
+			// slow subscriber; drop rather than block
+		}
+	}
+	b.jobSubsMu.Unlock()
+}
+
+// SubscribeJobs registers a new job SSE subscriber. It returns a read-only
+// channel that will receive future JobRecord events, and an unsubscribe
+// function that must be called when the subscriber disconnects.
+func (b *Buffer) SubscribeJobs() (<-chan models.JobRecord, func()) {
+	id := b.jobSubCounter.Add(1)
+	ch := make(chan models.JobRecord, 32)
+
+	b.jobSubsMu.Lock()
+	b.jobSubs[id] = ch
+	b.jobSubsMu.Unlock()
+
+	unsub := func() {
+		b.jobSubsMu.Lock()
+		delete(b.jobSubs, id)
+		b.jobSubsMu.Unlock()
+		close(ch)
+	}
+	return ch, unsub
 }
 
 // Subscribe registers a new SSE subscriber. It returns a read-only channel

@@ -39,6 +39,12 @@ type Store interface {
 	GetRawFeedItems(limit int) ([]models.RawFeedItem, error)
 	CleanupExpiredRawFeedItems() error
 	UpdateAIScore(id int, score float64, reason string, confidence float64, confidenceReason string) error
+	// Jobs
+	CreateJob(jobType string) (int, error)
+	CompleteJob(id int, summary models.JobSummary) error
+	FailJob(id int, errMsg string) error
+	ListJobs(limit int, statusFilter string) ([]models.JobRecord, error)
+	GetJob(id int) (*models.JobRecord, error)
 }
 
 // Storage handles persistent storage of staged torrents
@@ -129,6 +135,15 @@ func (s *Storage) migrate() error {
 		`ALTER TABLE staged_torrents ADD COLUMN match_confidence REAL DEFAULT -1`,
 		// Migration 5: Add match_confidence_reason
 		`ALTER TABLE staged_torrents ADD COLUMN match_confidence_reason TEXT DEFAULT ''`,
+		// Migration 6: Jobs table for background operation tracking
+		`CREATE TABLE IF NOT EXISTS jobs (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			type TEXT NOT NULL,
+			status TEXT NOT NULL DEFAULT 'running',
+			started_at DATETIME NOT NULL,
+			completed_at DATETIME,
+			summary_json TEXT NOT NULL DEFAULT '{}'
+		)`,
 	}
 
 	for _, migration := range migrations {
@@ -455,6 +470,103 @@ func (s *Storage) UpdateAIScore(id int, score float64, reason string, confidence
 		WHERE id = ?
 	`, score, reason, confidence, confidenceReason, id)
 	return err
+}
+
+// CreateJob inserts a new job record with status "running" and returns its ID.
+func (s *Storage) CreateJob(jobType string) (int, error) {
+	res, err := s.db.Exec(`
+		INSERT INTO jobs (type, status, started_at, summary_json)
+		VALUES (?, 'running', ?, '{}')
+	`, jobType, time.Now())
+	if err != nil {
+		return 0, err
+	}
+	id, err := res.LastInsertId()
+	return int(id), err
+}
+
+// CompleteJob marks a job as completed with summary statistics.
+func (s *Storage) CompleteJob(id int, summary models.JobSummary) error {
+	summaryJSON, err := json.Marshal(summary)
+	if err != nil {
+		return err
+	}
+	_, err = s.db.Exec(`
+		UPDATE jobs SET status = 'completed', completed_at = ?, summary_json = ? WHERE id = ?
+	`, time.Now(), string(summaryJSON), id)
+	return err
+}
+
+// FailJob marks a job as failed with an error message.
+func (s *Storage) FailJob(id int, errMsg string) error {
+	summary := models.JobSummary{ErrorMessage: errMsg}
+	summaryJSON, err := json.Marshal(summary)
+	if err != nil {
+		return err
+	}
+	_, err = s.db.Exec(`
+		UPDATE jobs SET status = 'failed', completed_at = ?, summary_json = ? WHERE id = ?
+	`, time.Now(), string(summaryJSON), id)
+	return err
+}
+
+// ListJobs returns the most recent job records, optionally filtered by status.
+func (s *Storage) ListJobs(limit int, statusFilter string) ([]models.JobRecord, error) {
+	query := `SELECT id, type, status, started_at, completed_at, summary_json FROM jobs`
+	args := []any{}
+	if statusFilter != "" {
+		query += ` WHERE status = ?`
+		args = append(args, statusFilter)
+	}
+	query += ` ORDER BY started_at DESC LIMIT ?`
+	args = append(args, limit)
+
+	rows, err := s.db.Query(query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var jobs []models.JobRecord
+	for rows.Next() {
+		var j models.JobRecord
+		var completedAt sql.NullTime
+		var summaryJSON string
+		if err := rows.Scan(&j.ID, &j.Type, &j.Status, &j.StartedAt, &completedAt, &summaryJSON); err != nil {
+			return nil, err
+		}
+		if completedAt.Valid {
+			j.CompletedAt = &completedAt.Time
+		}
+		if err := json.Unmarshal([]byte(summaryJSON), &j.Summary); err != nil {
+			return nil, err
+		}
+		jobs = append(jobs, j)
+	}
+	return jobs, rows.Err()
+}
+
+// GetJob retrieves a single job by ID. Returns nil, nil if not found.
+func (s *Storage) GetJob(id int) (*models.JobRecord, error) {
+	var j models.JobRecord
+	var completedAt sql.NullTime
+	var summaryJSON string
+	err := s.db.QueryRow(`
+		SELECT id, type, status, started_at, completed_at, summary_json FROM jobs WHERE id = ?
+	`, id).Scan(&j.ID, &j.Type, &j.Status, &j.StartedAt, &completedAt, &summaryJSON)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	if completedAt.Valid {
+		j.CompletedAt = &completedAt.Time
+	}
+	if err := json.Unmarshal([]byte(summaryJSON), &j.Summary); err != nil {
+		return nil, err
+	}
+	return &j, nil
 }
 
 // GetWindowStats returns activity counts for a rolling window of the given hours,

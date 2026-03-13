@@ -37,7 +37,8 @@
     {
       "name": "Bridgerton",
       "min_quality": "1080p",
-      "preferred_codec": "x265"
+      "preferred_codec": "x265",
+      "exclude_groups": ["YIFY", "RARBG"]
     },
     {
       "name": "Common Side Effects",

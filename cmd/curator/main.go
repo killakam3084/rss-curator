@@ -22,7 +22,7 @@ import (
 )
 
 const (
-	version = "0.20.3"
+	version = "0.21.0"
 )
 
 func main() {
@@ -84,6 +84,12 @@ func main() {
 func cmdCheck(cfg models.Config, store *storage.Storage) {
 	fmt.Println("Checking RSS feeds...")
 
+	// Record this run as a job so the UI can track it.
+	jobID, jobErr := store.CreateJob("feed_check")
+	if jobErr != nil {
+		fmt.Fprintf(os.Stderr, "Warning: could not create job record: %v\n", jobErr)
+	}
+
 	// Set up optional AI support — each subsystem uses its own model config.
 	enricherProvider := ai.NewProviderFor("enricher")
 	scorerProvider := ai.NewProviderFor("scorer")
@@ -105,8 +111,12 @@ func cmdCheck(cfg models.Config, store *storage.Storage) {
 		fmt.Println("Using environment variable config")
 	}
 
-	totalNew := 0
-	totalDiscovered := 0
+	var (
+		totalNew        int
+		totalDiscovered int
+		totalScored     int
+		feedFailed      bool
+	)
 	now := time.Now()
 	ttl := 24 * time.Hour // Keep raw feed items for 24 hours
 
@@ -116,6 +126,7 @@ func cmdCheck(cfg models.Config, store *storage.Storage) {
 		items, err := parser.Parse(feedURL)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error parsing feed: %v\n", err)
+			feedFailed = true
 			continue
 		}
 
@@ -143,6 +154,7 @@ func cmdCheck(cfg models.Config, store *storage.Storage) {
 		if scorerProvider.Available() {
 			history, _ := store.GetActivity(50, 0, "")
 			matches = scorer.ScoreAll(matches, history)
+			totalScored += len(matches)
 		}
 
 		// Stage matches
@@ -165,10 +177,30 @@ func cmdCheck(cfg models.Config, store *storage.Storage) {
 		fmt.Println("\nNo new matches found")
 	}
 
+	// Complete the feed_check job.
+	if jobErr == nil {
+		summary := models.JobSummary{
+			ItemsFound:   totalDiscovered,
+			ItemsMatched: totalNew,
+			ItemsScored:  totalScored,
+		}
+		if feedFailed {
+			if err := store.FailJob(jobID, "one or more feeds failed to parse"); err != nil {
+				fmt.Fprintf(os.Stderr, "Warning: could not fail job record: %v\n", err)
+			}
+		} else {
+			if err := store.CompleteJob(jobID, summary); err != nil {
+				fmt.Fprintf(os.Stderr, "Warning: could not complete job record: %v\n", err)
+			}
+		}
+	}
+
 	// Backfill AI scores for any torrents that were staged before the provider
 	// was available (ai_scored=false). Covers all statuses so approved/rejected
 	// history is also enriched for trend tracking.
 	if scorerProvider.Available() {
+		backfillJobID, backfillJobErr := store.CreateJob("rescore_backfill")
+
 		all, err := store.List("")
 		if err == nil {
 			history, _ := store.GetActivity(50, 0, "")
@@ -187,6 +219,11 @@ func cmdCheck(cfg models.Config, store *storage.Storage) {
 			if backfilled > 0 {
 				fmt.Printf("✓ Backfilled AI scores for %d torrents\n", backfilled)
 			}
+			if backfillJobErr == nil {
+				_ = store.CompleteJob(backfillJobID, models.JobSummary{ItemsScored: backfilled})
+			}
+		} else if backfillJobErr == nil {
+			_ = store.FailJob(backfillJobID, err.Error())
 		}
 	}
 }

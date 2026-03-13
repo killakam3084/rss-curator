@@ -5,6 +5,32 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.21.0] - 2026-03-12
+
+### Added
+- **Jobs system** — background task tracking across `cmdCheck`, `handleRescore`, and the backfill scorer; every run creates a `jobs` row with type, status, start/end times, and a `JobSummary` (items found / matched / scored / queued + error message)
+- **Job types**: `feed_check` (CLI `check`/`scan`), `rescore` (POST `/api/torrents/rescore`), `rescore_backfill` (automatic backfill block inside `cmdCheck`)
+- **SQLite Migration 6** — `jobs` table: `id`, `type`, `status` (`running` / `completed` / `failed`), `started_at`, `completed_at`, `summary_json`
+- **Storage API** — `CreateJob`, `CompleteJob`, `FailJob`, `ListJobs`, `GetJob` methods on `*Storage` and `Store` interface
+- **Jobs SSE fan-out** — `logbuffer.Buffer` gains `EmitJobEvent(models.JobRecord)` + `SubscribeJobs()` (parallel map, independent of log SSE)
+- **REST endpoints**: `GET /api/jobs`, `GET /api/jobs/{id}`, `GET /api/jobs/stream` (SSE)
+- **`/jobs` page** — standalone Vue 3 dark-mode app (`web/jobs.html`): breadcrumb back to curator, always-open SSE badge, three tabs (All / Active / Failed with live counts), expandable rows with type badge, status dot (pulsing while running), relative start time, duration, and full summary stats
+- **Fixed top navigation bar** — replaces the scrolling header card in `index.html`; `h-14` bar spans from left edge to sidebar edge (tracks `sidebarCollapsed` reactive binding); contains wordmark, briefcase jobs icon with animated badge (green pulse = running, red = failed), alerts placeholder (future), and logout button
+- **Jobs popover** — clicking the jobs icon opens a compact popover listing the 5 most recent jobs with type, status dot, relative time, summary excerpt, and a "Go to Jobs →" link to `/jobs`; outside-click overlay closes it
+- **Sidebar top offset** — sidebar now starts at `top-14` (below the nav bar) instead of `top-0`; height changed to `calc(100vh - 3.5rem)`
+- `JobRecord` and `JobSummary` structs in `pkg/models/types.go`
+
+### Changed
+- `cmdCheck` instruments the feed-check loop with a `feed_check` job; tracks `ItemsFound`, `ItemsMatched`, `ItemsScored`; marks the job completed or failed at exit; backfill block creates a separate `rescore_backfill` job
+- `handleRescore` wraps scoring with a `rescore` job and calls `logBuffer.EmitJobEvent` on create/complete/fail so the UI badge updates in real time
+- Main content area gains `paddingTop: 56px` so it clears the fixed nav bar
+- Toast notifications offset adjusted to `top-20` to clear the new nav bar
+- `app.js` version: adds `jobs`, `jobsPopoverOpen` refs; `runningJobs`, `failedJobs`, `recentJobs` computed; `fetchJobs` (initial backfill) + `openJobsStream` (always-open SSE with upsert-by-ID and auto-reconnect) called on `onMounted`; `formatRelative` helper exposed to template
+
+### Tests
+- `TestCreateJob`, `TestCompleteJob`, `TestFailJob`, `TestListJobs`, `TestGetJob_NotFound` added to `internal/storage/storage_test.go`
+- `mockStorage` in `internal/api/server_test.go` extended with the five new `Store` interface methods
+
 ## [0.20.3] - 2026-03-11
 
 ### Fixed

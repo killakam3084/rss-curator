@@ -190,6 +190,9 @@ func (s *Server) Start() error {
 	mux.HandleFunc("/api/logs", s.handleLogs)
 	mux.HandleFunc("/api/logs/stream", s.handleLogsStream)
 	mux.HandleFunc("/api/suggestions", s.handleSuggestions)
+	mux.HandleFunc("/api/jobs/stream", s.handleJobsStream)
+	mux.HandleFunc("/api/jobs/", s.handleJob)
+	mux.HandleFunc("/api/jobs", s.handleJobs)
 
 	// Static files and UI
 	mux.Handle("/style.css", http.FileServer(http.Dir("./web")))
@@ -199,6 +202,11 @@ func (s *Server) Start() error {
 	// no-ops when auth is disabled because the middleware never blocks access)
 	mux.HandleFunc("/login", s.handleLogin)
 	mux.HandleFunc("/logout", s.handleLogout)
+
+	// Jobs dedicated page
+	mux.HandleFunc("/jobs", func(w http.ResponseWriter, r *http.Request) {
+		http.ServeFile(w, r, "./web/jobs.html")
+	})
 
 	// Root and fallback
 	mux.HandleFunc("/", s.handleRoot)
@@ -838,9 +846,20 @@ func (s *Server) handleRescore(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Record this as a job so the UI can track it.
+	jobID, _ := s.store.CreateJob("rescore")
+	startedAt := time.Now()
+	s.logBuffer.EmitJobEvent(models.JobRecord{
+		ID:        jobID,
+		Type:      "rescore",
+		Status:    "running",
+		StartedAt: startedAt,
+	})
+
 	history, _ := s.store.GetActivity(50, 0, "")
 
 	var updated []TorrentResponse
+	var rescoreErr error
 	for _, id := range req.IDs {
 		t, err := s.store.GetByID(id)
 		if err != nil || t == nil {
@@ -853,6 +872,7 @@ func (s *Server) handleRescore(w http.ResponseWriter, r *http.Request) {
 		result := scored[0]
 		if err := s.store.UpdateAIScore(t.ID, result.AIScore, result.AIReason, result.MatchConfidence, result.MatchConfidenceReason); err != nil {
 			s.logger.Error("failed to update AI score", zap.Int("id", t.ID), zap.Error(err))
+			rescoreErr = err
 			continue
 		}
 		updated = append(updated, TorrentResponse{
@@ -870,11 +890,132 @@ func (s *Server) handleRescore(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 
+	// Complete or fail the job record and fan-out the update.
+	summary := models.JobSummary{ItemsScored: len(updated)}
+	now := time.Now()
+	finalJob := models.JobRecord{
+		ID:          jobID,
+		Type:        "rescore",
+		StartedAt:   startedAt,
+		CompletedAt: &now,
+		Summary:     summary,
+	}
+	if rescoreErr != nil && len(updated) == 0 {
+		finalJob.Status = "failed"
+		finalJob.Summary.ErrorMessage = rescoreErr.Error()
+		_ = s.store.FailJob(jobID, rescoreErr.Error())
+	} else {
+		finalJob.Status = "completed"
+		_ = s.store.CompleteJob(jobID, summary)
+	}
+	s.logBuffer.EmitJobEvent(finalJob)
+
 	s.logger.Info("torrents rescored", zap.Int("count", len(updated)))
 	json.NewEncoder(w).Encode(RescoreResponse{
 		Rescored: len(updated),
 		Torrents: updated,
 	})
+}
+
+// handleJobs returns recent job records as JSON.
+// GET /api/jobs?limit=50&status=<filter>
+func (s *Server) handleJobs(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	limit := 50
+	if raw := r.URL.Query().Get("limit"); raw != "" {
+		if v, err := strconv.Atoi(raw); err == nil && v > 0 {
+			limit = v
+		}
+	}
+	statusFilter := r.URL.Query().Get("status")
+
+	jobs, err := s.store.ListJobs(limit, statusFilter)
+	if err != nil {
+		s.logger.Error("failed to list jobs", zap.Error(err))
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+	if jobs == nil {
+		jobs = []models.JobRecord{}
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(jobs)
+}
+
+// handleJob returns a single job record by ID.
+// GET /api/jobs/{id}
+func (s *Server) handleJob(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	idStr := strings.TrimPrefix(r.URL.Path, "/api/jobs/")
+	id, err := strconv.Atoi(idStr)
+	if err != nil || id <= 0 {
+		http.Error(w, "invalid id", http.StatusBadRequest)
+		return
+	}
+
+	job, err := s.store.GetJob(id)
+	if err != nil {
+		s.logger.Error("failed to get job", zap.Int("id", id), zap.Error(err))
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+	if job == nil {
+		http.Error(w, "not found", http.StatusNotFound)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(job)
+}
+
+// handleJobsStream streams live job lifecycle events over Server-Sent Events.
+// GET /api/jobs/stream
+func (s *Server) handleJobsStream(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	fl, ok := w.(http.Flusher)
+	if !ok {
+		http.Error(w, "streaming unsupported", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+
+	ch, unsub := s.logBuffer.SubscribeJobs()
+	defer unsub()
+
+	fmt.Fprintf(w, ": connected\n\n")
+	fl.Flush()
+
+	for {
+		select {
+		case job, open := <-ch:
+			if !open {
+				return
+			}
+			data, err := json.Marshal(job)
+			if err != nil {
+				continue
+			}
+			fmt.Fprintf(w, "data: %s\n\n", data)
+			fl.Flush()
+		case <-r.Context().Done():
+			return
+		}
+	}
 }
 
 // handleSuggestions is the stub for the Suggester subsystem.

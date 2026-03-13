@@ -152,3 +152,140 @@ func TestListTorrents(t *testing.T) {
 		t.Errorf("expected 1 pending torrent, got %d", len(pending))
 	}
 }
+
+// ── Job CRUD tests ────────────────────────────────────────────────────────────
+
+func TestCreateJob(t *testing.T) {
+	store, tmpDir := setupTestDB(t)
+	defer cleanupTestDB(store, tmpDir)
+
+	id, err := store.CreateJob("feed_check")
+	if err != nil {
+		t.Fatalf("CreateJob: %v", err)
+	}
+	if id <= 0 {
+		t.Errorf("expected positive job ID, got %d", id)
+	}
+
+	job, err := store.GetJob(id)
+	if err != nil {
+		t.Fatalf("GetJob: %v", err)
+	}
+	if job == nil {
+		t.Fatal("GetJob returned nil for existing job")
+	}
+	if job.Type != "feed_check" {
+		t.Errorf("expected type 'feed_check', got %q", job.Type)
+	}
+	if job.Status != "running" {
+		t.Errorf("expected status 'running', got %q", job.Status)
+	}
+	if job.CompletedAt != nil {
+		t.Error("completed_at should be nil for a running job")
+	}
+}
+
+func TestCompleteJob(t *testing.T) {
+	store, tmpDir := setupTestDB(t)
+	defer cleanupTestDB(store, tmpDir)
+
+	id, _ := store.CreateJob("rescore")
+	summary := models.JobSummary{
+		ItemsFound:   10,
+		ItemsMatched: 3,
+		ItemsScored:  3,
+	}
+
+	if err := store.CompleteJob(id, summary); err != nil {
+		t.Fatalf("CompleteJob: %v", err)
+	}
+
+	job, err := store.GetJob(id)
+	if err != nil {
+		t.Fatalf("GetJob: %v", err)
+	}
+	if job.Status != "completed" {
+		t.Errorf("expected status 'completed', got %q", job.Status)
+	}
+	if job.CompletedAt == nil {
+		t.Error("expected completed_at to be set")
+	}
+	if job.Summary.ItemsFound != 10 {
+		t.Errorf("expected items_found=10, got %d", job.Summary.ItemsFound)
+	}
+}
+
+func TestFailJob(t *testing.T) {
+	store, tmpDir := setupTestDB(t)
+	defer cleanupTestDB(store, tmpDir)
+
+	id, _ := store.CreateJob("feed_check")
+	if err := store.FailJob(id, "network timeout"); err != nil {
+		t.Fatalf("FailJob: %v", err)
+	}
+
+	job, err := store.GetJob(id)
+	if err != nil {
+		t.Fatalf("GetJob: %v", err)
+	}
+	if job.Status != "failed" {
+		t.Errorf("expected status 'failed', got %q", job.Status)
+	}
+	if job.Summary.ErrorMessage != "network timeout" {
+		t.Errorf("expected error_message 'network timeout', got %q", job.Summary.ErrorMessage)
+	}
+}
+
+func TestListJobs(t *testing.T) {
+	store, tmpDir := setupTestDB(t)
+	defer cleanupTestDB(store, tmpDir)
+
+	// Create 3 jobs: 2 completed, 1 failed
+	id1, _ := store.CreateJob("feed_check")
+	id2, _ := store.CreateJob("rescore")
+	id3, _ := store.CreateJob("feed_check")
+
+	_ = store.CompleteJob(id1, models.JobSummary{ItemsFound: 5})
+	_ = store.CompleteJob(id2, models.JobSummary{ItemsScored: 2})
+	_ = store.FailJob(id3, "timeout")
+
+	// Wait a tiny bit so timestamps don't collide
+	time.Sleep(time.Millisecond)
+
+	all, err := store.ListJobs(10, "")
+	if err != nil {
+		t.Fatalf("ListJobs: %v", err)
+	}
+	if len(all) != 3 {
+		t.Errorf("expected 3 jobs, got %d", len(all))
+	}
+
+	failed, err := store.ListJobs(10, "failed")
+	if err != nil {
+		t.Fatalf("ListJobs(failed): %v", err)
+	}
+	if len(failed) != 1 {
+		t.Errorf("expected 1 failed job, got %d", len(failed))
+	}
+
+	completed, err := store.ListJobs(10, "completed")
+	if err != nil {
+		t.Fatalf("ListJobs(completed): %v", err)
+	}
+	if len(completed) != 2 {
+		t.Errorf("expected 2 completed jobs, got %d", len(completed))
+	}
+}
+
+func TestGetJob_NotFound(t *testing.T) {
+	store, tmpDir := setupTestDB(t)
+	defer cleanupTestDB(store, tmpDir)
+
+	job, err := store.GetJob(9999)
+	if err != nil {
+		t.Fatalf("GetJob on missing ID returned error: %v", err)
+	}
+	if job != nil {
+		t.Error("expected nil for missing job, got non-nil")
+	}
+}
