@@ -27,6 +27,12 @@ const app = createApp({
         const jobsPopoverOpen = ref(false);
         let jobsEventSource = null;
 
+        // Alerts state
+        const alerts = ref([]);
+        const alertsPopoverOpen = ref(false);
+        const lastReadAt = ref(new Date(localStorage.getItem('rss-curator-alerts-read-at') || 0));
+        let alertsEventSource = null;
+
         // Log drawer state
         const logsDrawerOpen = ref(false);
         const logEntries = ref([]);
@@ -76,6 +82,12 @@ const app = createApp({
         const runningJobs = computed(() => jobs.value.filter(j => j.status === 'running'));
         const failedJobs  = computed(() => jobs.value.filter(j => j.status === 'failed'));
         const recentJobs  = computed(() => jobs.value.slice(0, 5));
+
+        // Alerts computed
+        const unreadAlerts = computed(() =>
+            alerts.value.filter(a => new Date(a.triggered_at) > lastReadAt.value)
+        );
+        const recentAlerts = computed(() => alerts.value.slice().reverse().slice(0, 5));
 
         const filteredLogs = computed(() => {
             const filtered = logEntries.value.filter(e => {
@@ -624,6 +636,8 @@ const app = createApp({
             fetchStats();
             fetchJobs();
             openJobsStream();
+            fetchAlerts();
+            openAlertsStream();
             // Auto-refresh every 30 seconds
             setInterval(() => {
                 fetchAllTorrents();
@@ -676,6 +690,48 @@ const app = createApp({
             if (diff < 3600000) return Math.floor(diff / 60000) + 'm ago';
             if (diff < 86400000) return Math.floor(diff / 3600000) + 'h ago';
             return Math.floor(diff / 86400000) + 'd ago';
+        };
+
+        // Alerts helpers
+        const fetchAlerts = async () => {
+            try {
+                const res = await fetch('/api/alerts');
+                if (!res.ok) return;
+                const data = await res.json();
+                alerts.value = data || [];
+            } catch (_) {}
+        };
+
+        const openAlertsStream = () => {
+            if (alertsEventSource) return;
+            alertsEventSource = new EventSource('/api/alerts/stream');
+            alertsEventSource.onmessage = (e) => {
+                try {
+                    const alert = JSON.parse(e.data);
+                    const idx = alerts.value.findIndex(a => a.id === alert.id);
+                    if (idx >= 0) {
+                        alerts.value.splice(idx, 1, alert);
+                    } else {
+                        alerts.value.push(alert);
+                    }
+                    if (alerts.value.length > 50) alerts.value.shift();
+                } catch (_) {}
+            };
+            alertsEventSource.onerror = () => {
+                alertsEventSource.close();
+                alertsEventSource = null;
+                setTimeout(openAlertsStream, 5000);
+            };
+        };
+
+        const markAlertsRead = () => {
+            lastReadAt.value = new Date();
+            localStorage.setItem('rss-curator-alerts-read-at', lastReadAt.value.toISOString());
+        };
+
+        const clearAlerts = () => {
+            alerts.value = [];
+            markAlertsRead();
         };
 
         const toggleDarkMode = () => {
@@ -774,6 +830,12 @@ const app = createApp({
             recentJobs,
             fetchJobs,
             formatRelative,
+            alerts,
+            alertsPopoverOpen,
+            unreadAlerts,
+            recentAlerts,
+            markAlertsRead,
+            clearAlerts,
         };
     }
 });

@@ -193,6 +193,8 @@ func (s *Server) Start() error {
 	mux.HandleFunc("/api/jobs/stream", s.handleJobsStream)
 	mux.HandleFunc("/api/jobs/", s.handleJob)
 	mux.HandleFunc("/api/jobs", s.handleJobs)
+	mux.HandleFunc("/api/alerts/stream", s.handleAlertsStream)
+	mux.HandleFunc("/api/alerts", s.handleAlerts)
 
 	// Static files and UI
 	mux.Handle("/style.css", http.FileServer(http.Dir("./web")))
@@ -220,6 +222,7 @@ func (s *Server) Start() error {
 	}
 
 	s.logger.Info("API server starting", zap.String("address", addr))
+	go s.startAlertPoller()
 	return http.ListenAndServe(addr, handler)
 }
 
@@ -372,6 +375,15 @@ func (s *Server) handleApprove(w http.ResponseWriter, r *http.Request, id int) {
 		s.logger.Warn("failed to log approve activity", zap.Int("id", id), zap.Error(err))
 	}
 
+	s.logBuffer.EmitAlertEvent(models.AlertRecord{
+		Action:       "approve",
+		TorrentID:    id,
+		TorrentTitle: torrent.FeedItem.Title,
+		MatchReason:  torrent.MatchReason,
+		Message:      "Accepted: " + torrent.FeedItem.Title,
+		TriggeredAt:  time.Now(),
+	})
+
 	s.logger.Info("torrent accepted and awaiting queue decision", zap.Int("id", id), zap.String("title", torrent.FeedItem.Title))
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(ApproveResponse{
@@ -454,6 +466,15 @@ func (s *Server) handleQueue(w http.ResponseWriter, r *http.Request, id int) {
 		// Don't fail the request
 	}
 
+	s.logBuffer.EmitAlertEvent(models.AlertRecord{
+		Action:       "queue",
+		TorrentID:    id,
+		TorrentTitle: torrent.FeedItem.Title,
+		MatchReason:  torrent.MatchReason,
+		Message:      "Queued for download: " + torrent.FeedItem.Title,
+		TriggeredAt:  time.Now(),
+	})
+
 	s.logger.Info("torrent queued for download", zap.Int("id", id), zap.String("title", torrent.FeedItem.Title))
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(ApproveResponse{
@@ -508,6 +529,15 @@ func (s *Server) handleReject(w http.ResponseWriter, r *http.Request, id int) {
 		s.logger.Error("failed to log activity", zap.Int("id", id), zap.Error(err))
 		// Don't fail the request, just log the error
 	}
+
+	s.logBuffer.EmitAlertEvent(models.AlertRecord{
+		Action:       "reject",
+		TorrentID:    id,
+		TorrentTitle: torrent.FeedItem.Title,
+		MatchReason:  torrent.MatchReason,
+		Message:      "Rejected: " + torrent.FeedItem.Title,
+		TriggeredAt:  time.Now(),
+	})
 
 	s.logger.Info("torrent rejected", zap.Int("id", id), zap.String("title", torrent.FeedItem.Title))
 	w.Header().Set("Content-Type", "application/json")
@@ -904,6 +934,11 @@ func (s *Server) handleRescore(w http.ResponseWriter, r *http.Request) {
 		finalJob.Status = "failed"
 		finalJob.Summary.ErrorMessage = rescoreErr.Error()
 		_ = s.store.FailJob(jobID, rescoreErr.Error())
+		s.logBuffer.EmitAlertEvent(models.AlertRecord{
+			Action:      "job_failed",
+			Message:     "Rescore failed: " + rescoreErr.Error(),
+			TriggeredAt: now,
+		})
 	} else {
 		finalJob.Status = "completed"
 		_ = s.store.CompleteJob(jobID, summary)
@@ -1032,4 +1067,140 @@ func (s *Server) handleSuggestions(w http.ResponseWriter, r *http.Request) {
 		Suggestions: []interface{}{},
 		Status:      "not_implemented",
 	})
+}
+
+// handleAlerts returns buffered alert records as JSON (newest-last chronological order).
+// GET /api/alerts
+func (s *Server) handleAlerts(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	alerts := s.logBuffer.RecentAlerts()
+	if alerts == nil {
+		alerts = []models.AlertRecord{}
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(alerts)
+}
+
+// handleAlertsStream streams live alert events over Server-Sent Events.
+// GET /api/alerts/stream
+//
+// On connect the ring buffer is backfilled (recent alerts are replayed) then
+// future events are forwarded as they arrive.
+func (s *Server) handleAlertsStream(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	fl, ok := w.(http.Flusher)
+	if !ok {
+		http.Error(w, "streaming unsupported", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+
+	ch, unsub := s.logBuffer.SubscribeAlerts()
+	defer unsub()
+
+	fmt.Fprintf(w, ": connected\n\n")
+	fl.Flush()
+
+	for {
+		select {
+		case alert, open := <-ch:
+			if !open {
+				return
+			}
+			data, err := json.Marshal(alert)
+			if err != nil {
+				continue
+			}
+			fmt.Fprintf(w, "data: %s\n\n", data)
+			fl.Flush()
+		case <-r.Context().Done():
+			return
+		}
+	}
+}
+
+// startAlertPoller runs as a background goroutine for the lifetime of the
+// server. It polls the jobs table on a 15-second ticker to detect events that
+// originate from the cmdCheck OS process (which cannot call EmitAlertEvent
+// directly because it shares no memory with cmdServe).
+//
+// Detected events:
+//   - Any newly failed job (any type) → "job_failed" alert
+//   - Newly completed feed_check job with ItemsMatched > 0 → "staged" alert
+func (s *Server) startAlertPoller() {
+	ticker := time.NewTicker(15 * time.Second)
+	defer ticker.Stop()
+
+	// Track the highest job ID we have already processed so we only surface new ones.
+	lastSeenID := 0
+
+	// Seed lastSeenID from the current latest job so we don't fire alerts for
+	// history that existed before this server process started.
+	if existing, err := s.store.ListJobs(1, ""); err == nil && len(existing) > 0 {
+		lastSeenID = existing[0].ID
+	}
+
+	for range ticker.C {
+		jobs, err := s.store.ListJobs(50, "")
+		if err != nil {
+			s.logger.Warn("alert poller: failed to list jobs", zap.Error(err))
+			continue
+		}
+
+		for i := len(jobs) - 1; i >= 0; i-- { // iterate oldest → newest
+			j := jobs[i]
+			if j.ID <= lastSeenID {
+				continue
+			}
+			// Only surface terminal states — skip still-running jobs.
+			if j.Status == "running" {
+				continue
+			}
+
+			switch {
+			case j.Status == "failed":
+				msg := "Job failed: " + j.Type
+				if j.Summary.ErrorMessage != "" {
+					msg += " — " + j.Summary.ErrorMessage
+				}
+				s.logBuffer.EmitAlertEvent(models.AlertRecord{
+					Action:  "job_failed",
+					Message: msg,
+					TriggeredAt: func() time.Time {
+						if j.CompletedAt != nil {
+							return *j.CompletedAt
+						}
+						return time.Now()
+					}(),
+				})
+
+			case j.Status == "completed" && j.Type == "feed_check" && j.Summary.ItemsMatched > 0:
+				s.logBuffer.EmitAlertEvent(models.AlertRecord{
+					Action:  "staged",
+					Message: fmt.Sprintf("Feed check: %d new match(es) staged", j.Summary.ItemsMatched),
+					TriggeredAt: func() time.Time {
+						if j.CompletedAt != nil {
+							return *j.CompletedAt
+						}
+						return time.Now()
+					}(),
+				})
+			}
+
+			if j.ID > lastSeenID {
+				lastSeenID = j.ID
+			}
+		}
+	}
 }

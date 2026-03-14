@@ -5,6 +5,25 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.22.0] - 2026-03-13
+
+### Added
+- **Alerts system** — ephemeral in-memory notification ring (cap 50) for curator actions: `approve`, `reject`, `queue`, `staged` (feed_check with matched items), and `job_failed`
+- `AlertRecord` struct in `pkg/models/types.go` — `id`, `action`, `torrent_id`, `torrent_title`, `match_reason`, `message`, `triggered_at`
+- `logbuffer.Buffer` gains `EmitAlertEvent`, `SubscribeAlerts` (backfills ring on connect), and `RecentAlerts` — parallel to the existing jobs fan-out, using an independent ring, mutex, and subscriber map
+- **REST endpoints**: `GET /api/alerts` (JSON ring snapshot), `GET /api/alerts/stream` (SSE — replays ring backfill then streams live events)
+- **Background alert poller** (`startAlertPoller`) — 15 s ticker in `cmdServe` reads the SQLite `jobs` table for new `failed` jobs and `completed` `feed_check` jobs with matches; bridges the `cmdCheck`→`cmdServe` process gap; seeds `lastSeenID` on startup to avoid surfacing pre-existing history
+- **Alert bell icon** in the fixed top nav — amber `bg-amber-400` unread-count badge (shows "9+" above 9); clicking opens the alerts popover and clears the unread count
+- **Alerts popover** — `w-80` dropdown listing the 5 most recent alerts; action colour dot (emerald=approve, red=reject/job_failed, blue=queue, curator-500=staged); message, relative time, and `match_reason` when present; "clear" button purges client-side list; outside-click overlay closes both jobs and alerts popovers
+- Unread tracking via `localStorage` key `rss-curator-alerts-read-at` (ISO timestamp); survives page reload
+
+### Changed
+- `handleApprove`, `handleQueue`, `handleReject` each emit an `AlertRecord` with relevant torrent metadata after logging activity
+- `handleRescore` failure path emits a `job_failed` alert
+- Outside-click overlay now closes both `jobsPopoverOpen` and `alertsPopoverOpen`
+- `app.js`: adds `alerts`, `alertsPopoverOpen`, `lastReadAt` refs; `unreadAlerts` and `recentAlerts` computed; `fetchAlerts`, `openAlertsStream` (always-open SSE with upsert + auto-reconnect), `markAlertsRead`, `clearAlerts` helpers; all called/returned appropriately
+- `server_test.go`: test `Server` now wires a real `logbuffer.NewBuffer()` instead of `nil` so `EmitAlertEvent` calls in handlers don't panic during unit tests
+
 ## [0.21.0] - 2026-03-12
 
 ### Added

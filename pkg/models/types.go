@@ -119,6 +119,26 @@ type JobSummary struct {
 	ErrorMessage string `json:"error_message,omitempty"`
 }
 
+// AlertRecord is an ephemeral in-memory notification emitted by the server for
+// user-facing events. It is never persisted to SQLite; the activity_log table
+// remains the durable audit trail.
+//
+// Action values:
+//   - "approve"    — torrent accepted by a user
+//   - "reject"     — torrent rejected by a user
+//   - "queue"      — accepted torrent pushed to qBittorrent
+//   - "staged"     — feed_check completed with new matches
+//   - "job_failed" — any background job failed
+type AlertRecord struct {
+	ID           uint64    `json:"id"`
+	Action       string    `json:"action"`
+	TorrentID    int       `json:"torrent_id,omitempty"`
+	TorrentTitle string    `json:"torrent_title,omitempty"`
+	MatchReason  string    `json:"match_reason,omitempty"`
+	Message      string    `json:"message"`
+	TriggeredAt  time.Time `json:"triggered_at"`
+}
+
 // JobRecord represents a tracked background operation written to the jobs table.
 // Status values: "running", "completed", "failed".
 // Type values: "feed_check", "rescore_backfill", "rescore".

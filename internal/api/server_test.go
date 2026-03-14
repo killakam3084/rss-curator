@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/killakam3084/rss-curator/internal/logbuffer"
 	"github.com/killakam3084/rss-curator/internal/storage"
 	"github.com/killakam3084/rss-curator/pkg/models"
 	"go.uber.org/zap"
@@ -144,7 +145,7 @@ func setupTestServer(t *testing.T) (*Server, *mockStorage) {
 		store:      store,
 		client:     nil, // No qBittorrent client for testing
 		logger:     logger,
-		logBuffer:  nil,
+		logBuffer:  logbuffer.NewBuffer(),
 		scorer:     nil, // AI scoring not exercised in unit tests
 		aiProvider: nil,
 		port:       8081,

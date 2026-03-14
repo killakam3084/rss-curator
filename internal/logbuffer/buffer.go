@@ -14,6 +14,10 @@ import (
 // Cap is the maximum number of log entries retained in memory.
 const Cap = 500
 
+// AlertCap is the maximum number of alert records retained in the ring buffer.
+// Alerts are ephemeral; this covers a comfortable session window.
+const AlertCap = 50
+
 // LogEntry is a single structured log line captured from the application.
 type LogEntry struct {
 	ID      uint64         `json:"id"`
@@ -39,6 +43,16 @@ type Buffer struct {
 	jobSubsMu     sync.Mutex
 	jobSubs       map[uint64]chan models.JobRecord
 	jobSubCounter atomic.Uint64
+
+	// alert ring + SSE fan-out
+	alertMu         sync.RWMutex
+	alertEntries    [AlertCap]models.AlertRecord
+	alertHead       int
+	alertCount      int
+	alertIDCounter  atomic.Uint64
+	alertSubsMu     sync.Mutex
+	alertSubs       map[uint64]chan models.AlertRecord
+	alertSubCounter atomic.Uint64
 }
 
 // NewBuffer allocates and returns a ready-to-use Buffer.
@@ -46,6 +60,7 @@ func NewBuffer() *Buffer {
 	return &Buffer{
 		subscribers: make(map[uint64]chan LogEntry),
 		jobSubs:     make(map[uint64]chan models.JobRecord),
+		alertSubs:   make(map[uint64]chan models.AlertRecord),
 	}
 }
 
@@ -132,6 +147,77 @@ func (b *Buffer) SubscribeJobs() (<-chan models.JobRecord, func()) {
 		close(ch)
 	}
 	return ch, unsub
+}
+
+// EmitAlertEvent writes an AlertRecord to the ring buffer, assigns it an
+// auto-incremented ID, and fans it out to all current alert SSE subscribers.
+func (b *Buffer) EmitAlertEvent(alert models.AlertRecord) {
+	alert.ID = b.alertIDCounter.Add(1)
+
+	b.alertMu.Lock()
+	b.alertEntries[b.alertHead] = alert
+	b.alertHead = (b.alertHead + 1) % AlertCap
+	if b.alertCount < AlertCap {
+		b.alertCount++
+	}
+	b.alertMu.Unlock()
+
+	b.alertSubsMu.Lock()
+	for _, ch := range b.alertSubs {
+		select {
+		case ch <- alert:
+		default:
+			// slow subscriber; drop rather than block
+		}
+	}
+	b.alertSubsMu.Unlock()
+}
+
+// SubscribeAlerts registers a new alert SSE subscriber. It immediately
+// backfills the current ring contents so new connections see recent alerts,
+// then streams future events. Returns the channel and an unsubscribe func.
+func (b *Buffer) SubscribeAlerts() (<-chan models.AlertRecord, func()) {
+	id := b.alertSubCounter.Add(1)
+	ch := make(chan models.AlertRecord, AlertCap+8) // large enough for backfill burst
+
+	// Backfill existing ring entries before registering for live events.
+	b.alertMu.RLock()
+	if b.alertCount > 0 {
+		start := (b.alertHead - b.alertCount + AlertCap) % AlertCap
+		for i := 0; i < b.alertCount; i++ {
+			ch <- b.alertEntries[(start+i)%AlertCap]
+		}
+	}
+	b.alertMu.RUnlock()
+
+	b.alertSubsMu.Lock()
+	b.alertSubs[id] = ch
+	b.alertSubsMu.Unlock()
+
+	unsub := func() {
+		b.alertSubsMu.Lock()
+		delete(b.alertSubs, id)
+		b.alertSubsMu.Unlock()
+		close(ch)
+	}
+	return ch, unsub
+}
+
+// RecentAlerts returns all buffered alert records in chronological order
+// (oldest first). Safe for concurrent use.
+func (b *Buffer) RecentAlerts() []models.AlertRecord {
+	b.alertMu.RLock()
+	defer b.alertMu.RUnlock()
+
+	if b.alertCount == 0 {
+		return nil
+	}
+	result := make([]models.AlertRecord, b.alertCount)
+	start := (b.alertHead - b.alertCount + AlertCap) % AlertCap
+	for i := 0; i < b.alertCount; i++ {
+		result[i] = b.alertEntries[(start+i)%AlertCap]
+	}
+	return result
 }
 
 // Subscribe registers a new SSE subscriber. It returns a read-only channel
