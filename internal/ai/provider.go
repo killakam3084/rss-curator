@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -64,6 +65,24 @@ func NewProviderFor(subsystem string) Provider {
 		temperature = 0.0
 	}
 
+	// num_ctx: KV cache context window for Ollama. Curator prompts are small
+	// (~400 tokens); 2048 is generous headroom without the cost of 128K default.
+	numCtx := 2048
+	if v := os.Getenv("CURATOR_AI_NUM_CTX"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			numCtx = n
+		}
+	}
+
+	// num_predict: max tokens to generate. Scorer output is ~60-80 tokens of
+	// JSON; 200 is safe headroom. Enricher/suggester may need more.
+	numPredict := 200
+	if v := os.Getenv("CURATOR_AI_NUM_PREDICT"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			numPredict = n
+		}
+	}
+
 	switch providerType {
 	case "openai":
 		if host == "" {
@@ -93,6 +112,8 @@ func NewProviderFor(subsystem string) Provider {
 			model:       model,
 			client:      &http.Client{},
 			temperature: temperature,
+			numCtx:      numCtx,
+			numPredict:  numPredict,
 		}
 	}
 }
@@ -114,6 +135,8 @@ type ollamaProvider struct {
 	model       string
 	client      *http.Client
 	temperature float64
+	numCtx      int
+	numPredict  int
 }
 
 type ollamaRequest struct {
@@ -125,6 +148,8 @@ type ollamaRequest struct {
 
 type ollamaOptions struct {
 	Temperature float64 `json:"temperature"`
+	NumCtx      int     `json:"num_ctx"`
+	NumPredict  int     `json:"num_predict"`
 }
 
 type ollamaMessage struct {
@@ -144,8 +169,12 @@ func (o *ollamaProvider) Complete(ctx context.Context, system, user string) (str
 			{Role: "system", Content: system},
 			{Role: "user", Content: user},
 		},
-		Stream:  false,
-		Options: ollamaOptions{Temperature: o.temperature},
+		Stream: false,
+		Options: ollamaOptions{
+			Temperature: o.temperature,
+			NumCtx:      o.numCtx,
+			NumPredict:  o.numPredict,
+		},
 	})
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, o.host+"/api/chat", bytes.NewReader(body))

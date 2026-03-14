@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.22.3] - 2026-03-13
+
+### Changed
+- Ollama provider now sends `num_ctx` and `num_predict` in every `/api/chat` request
+- `CURATOR_AI_NUM_CTX` (default `2048`) — caps the KV cache context window; eliminates Ollama's wasteful 128K default allocation for curator's ~400-token prompts
+- `CURATOR_AI_NUM_PREDICT` (default `200`) — caps token generation; scorer output is 60-80 tokens of JSON, so this prevents runaway generation without any risk of truncation
+- Both vars documented in `curator.env.sample`
+
 ## [0.22.2] - 2026-03-13
 
 ### Changed
