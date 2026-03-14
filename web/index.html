@@ -70,7 +70,7 @@
                 <!-- Jobs button + badge -->
                 <div class="relative">
                     <button
-                        @click="jobsPopoverOpen = !jobsPopoverOpen"
+                        @click="jobsPopoverOpen = !jobsPopoverOpen; alertsPopoverOpen = false"
                         class="relative p-2 rounded border transition-colors duration-150"
                         :class="jobsPopoverOpen
                             ? 'bg-gray-800 border-gray-600 text-white'
@@ -141,7 +141,7 @@
                 <!-- Alerts button + badge -->
                 <div class="relative">
                     <button
-                        @click="alertsPopoverOpen = !alertsPopoverOpen; if (alertsPopoverOpen) markAlertsRead()"
+                        @click="alertsPopoverOpen = !alertsPopoverOpen; jobsPopoverOpen = false; if (alertsPopoverOpen) markAlertsRead()"
                         class="relative p-2 rounded border transition-colors duration-150"
                         :class="alertsPopoverOpen
                             ? 'bg-gray-800 border-gray-600 text-white'

@@ -5,6 +5,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.22.2] - 2026-03-13
+
+### Changed
+- Jobs and alerts popovers are now mutually exclusive — opening one closes the other; both can no longer be stacked simultaneously
+
 ## [0.22.1] - 2026-03-13
 
 ### Changed
