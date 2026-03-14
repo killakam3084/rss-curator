@@ -71,7 +71,10 @@
                 <div class="relative">
                     <button
                         @click="jobsPopoverOpen = !jobsPopoverOpen"
-                        class="relative p-2 rounded hover:bg-gray-800 border border-transparent hover:border-gray-700 transition-colors duration-150"
+                        class="relative p-2 rounded border transition-colors duration-150"
+                        :class="jobsPopoverOpen
+                            ? 'bg-gray-800 border-gray-600 text-white'
+                            : 'border-transparent hover:bg-gray-800 hover:border-gray-700'"
                         title="Jobs"
                     >
                         <!-- briefcase icon -->
@@ -93,6 +96,14 @@
                     </button>
 
                     <!-- Jobs popover -->
+                    <Transition
+                        enter-active-class="transition ease-out duration-150"
+                        enter-from-class="opacity-0 -translate-y-1"
+                        enter-to-class="opacity-100 translate-y-0"
+                        leave-active-class="transition ease-in duration-100"
+                        leave-from-class="opacity-100 translate-y-0"
+                        leave-to-class="opacity-0 -translate-y-1"
+                    >
                     <div
                         v-if="jobsPopoverOpen"
                         class="absolute top-10 right-0 w-80 bg-gray-900 border border-gray-700 rounded-lg shadow-2xl z-50"
@@ -124,13 +135,17 @@
                             </li>
                         </ul>
                     </div>
+                    </Transition>
                 </div>
 
                 <!-- Alerts button + badge -->
                 <div class="relative">
                     <button
                         @click="alertsPopoverOpen = !alertsPopoverOpen; if (alertsPopoverOpen) markAlertsRead()"
-                        class="relative p-2 rounded hover:bg-gray-800 border border-transparent hover:border-gray-700 transition-colors duration-150"
+                        class="relative p-2 rounded border transition-colors duration-150"
+                        :class="alertsPopoverOpen
+                            ? 'bg-gray-800 border-gray-600 text-white'
+                            : 'border-transparent hover:bg-gray-800 hover:border-gray-700'"
                         title="Alerts"
                     >
                         <!-- bell icon -->
@@ -146,6 +161,14 @@
                     </button>
 
                     <!-- Alerts popover -->
+                    <Transition
+                        enter-active-class="transition ease-out duration-150"
+                        enter-from-class="opacity-0 -translate-y-1"
+                        enter-to-class="opacity-100 translate-y-0"
+                        leave-active-class="transition ease-in duration-100"
+                        leave-from-class="opacity-100 translate-y-0"
+                        leave-to-class="opacity-0 -translate-y-1"
+                    >
                     <div
                         v-if="alertsPopoverOpen"
                         class="absolute top-10 right-0 w-80 bg-gray-900 border border-gray-700 rounded-lg shadow-2xl z-50"
@@ -176,6 +199,7 @@
                             </li>
                         </ul>
                     </div>
+                    </Transition>
                 </div>
 
                 <!-- Logout -->

@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.22.1] - 2026-03-13
+
+### Changed
+- Jobs and alerts popover buttons now show a persistent `bg-gray-800 border-gray-600` active state while their popover is open, making focus visually unambiguous
+- Both popovers gain a Vue `<Transition>` fade + slide-down entrance (150 ms ease-out) and slide-up exit (100 ms ease-in), so open/close feel intentional rather than an instant snap
+
 ## [0.22.0] - 2026-03-13
 
 ### Added
