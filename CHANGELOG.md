@@ -5,6 +5,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.22.9] - 2026-03-16
+
+### Added
+- Compact show-history summaries for the AI scorer to reduce token usage and improve scoring stability; introduces `internal/ai/history.go` and updates `internal/ai/scorer.go` to use summary-based history.
+
 ## [0.22.7] - 2026-03-15
 
 ### Fixed
