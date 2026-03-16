@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.22.6] - 2026-03-15
+
+### Fixed
+- AI scorer producing nonsensical reasons like `"Highly similar to a well-formed JSON object"` — llama3.2 was treating the user prompt text itself as the thing to evaluate rather than the torrent described within it
+- Added explicit task-closing instruction `"Score the torrent release described above."` at the end of every user prompt, anchoring the model's task after it has received all context
+- Removed `max 80 chars` hints from system prompt field descriptions — structured output enforces types not lengths; the hints were adding noise that contributed to prompt confusion on smaller models
+
 ## [0.22.5] - 2026-03-15
 
 ### Fixed

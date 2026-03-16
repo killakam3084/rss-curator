@@ -48,9 +48,9 @@ Match confidence:
 Always respond with a single JSON object. No explanation, no markdown, just raw JSON.
 Fields:
   score                    (float, 0.0-1.0)   - predicted likelihood of approval
-  reason                   (string, max 80 chars) - one-line explanation of score
+  reason                   (string)            - one-line explanation of score
   match_confidence         (float, 0.0-1.0)   - likelihood the rule name correctly identifies the content
-  match_confidence_reason  (string, max 80 chars) - one-line explanation of match confidence
+  match_confidence_reason  (string)            - one-line explanation of match confidence
 
 Example output (use exactly this shape, no other keys):
 {"score":0.85,"reason":"Strong content match, preferred codec and group","match_confidence":0.95,"match_confidence_reason":"Rule name exactly matches parsed show title"}`
@@ -166,7 +166,7 @@ func (s *Scorer) scoreOne(t *models.StagedTorrent, histCtx string) (float64, str
 	}
 
 	user := fmt.Sprintf(
-		"Content signals:\nTitle: %s\nParsed show (from title): %s\nMatched rule: %s\nMatch reason: %s\n\nTechnical signals:\nQuality: %s | Codec: %s | Group: %s | Source: %s\n\nRecent history:\n%s",
+		"Content signals:\nTitle: %s\nParsed show (from title): %s\nMatched rule: %s\nMatch reason: %s\n\nTechnical signals:\nQuality: %s | Codec: %s | Group: %s | Source: %s\n\nRecent history:\n%s\n\nScore the torrent release described above.",
 		t.FeedItem.Title,
 		showEp,
 		extractMatchedRule(t.MatchReason),
