@@ -152,6 +152,15 @@ func extractMatchedRule(matchReason string) string {
 }
 
 func (s *Scorer) scoreOne(t *models.StagedTorrent, histCtx string) (float64, string, float64, string) {
+	// Log scorer.request with compressed history context for correlation
+	if s.logger != nil {
+		s.logger.Debug("scorer.request",
+			zap.Int("torrent_id", t.ID),
+			zap.String("title", t.FeedItem.Title),
+			zap.String("user_prompt", user),
+			zap.String("compressed_history", histCtx),
+		)
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(s.timeoutSecs)*time.Second)
 	defer cancel()
 
