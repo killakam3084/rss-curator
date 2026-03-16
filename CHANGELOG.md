@@ -5,6 +5,25 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+
+## [0.22.8] - 2026-03-15
+
+### Changed
+- Alerts system: UI polish and bugfixes for popover mutual exclusion, active-state styling, and transitions in `web/index.html` and `web/app.js`.
+- Alerts popover and jobs popover are now mutually exclusive (opening one closes the other).
+- Popover buttons show persistent active state while open.
+- Added Vue `<Transition>` fade/slide for popover open/close.
+- Overlay closes both popovers on outside click.
+
+### Fixed
+- Minor UI/UX bugs in alerts and jobs popovers.
+
+
+## [0.22.10] - 2026-03-16
+
+### Added
+- Log compressed show-history context in `scorer.request` debug logs for benchmarking and validation. This makes it easy to correlate the prompt input with each scorer response.
+
 ## [0.22.9] - 2026-03-16
 
 ### Added
