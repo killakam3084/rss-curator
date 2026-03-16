@@ -125,10 +125,10 @@ func (s *Scorer) ScoreAll(staged []models.StagedTorrent, history []models.Activi
 	if !s.provider.Available() {
 		return staged
 	}
-
-	histCtx := buildHistoryContext(history, s.historySize)
 	for i := range staged {
 		t := &staged[i]
+		candidateShow := extractMatchedRule(t.MatchReason)
+		histCtx := buildHistoryContext(history, s.historySize, candidateShow)
 		t.AIScore, t.AIReason, t.MatchConfidence, t.MatchConfidenceReason = s.scoreOne(t, histCtx)
 	}
 	return staged
@@ -263,19 +263,54 @@ func (s *Scorer) scoreOne(t *models.StagedTorrent, histCtx string) (float64, str
 // buildHistoryContext produces a compact text summary of activity history for
 // inclusion in the scoring prompt. Uses stratified sampling via sampleHistory.
 // Each line includes the action, title, and match reason for richer signal.
-func buildHistoryContext(history []models.Activity, size int) string {
-	if len(history) == 0 {
+func buildHistoryContext(history []models.Activity, size int, candidateShow string) string {
+	summaries := BuildShowSummaries(history, size)
+	if len(summaries) == 0 {
 		return "No history yet."
 	}
-	history = sampleHistory(history, size)
-	var sb strings.Builder
-	for _, h := range history {
-		line := fmt.Sprintf("[%s] %s", strings.ToUpper(h.Action), h.TorrentTitle)
-		if h.MatchReason != "" {
-			line += fmt.Sprintf(" (match: %s)", h.MatchReason)
-		}
-		sb.WriteString(line + "\n")
+
+	// Create a sortable slice of summaries by total interaction weight.
+	type kv struct {
+		name string
+		tot  float64
+		s    *ShowSummary
 	}
+	var list []kv
+	for name, s := range summaries {
+		tot := s.ApproveWeight + s.RejectWeight + float64(s.QueueCount)
+		list = append(list, kv{name: name, tot: tot, s: s})
+	}
+
+	sort.Slice(list, func(i, j int) bool { return list[i].tot > list[j].tot })
+
+	var sb strings.Builder
+	// Candidate show first when available
+	if candidateShow != "" {
+		if s, ok := summaries[candidateShow]; ok {
+			sb.WriteString(formatShortSummary(s) + "\n")
+			// mark printed
+			for i := range list {
+				if list[i].name == candidateShow {
+					list[i].tot = -1
+					break
+				}
+			}
+		}
+	}
+
+	// Append top 3 other shows
+	appended := 0
+	for _, it := range list {
+		if it.tot < 0 {
+			continue
+		}
+		sb.WriteString(formatShortSummary(it.s) + "\n")
+		appended++
+		if appended >= 3 {
+			break
+		}
+	}
+
 	return sb.String()
 }
 
