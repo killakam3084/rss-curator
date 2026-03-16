@@ -66,9 +66,17 @@ type Scorer struct {
 var scoreOutputSchema = json.RawMessage(`{
 	"type": "object",
 	"properties": {
-		"score":                    {"type": "number"},
+		"score": {
+			"type": "number",
+			"minimum": 0,
+			"maximum": 1
+		},
 		"reason":                   {"type": "string"},
-		"match_confidence":         {"type": "number"},
+		"match_confidence": {
+			"type": "number",
+			"minimum": 0,
+			"maximum": 1
+		},
 		"match_confidence_reason":  {"type": "string"}
 	},
 	"required": ["score", "reason", "match_confidence", "match_confidence_reason"]
@@ -211,12 +219,20 @@ func (s *Scorer) scoreOne(t *models.StagedTorrent, histCtx string) (float64, str
 		return 0, "", -1, ""
 	}
 
-	// Clamp score to [0, 1].
+	// Clamp score to [0, 1] and record original for diagnostics.
+	origScore := result.Score
 	if result.Score < 0 {
 		result.Score = 0
 	}
 	if result.Score > 1 {
 		result.Score = 1
+	}
+	if s.logger != nil && origScore != result.Score {
+		s.logger.Debug("scorer.clamped",
+			zap.Int("torrent_id", t.ID),
+			zap.Float64("original_score", origScore),
+			zap.Float64("clamped_score", result.Score),
+		)
 	}
 
 	// Clamp match_confidence to [0, 1]; -1 sentinel means not assessed.
