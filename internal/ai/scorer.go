@@ -15,35 +15,25 @@ import (
 )
 
 const scoreSystemPrompt = `You are a torrent preference scorer.
-You will receive two categories of signals about a candidate torrent release:
-
-  CONTENT SIGNALS (primary weight)
-    These reflect *what* the content is. A strong content match indicates the
-    user is likely to want this title regardless of release packaging.
-
-  TECHNICAL SIGNALS (secondary weight)
-    These reflect *how well packaged* the release is (codec, quality, group).
-    A strong technical profile improves an already good content match but
-    cannot compensate for weak content relevance.
+You will receive:
+  1. A recent approval history showing past APPROVE/REJECT/QUEUE decisions (for context only).
+  2. A candidate torrent to score — this is the release you must evaluate.
 
 Scoring rules:
-  1. The "Match reason" field is AUTHORITATIVE — it was produced by a deterministic
-     matcher that already evaluated whether the title, quality, codec, and group meet
-     the user's preferences. Do NOT re-evaluate whether those specs are appropriate;
-     treat a non-empty match reason as confirmation that the technical profile is correct.
-  2. Use Technical signals only to differentiate between candidates that share the
-     same match reason (e.g. prefer Atmos over non-Atmos when both match equally).
-  3. A torrent that matches well on content with suboptimal technical specs should
-     score higher than one with perfect technical specs but weak content match.
+  1. Score ONLY the candidate torrent. The history entries are context — do not score them.
+  2. The "Match reason" field is AUTHORITATIVE — it was produced by a deterministic
+     matcher that already confirmed title, quality, codec, and group meet preferences.
+     Do NOT re-evaluate those specs; treat a non-empty match reason as confirmation.
+  3. Use history to calibrate likelihood of approval for this type of content and quality.
+  4. A torrent matching well on content with suboptimal technical specs should score
+     higher than one with perfect technical specs but weak content relevance.
 
 Match confidence:
-  Separately from scoring, assess whether the "Matched rule" field plausibly identifies
-  the actual content in the title. Compare "Matched rule" against "Parsed show" and the
-  full "Title". Score 1.0 when the matched rule is clearly the show/movie being released.
-  Score low when the rule name appears to be an incidental substring of an unrelated title
+  Assess whether the "Matched rule" field plausibly identifies the actual content in the
+  candidate title. Score 1.0 when the rule clearly names the show/movie being released.
+  Score low when the rule appears to be an incidental substring of an unrelated title
   (e.g. rule "NOVA" firing on "Renovation"; rule "Invincible" firing on "The Invincible
-  Samurai"). This is orthogonal to release quality — a perfect release of the wrong
-  content should have high score but low match_confidence.
+  Samurai"). This is orthogonal to release quality.
 
 Always respond with a single JSON object. No explanation, no markdown, just raw JSON.
 Fields:
@@ -166,7 +156,8 @@ func (s *Scorer) scoreOne(t *models.StagedTorrent, histCtx string) (float64, str
 	}
 
 	user := fmt.Sprintf(
-		"Content signals:\nTitle: %s\nParsed show (from title): %s\nMatched rule: %s\nMatch reason: %s\n\nTechnical signals:\nQuality: %s | Codec: %s | Group: %s | Source: %s\n\nRecent history:\n%s\n\nScore the torrent release described above.",
+		"Recent approval history (for context — do not score these):\n%s\nCandidate torrent to score:\nTitle: %s\nParsed show (from title): %s\nMatched rule: %s\nMatch reason: %s\nQuality: %s | Codec: %s | Group: %s | Source: %s\n\nScore the candidate torrent above.",
+		histCtx,
 		t.FeedItem.Title,
 		showEp,
 		extractMatchedRule(t.MatchReason),
@@ -175,7 +166,6 @@ func (s *Scorer) scoreOne(t *models.StagedTorrent, histCtx string) (float64, str
 		t.FeedItem.Codec,
 		t.FeedItem.ReleaseGroup,
 		t.FeedItem.Source,
-		histCtx,
 	)
 
 	if s.logger != nil {

@@ -22,7 +22,7 @@ import (
 )
 
 const (
-	version = "0.22.6"
+	version = "0.22.7"
 )
 
 func main() {

@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.22.7] - 2026-03-15
+
+### Fixed
+- AI scorer recency bias: model was reading the last history entries (e.g. `[REJECT] Beachfront Bargain Hunt Renovation`) immediately before the task instruction and anchoring on them as the subject to score rather than the candidate torrent
+- Restructured user prompt from `[candidate] → [history] → score` to `[history (context)] → [candidate] → score` — candidate torrent now appears immediately before the task instruction so it is the last thing the model reads, eliminating positional confusion
+- Added explicit label `"Recent approval history (for context only — do not score these):"` before history block and `"Candidate torrent to score:"` before the release fields
+- Rewrote system prompt to match new prompt structure: numbered inputs (1. history, 2. candidate), explicit `"Score ONLY the candidate torrent"` rule, consolidated into cleaner instruction set
+
 ## [0.22.6] - 2026-03-15
 
 ### Fixed
