@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.22.4] - 2026-03-15
+
+### Fixed
+- AI scorer response `unexpected end of JSON input` — root cause was two compounding issues:
+  1. `num_predict=200` was too low; llama3.2 was generating a verbose wrong-schema response that exceeded the cap and produced truncated JSON. Default raised to `400`
+  2. Ollama was not in JSON mode — added `format: "json"` to every `/api/chat` request, which constrains the model to syntactically valid JSON output regardless of verbosity
+- Added explicit JSON shape example to the scorer system prompt to reduce schema hallucination (`status`/`title`/`url` keys instead of `score`/`reason`) on smaller models
+
 ## [0.22.3] - 2026-03-13
 
 ### Changed

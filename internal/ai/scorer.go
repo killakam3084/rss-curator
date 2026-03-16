@@ -50,7 +50,10 @@ Fields:
   score                    (float, 0.0-1.0)   - predicted likelihood of approval
   reason                   (string, max 80 chars) - one-line explanation of score
   match_confidence         (float, 0.0-1.0)   - likelihood the rule name correctly identifies the content
-  match_confidence_reason  (string, max 80 chars) - one-line explanation of match confidence`
+  match_confidence_reason  (string, max 80 chars) - one-line explanation of match confidence
+
+Example output (use exactly this shape, no other keys):
+{"score":0.85,"reason":"Strong content match, preferred codec and group","match_confidence":0.95,"match_confidence_reason":"Rule name exactly matches parsed show title"}`
 
 type scoreResult struct {
 	Score                 float64 `json:"score"`

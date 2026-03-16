@@ -74,9 +74,9 @@ func NewProviderFor(subsystem string) Provider {
 		}
 	}
 
-	// num_predict: max tokens to generate. Scorer output is ~60-80 tokens of
-	// JSON; 200 is safe headroom. Enricher/suggester may need more.
-	numPredict := 200
+	// num_predict: max tokens to generate. Scorer output is ~80-100 tokens of
+	// JSON; 400 is safe headroom. Enricher/suggester may need more.
+	numPredict := 400
 	if v := os.Getenv("CURATOR_AI_NUM_PREDICT"); v != "" {
 		if n, err := strconv.Atoi(v); err == nil && n > 0 {
 			numPredict = n
@@ -143,6 +143,7 @@ type ollamaRequest struct {
 	Model    string          `json:"model"`
 	Messages []ollamaMessage `json:"messages"`
 	Stream   bool            `json:"stream"`
+	Format   string          `json:"format,omitempty"`
 	Options  ollamaOptions   `json:"options"`
 }
 
@@ -170,6 +171,7 @@ func (o *ollamaProvider) Complete(ctx context.Context, system, user string) (str
 			{Role: "user", Content: user},
 		},
 		Stream: false,
+		Format: "json",
 		Options: ollamaOptions{
 			Temperature: o.temperature,
 			NumCtx:      o.numCtx,
