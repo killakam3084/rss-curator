@@ -21,6 +21,14 @@ type Provider interface {
 	Available() bool
 }
 
+// FormatSetter is implemented by providers that support structured output
+// schemas (Ollama structured outputs). Callers can type-assert a Provider to
+// FormatSetter and call SetFormat with a JSON Schema object to constrain the
+// model to a specific response shape.
+type FormatSetter interface {
+	SetFormat(schema json.RawMessage)
+}
+
 // NewProvider constructs a Provider from environment variables using the
 // shared model setting. Equivalent to NewProviderFor("").
 //
@@ -137,13 +145,18 @@ type ollamaProvider struct {
 	temperature float64
 	numCtx      int
 	numPredict  int
+	format      json.RawMessage // nil = omit; set via SetFormat for structured output
 }
+
+// SetFormat implements FormatSetter. Pass a JSON Schema object to enable
+// Ollama structured outputs, which pins the response to that exact shape.
+func (o *ollamaProvider) SetFormat(schema json.RawMessage) { o.format = schema }
 
 type ollamaRequest struct {
 	Model    string          `json:"model"`
 	Messages []ollamaMessage `json:"messages"`
 	Stream   bool            `json:"stream"`
-	Format   string          `json:"format,omitempty"`
+	Format   json.RawMessage `json:"format,omitempty"`
 	Options  ollamaOptions   `json:"options"`
 }
 
@@ -171,7 +184,7 @@ func (o *ollamaProvider) Complete(ctx context.Context, system, user string) (str
 			{Role: "user", Content: user},
 		},
 		Stream: false,
-		Format: "json",
+		Format: o.format,
 		Options: ollamaOptions{
 			Temperature: o.temperature,
 			NumCtx:      o.numCtx,

@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.22.5] - 2026-03-15
+
+### Fixed
+- AI scorer hallucinating a JSON Schema definition (`{"title":"Approved","type":"object","properties":{...}}`) instead of a score response — root cause: `format: "json"` (loose JSON mode) causes llama3.2 to infer and output a schema rather than populate one
+- Replaced loose `format: "json"` with Ollama structured outputs: the scorer now sends `format: {JSON Schema}` pinning the model to exactly `score`, `reason`, `match_confidence`, `match_confidence_reason` — the model is forced to populate those four fields and cannot generate extra keys or off-schema structures
+- Added `FormatSetter` interface to `ai.Provider` layer so the scorer can configure structured output without the `Provider` interface signature changing
+- `scoreOutputSchema` defined as a package-level `json.RawMessage` in `scorer.go`; applied via `configureFormat()` at `NewScorer` construction time via type assertion
+
 ## [0.22.4] - 2026-03-15
 
 ### Fixed

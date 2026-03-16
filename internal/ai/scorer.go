@@ -70,6 +70,20 @@ type Scorer struct {
 	logger      *zap.Logger // may be nil; set via SetLogger after construction
 }
 
+// scoreOutputSchema is an Ollama structured-output JSON Schema that pins the
+// model response to exactly the four fields the scorer expects. Passed via
+// FormatSetter.SetFormat so the model cannot generate an off-schema response.
+var scoreOutputSchema = json.RawMessage(`{
+	"type": "object",
+	"properties": {
+		"score":                    {"type": "number"},
+		"reason":                   {"type": "string"},
+		"match_confidence":         {"type": "number"},
+		"match_confidence_reason":  {"type": "string"}
+	},
+	"required": ["score", "reason", "match_confidence", "match_confidence_reason"]
+}`)
+
 // NewScorer creates a Scorer backed by the given Provider.
 // The history window size is read from CURATOR_AI_HISTORY_SIZE (default 40).
 // The per-request LLM timeout is read from CURATOR_AI_TIMEOUT_SECS (default 60).
@@ -87,7 +101,18 @@ func NewScorer(p Provider) *Scorer {
 			timeout = n
 		}
 	}
-	return &Scorer{provider: p, historySize: size, timeoutSecs: timeout}
+	s := &Scorer{provider: p, historySize: size, timeoutSecs: timeout}
+	s.configureFormat()
+	return s
+}
+
+// configureFormat sets the structured output schema on the provider if it
+// supports FormatSetter (i.e. Ollama). This pins the model response to the
+// exact four fields the scorer expects, preventing off-schema hallucinations.
+func (s *Scorer) configureFormat() {
+	if fs, ok := s.provider.(FormatSetter); ok {
+		fs.SetFormat(scoreOutputSchema)
+	}
 }
 
 // SetLogger wires a zap.Logger into the scorer so that all LLM requests and
