@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/killakam3084/rss-curator/internal/metadata"
 	"github.com/killakam3084/rss-curator/pkg/models"
 	"go.uber.org/zap"
 )
@@ -55,9 +56,10 @@ type scoreResult struct {
 // Scorer ranks matched StagedTorrents using the LLM and the user's activity history.
 type Scorer struct {
 	provider    Provider
-	historySize int         // number of activity entries to sample into the prompt context
-	timeoutSecs int         // per-request LLM timeout; read from CURATOR_AI_TIMEOUT_SECS
-	logger      *zap.Logger // may be nil; set via SetLogger after construction
+	lookup      *metadata.Lookup // optional; nil disables metadata enrichment
+	historySize int              // number of activity entries to sample into the prompt context
+	timeoutSecs int              // per-request LLM timeout; read from CURATOR_AI_TIMEOUT_SECS
+	logger      *zap.Logger      // may be nil; set via SetLogger after construction
 }
 
 // scoreOutputSchema is an Ollama structured-output JSON Schema that pins the
@@ -85,8 +87,10 @@ var scoreOutputSchema = json.RawMessage(`{
 // NewScorer creates a Scorer backed by the given Provider.
 // The history window size is read from CURATOR_AI_HISTORY_SIZE (default 40).
 // The per-request LLM timeout is read from CURATOR_AI_TIMEOUT_SECS (default 60).
+// Pass a non-nil *metadata.Lookup to have the scorer append TV metadata context
+// (genres, network, status, premiere year) to each candidate's scoring prompt.
 // Call SetLogger to enable structured LLM I/O logging.
-func NewScorer(p Provider) *Scorer {
+func NewScorer(p Provider, lookup *metadata.Lookup) *Scorer {
 	size := 40
 	if v := os.Getenv("CURATOR_AI_HISTORY_SIZE"); v != "" {
 		if n, err := strconv.Atoi(v); err == nil && n > 0 {
@@ -99,7 +103,7 @@ func NewScorer(p Provider) *Scorer {
 			timeout = n
 		}
 	}
-	s := &Scorer{provider: p, historySize: size, timeoutSecs: timeout}
+	s := &Scorer{provider: p, lookup: lookup, historySize: size, timeoutSecs: timeout}
 	s.configureFormat()
 	return s
 }
@@ -164,7 +168,7 @@ func (s *Scorer) scoreOne(t *models.StagedTorrent, histCtx string) (float64, str
 	}
 
 	user := fmt.Sprintf(
-		"Recent approval history (for context — do not score these):\n%s\nCandidate torrent to score:\nTitle: %s\nParsed show (from title): %s\nMatched rule: %s\nMatch reason: %s\nQuality: %s | Codec: %s | Group: %s | Source: %s\n\nScore the candidate torrent above.",
+		"Recent approval history (for context — do not score these):\n%s\nCandidate torrent to score:\nTitle: %s\nParsed show (from title): %s\nMatched rule: %s\nMatch reason: %s\nQuality: %s | Codec: %s | Group: %s | Source: %s",
 		histCtx,
 		t.FeedItem.Title,
 		showEp,
@@ -176,6 +180,31 @@ func (s *Scorer) scoreOne(t *models.StagedTorrent, histCtx string) (float64, str
 		t.FeedItem.Source,
 	)
 
+	// Append TV metadata block when the lookup resolves for this show.
+	if s.lookup != nil {
+		showKey := extractMatchedRule(t.MatchReason)
+		if meta := s.lookup.Resolve(ctx, showKey); meta != nil {
+			var parts []string
+			if len(meta.Genres) > 0 {
+				parts = append(parts, "Genre: "+strings.Join(meta.Genres, ", "))
+			}
+			if meta.Network != "" {
+				parts = append(parts, "Network: "+meta.Network)
+			}
+			if meta.Status != "" {
+				parts = append(parts, "Status: "+meta.Status)
+			}
+			if meta.PremiereYear > 0 {
+				parts = append(parts, fmt.Sprintf("Premiered: %d", meta.PremiereYear))
+			}
+			if len(parts) > 0 {
+				user += "\nShow metadata: " + strings.Join(parts, " | ")
+			}
+		}
+	}
+
+	user += "\n\nScore the candidate torrent above."
+
 	// Log scorer.request with compressed history context for correlation
 	if s.logger != nil {
 		s.logger.Debug("scorer.request",
@@ -183,14 +212,6 @@ func (s *Scorer) scoreOne(t *models.StagedTorrent, histCtx string) (float64, str
 			zap.String("title", t.FeedItem.Title),
 			zap.String("user_prompt", user),
 			zap.String("compressed_history", histCtx),
-		)
-	}
-
-	if s.logger != nil {
-		s.logger.Debug("scorer.request",
-			zap.Int("torrent_id", t.ID),
-			zap.String("title", t.FeedItem.Title),
-			zap.String("user_prompt", user),
 		)
 	}
 

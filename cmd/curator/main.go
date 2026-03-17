@@ -17,12 +17,13 @@ import (
 	"github.com/killakam3084/rss-curator/internal/feed"
 	"github.com/killakam3084/rss-curator/internal/logbuffer"
 	"github.com/killakam3084/rss-curator/internal/matcher"
+	"github.com/killakam3084/rss-curator/internal/metadata"
 	"github.com/killakam3084/rss-curator/internal/storage"
 	"github.com/killakam3084/rss-curator/pkg/models"
 )
 
 const (
-	version = "0.22.10"
+	version = "0.23.0"
 )
 
 func main() {
@@ -48,12 +49,25 @@ func main() {
 	}
 	defer store.Close()
 
+	// Initialise the TV metadata provider, cache, and lookup resolver.
+	// The cache is co-located with the main DB (same directory) so it lands on
+	// the same container volume automatically.
+	metaProvider := metadata.NewMetadataProvider()
+	metaCache, metaCacheErr := metadata.NewCache(cfg.StoragePath)
+	if metaCacheErr != nil {
+		fmt.Fprintf(os.Stderr, "Warning: metadata cache unavailable: %v\n", metaCacheErr)
+	}
+	metaLookup := metadata.NewLookup(metaProvider, metaCache)
+	if metaCacheErr == nil {
+		defer metaCache.Close()
+	}
+
 	// Create the log buffer once; shared across all commands that log.
 	buf := logbuffer.NewBuffer()
 
 	switch command {
 	case "check", "scan":
-		cmdCheck(cfg, store)
+		cmdCheck(cfg, store, metaLookup)
 	case "list", "ls":
 		cmdList(store)
 	case "approve":
@@ -63,7 +77,7 @@ func main() {
 	case "review":
 		cmdReview(cfg, store)
 	case "serve":
-		cmdServe(cfg, store, buf)
+		cmdServe(cfg, store, buf, metaLookup)
 	case "test":
 		cmdTest(cfg)
 	case "resume":
@@ -81,7 +95,7 @@ func main() {
 	}
 }
 
-func cmdCheck(cfg models.Config, store *storage.Storage) {
+func cmdCheck(cfg models.Config, store *storage.Storage, metaLookup *metadata.Lookup) {
 	fmt.Println("Checking RSS feeds...")
 
 	// Record this run as a job so the UI can track it.
@@ -94,7 +108,7 @@ func cmdCheck(cfg models.Config, store *storage.Storage) {
 	enricherProvider := ai.NewProviderFor("enricher")
 	scorerProvider := ai.NewProviderFor("scorer")
 	enricher := ai.NewEnricher(enricherProvider, nil) // nil logger: CLI stdout is the observable surface
-	scorer := ai.NewScorer(scorerProvider)
+	scorer := ai.NewScorer(scorerProvider, metaLookup)
 	if enricherProvider.Available() || scorerProvider.Available() {
 		fmt.Println("AI provider available — enrichment and scoring enabled")
 	}
@@ -666,11 +680,11 @@ func cmdPause(cfg models.Config, store *storage.Storage, args []string) {
 	}
 }
 
-func cmdServe(cfg models.Config, store *storage.Storage, buf *logbuffer.Buffer) {
+func cmdServe(cfg models.Config, store *storage.Storage, buf *logbuffer.Buffer, metaLookup *metadata.Lookup) {
 	// Initialise AI scorer (available even during serve — used for on-demand rescore).
 	// Uses CURATOR_AI_SCORER_MODEL if set, falls back to CURATOR_AI_MODEL.
 	scorerProvider := ai.NewProviderFor("scorer")
-	scorer := ai.NewScorer(scorerProvider)
+	scorer := ai.NewScorer(scorerProvider, metaLookup)
 	if scorerProvider.Available() {
 		fmt.Println("[Serve] AI provider available — on-demand rescore enabled")
 	}

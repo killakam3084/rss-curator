@@ -6,6 +6,32 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+## [0.23.0] - 2026-03-16
+
+### Added
+- Pluggable TV metadata provider subsystem (`internal/metadata/`): provider interface + factory, TVMaze live implementation (free, no API key), TMDB and TVDB stubs ready for future implementation, and a noop/disabled provider.
+- SQLite-backed TTL cache (`internal/metadata/cache.go`) co-located with the main `curator.db` — placed in the same directory automatically so it lands on the correct container volume or dataset without extra configuration. Explicit override available via `CURATOR_META_DB`.
+- Cache-first lookup resolver (`internal/metadata/lookup.go`) with configurable TTL (`CURATOR_META_TTL_HOURS`, default 7 days). `Resolve` never returns an error — metadata is always additive and never blocks normal operation.
+- AI scorer now enriches each candidate's prompt with TV metadata (genres, network, status, premiere year) when available, giving the LLM richer context for show-type disambiguation and approval likelihood.
+- New env vars documented in `curator.env.sample`: `CURATOR_META_PROVIDER`, `CURATOR_META_KEY`, `CURATOR_META_HOST`, `CURATOR_META_TTL_HOURS`, `CURATOR_META_DB`.
+- Removed duplicate `scorer.request` debug log emission that was introduced in v0.22.10.
+
+
+## [0.22.11] - 2026-03-16
+
+### Changed
+- Documentation refresh across `PROJECT_SUMMARY.md`, `ARCHITECTURE.md`, `FIELD_NOTES.md`, and `README.md` to reflect the v0.22.x series.
+
+## [0.22.10] - 2026-03-16
+
+### Added
+- Log compressed show-history context in `scorer.request` debug logs for benchmarking and validation. This makes it easy to correlate the prompt input with each scorer response.
+
+## [0.22.9] - 2026-03-16
+
+### Added
+- Compact show-history summaries for the AI scorer to reduce token usage and improve scoring stability; introduces `internal/ai/history.go` and updates `internal/ai/scorer.go` to use summary-based history.
+
 ## [0.22.8] - 2026-03-15
 
 ### Changed
@@ -17,17 +43,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 - Minor UI/UX bugs in alerts and jobs popovers.
-
-
-## [0.22.10] - 2026-03-16
-
-### Added
-- Log compressed show-history context in `scorer.request` debug logs for benchmarking and validation. This makes it easy to correlate the prompt input with each scorer response.
-
-## [0.22.9] - 2026-03-16
-
-### Added
-- Compact show-history summaries for the AI scorer to reduce token usage and improve scoring stability; introduces `internal/ai/history.go` and updates `internal/ai/scorer.go` to use summary-based history.
 
 ## [0.22.7] - 2026-03-15
 
