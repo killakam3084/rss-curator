@@ -63,8 +63,20 @@ func NewEnricher(p Provider, logger *zap.Logger) *Enricher {
 // It is safe to call on every item - it no-ops if the regex already parsed the
 // title successfully, or if the provider is unreachable.
 func (e *Enricher) Enrich(item *models.FeedItem) {
+	e.enrich(item, false)
+}
+
+// EnrichForce forces an AI parse even when regex-derived fields are already
+// populated, and lets non-empty AI fields override the current values. This is
+// useful for rematch/debug flows where we want to compare deterministic parsing
+// with a fresh model interpretation of the title.
+func (e *Enricher) EnrichForce(item *models.FeedItem) {
+	e.enrich(item, true)
+}
+
+func (e *Enricher) enrich(item *models.FeedItem, force bool) {
 	// Only enrich if at least one key field is missing.
-	if item.ShowName != "" &&
+	if !force && item.ShowName != "" &&
 		item.Season > 0 &&
 		item.Quality != "" &&
 		item.Codec != "" &&
@@ -85,6 +97,7 @@ func (e *Enricher) Enrich(item *models.FeedItem) {
 	if e.logger != nil {
 		e.logger.Debug("enricher.request",
 			zap.String("title", item.Title),
+			zap.Bool("force", force),
 			zap.String("user_prompt", userPrompt),
 		)
 	}
@@ -128,6 +141,7 @@ func (e *Enricher) Enrich(item *models.FeedItem) {
 	if e.logger != nil {
 		e.logger.Debug("enricher.response",
 			zap.String("title", item.Title),
+			zap.Bool("force", force),
 			zap.Int64("duration_ms", durationMs),
 			zap.String("raw_response", raw),
 			zap.String("show_name", result.ShowName),
@@ -140,19 +154,19 @@ func (e *Enricher) Enrich(item *models.FeedItem) {
 		)
 	}
 
-	if result.ShowName != "" && item.ShowName == "" {
+	if result.ShowName != "" && (force || item.ShowName == "") {
 		item.ShowName = result.ShowName
 	}
-	if result.Season > 0 && item.Season == 0 {
+	if result.Season > 0 && (force || item.Season == 0) {
 		item.Season = result.Season
 	}
-	if result.Episode > 0 && item.Episode == 0 {
+	if result.Episode > 0 && (force || item.Episode == 0) {
 		item.Episode = result.Episode
 	}
-	if result.Quality != "" && item.Quality == "" {
+	if result.Quality != "" && (force || item.Quality == "") {
 		item.Quality = strings.ToUpper(strings.TrimSpace(result.Quality))
 	}
-	if result.Codec != "" && item.Codec == "" {
+	if result.Codec != "" && (force || item.Codec == "") {
 		codec := strings.ToUpper(strings.TrimSpace(result.Codec))
 		if strings.Contains(codec, "265") || codec == "HEVC" {
 			item.Codec = "x265"
@@ -160,10 +174,10 @@ func (e *Enricher) Enrich(item *models.FeedItem) {
 			item.Codec = "x264"
 		}
 	}
-	if result.Source != "" && item.Source == "" {
+	if result.Source != "" && (force || item.Source == "") {
 		item.Source = strings.TrimSpace(result.Source)
 	}
-	if result.ReleaseGroup != "" && item.ReleaseGroup == "" {
+	if result.ReleaseGroup != "" && (force || item.ReleaseGroup == "") {
 		item.ReleaseGroup = strings.TrimSpace(result.ReleaseGroup)
 	}
 }

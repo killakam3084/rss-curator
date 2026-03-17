@@ -67,6 +67,7 @@ const app = createApp({
         const rematchModalOpen = ref(false);
         const rematchIds = ref([]);
         const rematchAutoRescore = ref(true);
+        const rematchForceAIEnrich = ref(false);
         let toastCounter = 0;
 
         // Computed properties
@@ -547,12 +548,14 @@ const app = createApp({
             }
             rematchIds.value = [...ids];
             rematchAutoRescore.value = true;
+            rematchForceAIEnrich.value = false;
             rematchModalOpen.value = true;
         };
 
         const closeRematchModal = () => {
             rematchModalOpen.value = false;
             rematchIds.value = [];
+            rematchForceAIEnrich.value = false;
         };
 
         const rematchOne = (id) => {
@@ -575,7 +578,8 @@ const app = createApp({
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         ids: rematchIds.value,
-                        auto_rescore: rematchAutoRescore.value
+                        auto_rescore: rematchAutoRescore.value,
+                        force_ai_enrich: rematchForceAIEnrich.value
                     })
                 });
                 const data = await response.json();
@@ -884,6 +888,7 @@ const app = createApp({
             rematchModalOpen,
             rematchIds,
             rematchAutoRescore,
+            rematchForceAIEnrich,
             openRematchModal,
             closeRematchModal,
             submitRematch,

@@ -526,6 +526,18 @@
                         <span class="text-sm font-mono text-gray-200">Auto re-score matched items</span>
                     </label>
 
+                    <label class="flex items-center gap-3 p-3 bg-gray-800 border border-gray-700 rounded cursor-pointer">
+                        <input
+                            v-model="rematchForceAIEnrich"
+                            type="checkbox"
+                            class="w-4 h-4 rounded border-gray-600 bg-gray-900 text-curator-500 focus:ring-curator-500"
+                        >
+                        <div>
+                            <span class="block text-sm font-mono text-gray-200">Force AI enrich before matching</span>
+                            <span class="block text-xs text-gray-500 mt-1">Allows AI to override parsed title fields before rematch. Useful for ambiguous titles and validation runs.</span>
+                        </div>
+                    </label>
+
                     <div class="flex gap-3">
                         <button
                             type="submit"

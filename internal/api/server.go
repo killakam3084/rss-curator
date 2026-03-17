@@ -119,8 +119,9 @@ type RescoreResponse struct {
 }
 
 type RematchRequest struct {
-	IDs         []int `json:"ids"`
-	AutoRescore bool  `json:"auto_rescore"`
+	IDs           []int `json:"ids"`
+	AutoRescore   bool  `json:"auto_rescore"`
+	ForceAIEnrich bool  `json:"force_ai_enrich"`
 }
 
 type RematchResponse struct {
@@ -1043,7 +1044,11 @@ func (s *Server) handleRematch(w http.ResponseWriter, r *http.Request) {
 		item := t.FeedItem
 		feed.ParseTitleMetadata(&item)
 		if s.enricher != nil {
-			s.enricher.Enrich(&item)
+			if req.ForceAIEnrich {
+				s.enricher.EnrichForce(&item)
+			} else {
+				s.enricher.Enrich(&item)
+			}
 		}
 
 		matches, reason := s.matcher.Match(item)
