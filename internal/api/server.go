@@ -11,7 +11,9 @@ import (
 
 	"github.com/killakam3084/rss-curator/internal/ai"
 	"github.com/killakam3084/rss-curator/internal/client"
+	"github.com/killakam3084/rss-curator/internal/feed"
 	"github.com/killakam3084/rss-curator/internal/logbuffer"
+	"github.com/killakam3084/rss-curator/internal/matcher"
 	"github.com/killakam3084/rss-curator/internal/storage"
 	"github.com/killakam3084/rss-curator/pkg/models"
 	"go.uber.org/zap"
@@ -35,6 +37,8 @@ type Server struct {
 	logBuffer     *logbuffer.Buffer
 	scorer        *ai.Scorer  // May be nil if AI is disabled
 	aiProvider    ai.Provider // May be nil if AI is disabled
+	matcher       *matcher.Matcher
+	enricher      *ai.Enricher
 	port          int
 	authEnabled   bool
 	authUsername  string
@@ -114,6 +118,19 @@ type RescoreResponse struct {
 	Torrents []TorrentResponse `json:"torrents"`
 }
 
+type RematchRequest struct {
+	IDs         []int `json:"ids"`
+	AutoRescore bool  `json:"auto_rescore"`
+}
+
+type RematchResponse struct {
+	Rematched       int               `json:"rematched"`
+	NoLongerMatches int               `json:"no_longer_matches"`
+	Rescored        int               `json:"rescored"`
+	Skipped         int               `json:"skipped"`
+	Torrents        []TorrentResponse `json:"torrents"`
+}
+
 // SuggestionsResponse is the shape returned by POST /api/suggestions.
 // Currently returns 501 Not Implemented — the Suggester subsystem is
 // under active development. This stub establishes the API contract.
@@ -140,7 +157,7 @@ type FeedStreamResponse struct {
 // NewServer creates a new API server instance.
 // buf may be nil; when provided, logs are tee'd into it for /api/logs streaming.
 // scorer and aiProvider may be nil when AI is disabled.
-func NewServer(store storage.Store, client *client.Client, port int, buf *logbuffer.Buffer, scorer *ai.Scorer, aiProvider ai.Provider, auth AuthConfig) *Server {
+func NewServer(store storage.Store, client *client.Client, port int, buf *logbuffer.Buffer, scorer *ai.Scorer, aiProvider ai.Provider, m *matcher.Matcher, enricher *ai.Enricher, auth AuthConfig) *Server {
 	prodCore, err := zap.NewProduction()
 	if err != nil {
 		panic(fmt.Sprintf("failed to create logger: %v", err))
@@ -166,6 +183,8 @@ func NewServer(store storage.Store, client *client.Client, port int, buf *logbuf
 		logBuffer:     buf,
 		scorer:        scorer,
 		aiProvider:    aiProvider,
+		matcher:       m,
+		enricher:      enricher,
 		port:          port,
 		authEnabled:   auth.Password != "",
 		authUsername:  auth.Username,
@@ -182,6 +201,7 @@ func (s *Server) Start() error {
 	// API endpoints
 	mux.HandleFunc("/api/torrents", s.handleList)
 	mux.HandleFunc("/api/torrents/rescore", s.handleRescore)
+	mux.HandleFunc("/api/torrents/rematch", s.handleRematch)
 	mux.HandleFunc("/api/torrents/", s.handleTorrentAction)
 	mux.HandleFunc("/api/health", s.handleHealth)
 	mux.HandleFunc("/api/activity", s.handleActivity)
@@ -949,6 +969,186 @@ func (s *Server) handleRescore(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(RescoreResponse{
 		Rescored: len(updated),
 		Torrents: updated,
+	})
+}
+
+func isRematchEligibleStatus(status string) bool {
+	switch status {
+	case "pending", "accepted", "rejected":
+		return true
+	default:
+		return false
+	}
+}
+
+// handleRematch force re-runs parser+matcher on specific torrents and updates
+// match_reason/status in place. Optional auto_rescore can re-run AI scoring on
+// items that still match after rematch.
+// POST /api/torrents/rematch  body: {"ids":[1,2,3],"auto_rescore":true}
+func (s *Server) handleRematch(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+
+	if s.matcher == nil {
+		w.WriteHeader(http.StatusServiceUnavailable)
+		json.NewEncoder(w).Encode(ErrorResponse{Error: "matcher unavailable"})
+		return
+	}
+
+	var req RematchRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || len(req.IDs) == 0 {
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(ErrorResponse{Error: "request body must include at least one id"})
+		return
+	}
+
+	jobID, _ := s.store.CreateJob("rematch")
+	startedAt := time.Now()
+	s.logBuffer.EmitJobEvent(models.JobRecord{
+		ID:        jobID,
+		Type:      "rematch",
+		Status:    "running",
+		StartedAt: startedAt,
+	})
+
+	canRescore := req.AutoRescore && s.scorer != nil && s.aiProvider != nil && s.aiProvider.Available()
+	var history []models.Activity
+	if canRescore {
+		history, _ = s.store.GetActivity(50, 0, "")
+	}
+
+	var (
+		updated         []TorrentResponse
+		rematchErr      error
+		rematched       int
+		noLongerMatches int
+		rescored        int
+		skipped         int
+	)
+
+	for _, id := range req.IDs {
+		t, err := s.store.GetByID(id)
+		if err != nil || t == nil {
+			skipped++
+			continue
+		}
+		if !isRematchEligibleStatus(t.Status) {
+			skipped++
+			continue
+		}
+
+		item := t.FeedItem
+		feed.ParseTitleMetadata(&item)
+		if s.enricher != nil {
+			s.enricher.Enrich(&item)
+		}
+
+		matches, reason := s.matcher.Match(item)
+		newStatus := t.Status
+		newReason := reason
+		if matches {
+			rematched++
+		} else {
+			noLongerMatches++
+			newStatus = "rejected"
+			if reason != "" {
+				newReason = fmt.Sprintf("rematch: no longer matches current rules (%s)", reason)
+			} else {
+				newReason = "rematch: no longer matches current rules"
+			}
+		}
+
+		if err := s.store.UpdateAfterRematch(t.ID, item, newReason, newStatus); err != nil {
+			s.logger.Error("failed to persist rematch update", zap.Int("id", t.ID), zap.Error(err))
+			rematchErr = err
+			skipped++
+			continue
+		}
+
+		refreshed, err := s.store.GetByID(t.ID)
+		if err != nil || refreshed == nil {
+			skipped++
+			continue
+		}
+
+		if canRescore && matches {
+			scored := s.scorer.ScoreAll([]models.StagedTorrent{*refreshed}, history)
+			if len(scored) > 0 {
+				r := scored[0]
+				if err := s.store.UpdateAIScore(refreshed.ID, r.AIScore, r.AIReason, r.MatchConfidence, r.MatchConfidenceReason); err != nil {
+					s.logger.Error("failed to update AI score after rematch", zap.Int("id", refreshed.ID), zap.Error(err))
+					rematchErr = err
+				} else {
+					rescored++
+					refreshed.AIScore = r.AIScore
+					refreshed.AIReason = r.AIReason
+					refreshed.AIScored = true
+					refreshed.MatchConfidence = r.MatchConfidence
+					refreshed.MatchConfidenceReason = r.MatchConfidenceReason
+				}
+			}
+		}
+
+		updated = append(updated, TorrentResponse{
+			ID:                    refreshed.ID,
+			Title:                 refreshed.FeedItem.Title,
+			Size:                  refreshed.FeedItem.Size,
+			MatchReason:           refreshed.MatchReason,
+			Status:                refreshed.Status,
+			Link:                  refreshed.FeedItem.Link,
+			AIScore:               refreshed.AIScore,
+			AIReason:              refreshed.AIReason,
+			AIScored:              refreshed.AIScored,
+			MatchConfidence:       refreshed.MatchConfidence,
+			MatchConfidenceReason: refreshed.MatchConfidenceReason,
+		})
+	}
+
+	summary := models.JobSummary{
+		ItemsFound:   len(req.IDs),
+		ItemsMatched: rematched,
+		ItemsScored:  rescored,
+	}
+	now := time.Now()
+	finalJob := models.JobRecord{
+		ID:          jobID,
+		Type:        "rematch",
+		StartedAt:   startedAt,
+		CompletedAt: &now,
+		Summary:     summary,
+	}
+	if rematchErr != nil && len(updated) == 0 {
+		finalJob.Status = "failed"
+		finalJob.Summary.ErrorMessage = rematchErr.Error()
+		_ = s.store.FailJob(jobID, rematchErr.Error())
+		s.logBuffer.EmitAlertEvent(models.AlertRecord{
+			Action:      "job_failed",
+			Message:     "Rematch failed: " + rematchErr.Error(),
+			TriggeredAt: now,
+		})
+	} else {
+		finalJob.Status = "completed"
+		_ = s.store.CompleteJob(jobID, summary)
+	}
+	s.logBuffer.EmitJobEvent(finalJob)
+
+	s.logger.Info("torrents rematched",
+		zap.Int("requested", len(req.IDs)),
+		zap.Int("rematched", rematched),
+		zap.Int("no_longer_matches", noLongerMatches),
+		zap.Int("rescored", rescored),
+		zap.Int("skipped", skipped),
+	)
+
+	json.NewEncoder(w).Encode(RematchResponse{
+		Rematched:       rematched,
+		NoLongerMatches: noLongerMatches,
+		Rescored:        rescored,
+		Skipped:         skipped,
+		Torrents:        updated,
 	})
 }
 

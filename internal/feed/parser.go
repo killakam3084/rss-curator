@@ -94,7 +94,7 @@ func (p *Parser) Parse(feedURL string) ([]models.FeedItem, error) {
 		item.Size = parseSize(rssItem.Description)
 
 		// Extract metadata from title
-		extractMetadata(&item)
+		ParseTitleMetadata(&item)
 
 		// Optionally enrich missing fields via AI.
 		if p.enricher != nil {
@@ -141,6 +141,21 @@ func parseSize(description string) int64 {
 	default:
 		return 0
 	}
+}
+
+// ParseTitleMetadata resets parsed metadata fields and reparses them from the
+// title using the current regex rules. Intended for normal feed ingestion and
+// for rematch/re-evaluation workflows that need parser parity.
+func ParseTitleMetadata(item *models.FeedItem) {
+	item.ShowName = ""
+	item.Season = 0
+	item.Episode = 0
+	item.Quality = ""
+	item.Codec = ""
+	item.Source = ""
+	item.ReleaseGroup = ""
+
+	extractMetadata(item)
 }
 
 // extractMetadata parses show name, season, episode, quality, etc. from title

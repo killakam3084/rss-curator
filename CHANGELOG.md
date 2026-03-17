@@ -6,6 +6,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+## [0.24.0] - 2026-03-16
+
+### Added
+- Batch re-match capability across `pending`, `accepted`, and `rejected` torrents via new API endpoint `POST /api/torrents/rematch`, including job tracking and job-stream updates.
+- Web UI re-match actions for single and multi-select workflows, plus a rematch modal with `auto_rescore` toggle so parser/matcher remediation and scoring refresh can be run together.
+- Server-side rematch pipeline now re-runs title parsing (current parser rules), optional AI enrichment, matcher evaluation, and in-place persistence of refreshed `feed_item` + `match_reason`.
+
+### Changed
+- `serve` wiring now injects matcher and enricher dependencies into the API server so rematch uses the same matching stack as feed checks.
+
+### Fixed
+- Aggressive cleanup path: torrents that no longer match current rules during rematch are reconciled to `rejected` with explicit rematch context in `match_reason`.
+- Rematch persistence now clears stale AI scoring/confidence fields when match context changes, preventing outdated score display.
+
+
 ## [0.23.1] - 2026-03-16
 
 ### Added

@@ -39,6 +39,7 @@ type Store interface {
 	GetRawFeedItems(limit int) ([]models.RawFeedItem, error)
 	CleanupExpiredRawFeedItems() error
 	UpdateAIScore(id int, score float64, reason string, confidence float64, confidenceReason string) error
+	UpdateAfterRematch(id int, item models.FeedItem, matchReason, status string) error
 	// Jobs
 	CreateJob(jobType string) (int, error)
 	CompleteJob(id int, summary models.JobSummary) error
@@ -469,6 +470,31 @@ func (s *Storage) UpdateAIScore(id int, score float64, reason string, confidence
 		SET ai_score = ?, ai_reason = ?, ai_scored = 1, match_confidence = ?, match_confidence_reason = ?
 		WHERE id = ?
 	`, score, reason, confidence, confidenceReason, id)
+	return err
+}
+
+// UpdateAfterRematch persists the re-parsed feed item, refreshed match reason,
+// and reconciled status for an existing staged torrent. It also clears AI score
+// fields so stale prior scores are not shown when match context changed.
+func (s *Storage) UpdateAfterRematch(id int, item models.FeedItem, matchReason, status string) error {
+	feedItemJSON, err := json.Marshal(item)
+	if err != nil {
+		return fmt.Errorf("failed to marshal feed item: %w", err)
+	}
+
+	_, err = s.db.Exec(`
+		UPDATE staged_torrents
+		SET feed_item = ?,
+		    match_reason = ?,
+		    status = ?,
+		    approved_at = CASE WHEN ? = 'accepted' THEN approved_at ELSE NULL END,
+		    ai_score = 0,
+		    ai_reason = '',
+		    ai_scored = 0,
+		    match_confidence = -1,
+		    match_confidence_reason = ''
+		WHERE id = ?
+	`, string(feedItemJSON), matchReason, status, status, id)
 	return err
 }
 

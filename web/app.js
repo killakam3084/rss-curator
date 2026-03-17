@@ -8,6 +8,7 @@ const app = createApp({
         const loading = ref(false);
         const bulkLoading = ref(false);
         const rescoreLoading = ref(false);
+        const rematchLoading = ref(false);
         const activeTab = ref('pending');
         const selectedIds = ref(new Set());
         const operatingIds = ref(new Set());
@@ -63,6 +64,9 @@ const app = createApp({
             tags: '',
             category: ''
         });
+        const rematchModalOpen = ref(false);
+        const rematchIds = ref([]);
+        const rematchAutoRescore = ref(true);
         let toastCounter = 0;
 
         // Computed properties
@@ -536,6 +540,71 @@ const app = createApp({
 
         const isSelected = (id) => selectedIds.value.has(id);
 
+        const openRematchModal = (ids) => {
+            if (!Array.isArray(ids) || ids.length === 0) {
+                showToast('No torrents selected for rematch', 'error');
+                return;
+            }
+            rematchIds.value = [...ids];
+            rematchAutoRescore.value = true;
+            rematchModalOpen.value = true;
+        };
+
+        const closeRematchModal = () => {
+            rematchModalOpen.value = false;
+            rematchIds.value = [];
+        };
+
+        const rematchOne = (id) => {
+            openMenuId.value = null;
+            openRematchModal([id]);
+        };
+
+        const rematchSelected = () => {
+            const ids = [...selectedIds.value];
+            openRematchModal(ids);
+        };
+
+        const submitRematch = async () => {
+            if (rematchIds.value.length === 0) return;
+
+            rematchLoading.value = true;
+            try {
+                const response = await fetch('/api/torrents/rematch', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        ids: rematchIds.value,
+                        auto_rescore: rematchAutoRescore.value
+                    })
+                });
+                const data = await response.json();
+                if (response.ok) {
+                    if (Array.isArray(data.torrents)) {
+                        data.torrents.forEach(updated => {
+                            const idx = torrents.value.findIndex(t => t.id === updated.id);
+                            if (idx !== -1) torrents.value[idx] = { ...torrents.value[idx], ...updated };
+                        });
+                    }
+
+                    let message = `Re-match complete: ${data.rematched} matched, ${data.no_longer_matches} cleaned`;
+                    if ((data.rescored || 0) > 0) message += `, ${data.rescored} re-scored`;
+                    if ((data.skipped || 0) > 0) message += `, ${data.skipped} skipped`;
+                    showToast(message, 'success');
+
+                    selectedIds.value = new Set();
+                    closeRematchModal();
+                } else {
+                    showToast(data.error || 'Re-match failed', 'error');
+                }
+            } catch (error) {
+                console.error('Error during rematch:', error);
+                showToast('Error during re-match', 'error');
+            } finally {
+                rematchLoading.value = false;
+            }
+        };
+
         // rescoreOne: single-card re-score from the kebab menu
         const rescoreOne = async (id) => {
             openMenuId.value = null;
@@ -772,6 +841,7 @@ const app = createApp({
             loading,
             bulkLoading,
             rescoreLoading,
+            rematchLoading,
             activeTab,
             selectedIds,
             operatingIds,
@@ -811,12 +881,20 @@ const app = createApp({
             openBulkReviewModal,
             closeBulkReviewModal,
             submitBulkReview,
+            rematchModalOpen,
+            rematchIds,
+            rematchAutoRescore,
+            openRematchModal,
+            closeRematchModal,
+            submitRematch,
             queueForDownload,
             bulkApprove,
             bulkReject,
             bulkQueue,
             toggleCard,
             isSelected,
+            rematchSelected,
+            rematchOne,
             rescoreSelected,
             rescoreOne,
             formatSize,

@@ -23,7 +23,7 @@ import (
 )
 
 const (
-	version = "0.23.1"
+	version = "0.24.0"
 )
 
 func main() {
@@ -685,8 +685,18 @@ func cmdServe(cfg models.Config, store *storage.Storage, buf *logbuffer.Buffer, 
 	// Uses CURATOR_AI_SCORER_MODEL if set, falls back to CURATOR_AI_MODEL.
 	scorerProvider := ai.NewProviderFor("scorer")
 	scorer := ai.NewScorer(scorerProvider, metaLookup)
+	enricherProvider := ai.NewProviderFor("enricher")
+	enricher := ai.NewEnricher(enricherProvider, nil)
 	if scorerProvider.Available() {
 		fmt.Println("[Serve] AI provider available — on-demand rescore enabled")
+	}
+
+	// Create matcher config once for API rematch operations.
+	var m *matcher.Matcher
+	if cfg.ShowsConfig != nil {
+		m = matcher.NewMatcher(cfg.ShowsConfig, nil)
+	} else {
+		m = matcher.NewMatcher(nil, &cfg.MatchRules)
 	}
 
 	// Try to initialize qBittorrent client, but don't fail if unavailable
@@ -742,7 +752,7 @@ func cmdServe(cfg models.Config, store *storage.Storage, buf *logbuffer.Buffer, 
 	}
 
 	// Create and start API server (even if qBittorrent is unavailable)
-	server := api.NewServer(store, qb, port, buf, scorer, scorerProvider, auth)
+	server := api.NewServer(store, qb, port, buf, scorer, scorerProvider, m, enricher, auth)
 	fmt.Printf("[Serve] Starting API server on port %d\n", port)
 	if err := server.Start(); err != nil {
 		fmt.Fprintf(os.Stderr, "Error starting API server: %v\n", err)

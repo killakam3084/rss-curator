@@ -119,6 +119,21 @@ func (m *mockStorage) UpdateAIScore(id int, score float64, reason string, confid
 	return nil
 }
 
+// UpdateAfterRematch persists rematch changes for a torrent.
+func (m *mockStorage) UpdateAfterRematch(id int, item models.FeedItem, matchReason, status string) error {
+	if t, ok := m.torrents[id]; ok {
+		t.FeedItem = item
+		t.MatchReason = matchReason
+		t.Status = status
+		t.AIScore = 0
+		t.AIReason = ""
+		t.AIScored = false
+		t.MatchConfidence = -1
+		t.MatchConfidenceReason = ""
+	}
+	return nil
+}
+
 // GetWindowStats returns a zero-value WindowStats for testing
 func (m *mockStorage) GetWindowStats(hours int) (*storage.WindowStats, error) {
 	return &storage.WindowStats{Hours: hours}, nil
