@@ -6,6 +6,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+## [0.23.1] - 2026-03-16
+
+### Added
+- Enricher fallback now supports additional structured fields (`quality`, `codec`, `source`, `release_group`) and backfills missing values conservatively (only when parser fields are empty).
+
+### Fixed
+- Feed parser codec extraction now handles space-separated forms like `H 265` / `H 264` in addition to existing `x265`/`x264`/`H.265`/`HEVC` patterns.
+
+
 ## [0.23.0] - 2026-03-16
 
 ### Added
