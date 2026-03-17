@@ -127,6 +127,15 @@ erDiagram
         datetime expires_at "24h TTL — auto-cleaned"
     }
 
+    jobs {
+        int      id           PK
+        text     type         "feed_check | rescore | rescore_backfill"
+        text     status       "running | completed | failed"
+        datetime started_at
+        datetime completed_at "nullable"
+        json     summary_json "JobSummary: found/matched/scored/queued + error"
+    }
+
     staged_torrents ||--o{ activity_log : "records curation decisions"
 ```
 
@@ -148,25 +157,30 @@ cmd/curator/
 
 internal/
   ai/
-    provider.go     Provider interface + OllamaProvider, OpenAIProvider, noopProvider
+    provider.go     Provider interface + OllamaProvider, OpenAIProvider, noopProvider; FormatSetter interface
     enricher.go     LLM metadata fallback (ShowName / Season gap fill)
-    scorer.go       Approval probability scorer (0.0–1.0) against activity history
+    scorer.go       Approval probability scorer with structured output, clamping, debug logging
+    history.go      ShowSummary aggregator — compact per-show history for scorer prompt injection
   api/
-    server.go       HTTP API server, all handlers, JSON response types
+    server.go       HTTP API server, all handlers, JSON response types, jobs/alerts SSE, alert poller
   client/
     qbittorrent.go  qBittorrent Web API client wrapper
   feed/
     parser.go       RSS fetch + parse + regex metadata extraction
+  logbuffer/
+    buffer.go       In-memory ring buffer — log ring, jobs fan-out, alerts fan-out
   matcher/
     matcher.go      Rule-based show/quality/codec/group matching
   storage/
-    storage.go      Store interface + SQLite implementation, all migrations
+    storage.go      Store interface + SQLite implementation, all migrations (incl. jobs table)
 
 pkg/models/
-  types.go          Shared value types: FeedItem, StagedTorrent, Activity, ShowsConfig, Config
+  types.go          Shared value types: FeedItem, StagedTorrent, Activity, ShowsConfig, Config,
+                    JobRecord, JobSummary, AlertRecord
 
 web/
   index.html        Vue.js single-page dashboard
-  app.js            Vue 3 application logic
+  app.js            Vue 3 application logic (alerts, jobs, scoring, SSE)
+  jobs.html         Standalone Jobs page (Vue.js)
   style.css         Tailwind-based styles
 ```

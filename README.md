@@ -20,6 +20,11 @@ A semi-automated torrent curator for private tracker RSS feeds with human-in-the
 - ✅ Web UI dashboard (approve/reject queue, activity log, feed stream, AI score badges)
 - ✅ AI-assisted scoring and metadata enrichment (Ollama / OpenAI / disabled)
 - ✅ Per-show rule configuration via `shows.json`
+- ✅ AI scorer match confidence — separate signal for rule-vs-title plausibility with low-confidence UI badge
+- ✅ Compact show-history summaries for AI scorer — token-efficient, recency-bias-free prompt context
+- ✅ Ollama structured output — JSON Schema enforcement eliminating schema hallucination
+- ✅ Jobs system — background task tracking with live SSE updates and dedicated Jobs page
+- ✅ Ephemeral alerts — in-browser notification ring (approve/reject/queue/staged/job_failed) with bell icon and unread badge
 
 ## Installation
 
@@ -367,9 +372,10 @@ Full diagrams (state machine, ER model, component map): [docs/ARCHITECTURE.md](.
 - **AI Enricher** (`internal/ai`): LLM fallback to fill `ShowName`/`Season` when regex fails — silent no-op when unavailable
 - **Matcher** (`internal/matcher`): Applies show/quality/codec/group rules
 - **AI Scorer** (`internal/ai`): Scores matches 0–1 against approve/reject history — silent no-op when unavailable
-- **Storage** (`internal/storage`): SQLite staging queue + activity log + raw feed stream
-- **API Server** (`internal/api`): REST API + serves Web UI; started with `curator serve`
-- **Web UI** (`web/`): Vue.js dashboard for approvals, activity, stats, feed stream
+- **Storage** (`internal/storage`): SQLite staging queue + activity log + raw feed stream + jobs table
+- **Log Buffer** (`internal/logbuffer`): In-memory ring buffer for logs, jobs fan-out, and alerts fan-out via SSE
+- **API Server** (`internal/api`): REST API + serves Web UI; jobs and alerts SSE endpoints; alert poller; started with `curator serve`
+- **Web UI** (`web/`): Vue.js dashboard for approvals, activity, stats, feed stream; top nav with jobs badge and alerts bell; `jobs.html` standalone page
 - **qBittorrent Client** (`internal/client`): Wrapper around qBittorrent Web API
 
 ## Development
@@ -380,14 +386,15 @@ Full diagrams (state machine, ER model, component map): [docs/ARCHITECTURE.md](.
 rss-curator/
 ├── cmd/curator/main.go        # CLI entry point, all command dispatch
 ├── internal/
-│   ├── ai/                    # Provider interface, Enricher, Scorer
-│   ├── api/                   # HTTP API server + Web UI handler
+│   ├── ai/                    # Provider interface, Enricher, Scorer, History aggregator
+│   ├── api/                   # HTTP API server, jobs/alerts SSE, alert poller
 │   ├── client/                # qBittorrent Web API client
 │   ├── feed/                  # RSS fetch + regex metadata extraction
+│   ├── logbuffer/             # In-memory ring buffer (logs, jobs, alerts)
 │   ├── matcher/               # Rule-based matching
 │   └── storage/               # Store interface + SQLite implementation
-├── pkg/models/types.go        # Shared value types
-├── web/                       # Vue.js dashboard (index.html, app.js, style.css)
+├── pkg/models/types.go        # Shared value types (incl. JobRecord, AlertRecord)
+├── web/                       # Vue.js dashboard (index.html, jobs.html, app.js, style.css)
 ├── docs/                      # Reference documentation
 ├── scripts/                   # Container entrypoint + scheduler
 ├── go.mod
@@ -418,22 +425,19 @@ GOOS=darwin GOARCH=arm64 go build -o curator-darwin-arm64 ./cmd/curator
 
 ## Roadmap
 
+- [x] AI scorer `match_confidence` signal — rule-vs-title plausibility score with UI badge
+- [x] Jobs system — background task tracking, SSE fan-out, standalone Jobs page
+- [x] Ephemeral alerts — in-memory ring, SSE, bell UI, localStorage unread tracking
+- [x] Compact show-history summaries — token-efficient scorer context, eliminates recency bias
+- [x] Ollama structured output — JSON Schema enforcement, `num_ctx`/`num_predict` configurable
 - [ ] YAML configuration file support
 - [ ] Webhook notifications (on approve/stage)
 - [ ] Season pack handling
 - [ ] Custom metadata extraction patterns
 - [ ] Multi-tracker aggregate feed support
-- [ ] **Scorer match-confidence signal** — currently the scorer is instructed to treat the matcher's match reason as authoritative and not re-evaluate it; this creates a blind spot where a structurally valid match (rule fired, quality met, preferred group present) is semantically wrong (e.g. a broad substring rule firing on an unrelated title)
-  - Add a separate `match_confidence` output field to the scorer response, distinct from `score`; the scorer assesses whether the matched rule plausibly describes the actual content, without overriding release-quality scoring
-  - Low `match_confidence` can surface as a UI warning, suppress auto-queue, or route to a dedicated review state — the response to it is a product decision, not baked into the scorer
-  - Keeps the scorer's role general: any rule-vs-title divergence (substring collision, regex too broad, franchise spin-off, franchise reboot with shared keywords) benefits from the same signal
-- [ ] **Suggester engine** (`POST /api/suggestions` stub already in place)
-  - Analyse accept/reject history to infer franchise, genre, and creator patterns
-  - Surface suggested `shows.json` rules *proactively* — before matching episodes ever appear in the feed
-  - Distinguish between two rule-generation modes:
-    - **Exact-show rule** — new title clearly not covered by any existing rule (e.g. a spin-off whose name doesn't overlap with the parent)
-    - **Franchise broadening** — an existing rule is catching a spin-off via loose substring match (e.g. `Yellowstone` matching `Marshals: A Yellowstone Story`); suggest a dedicated rule for the spin-off rather than widening the parent regex
-  - Rank suggestions by confidence; include a human-readable rationale for each so the user can accept or dismiss with context
+- [ ] Candidate-focused retrieval — embeddings or fuzzy matching to select the most relevant history summaries for a candidate at score time
+- [ ] App-level Prometheus metrics — expose `/metrics` endpoint; track scorer latency, error rate, clamp frequency
+- [ ] **Suggester engine** — analyse accept/reject history to infer franchise/genre/creator patterns; surface suggested `shows.json` rules proactively before matching episodes appear in the feed
 
 ## Troubleshooting
 

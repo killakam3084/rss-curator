@@ -1,6 +1,6 @@
 # RSS Curator — Project Summary
 
-**Version:** v0.14.2 | **Language:** Go 1.22 | **Storage:** SQLite
+**Version:** v0.22.10 | **Language:** Go 1.22 | **Storage:** SQLite
 
 A semi-automated torrent curator for private tracker RSS feeds with human-in-the-loop approval and optional AI-assisted scoring.
 
@@ -69,22 +69,45 @@ Configured via environment variables:
 #### Scorer (`scorer.go`)
 
 - Scores each staged torrent 0.0–1.0 for likelihood of human approval
-- Builds context from the last 20 `activity_log` entries (`[APPROVED] Title` / `[REJECTED] Title`)
-- Stores result as `ai_score` + `ai_reason` (≤80 chars) on `StagedTorrent`
-- Sets `ai_scored = true` even if the returned score is `0.0` — disambiguates "never attempted" from "low confidence"
+- History context built via `BuildShowSummaries` (`internal/ai/history.go`) — compact per-show summaries (`+N -N | last:date | q=quality | ex=title...`) replace raw log lines; reduces token usage significantly and eliminates recency bias
+- Candidate show summary is pinned first in history context; up to 3 other top-activity shows follow
+- Prompt structure: history context (for context only) → candidate torrent → score instruction; model reads candidate immediately before task, eliminating positional confusion
+- Uses Ollama structured output (`format: <JSON Schema>`) via `FormatSetter` interface — forces model to output exactly `score`, `reason`, `match_confidence`, `match_confidence_reason`; eliminates schema hallucination
+- `num_ctx` and `num_predict` configurable via `CURATOR_AI_NUM_CTX` / `CURATOR_AI_NUM_PREDICT` env vars
+- Emits `match_confidence` (0.0–1.0) and `match_confidence_reason` alongside `ai_score`
+- Stores result as `ai_score` + `ai_reason` + `match_confidence` + `match_confidence_reason` on `StagedTorrent`
+- Sets `ai_scored = true` even if score is `0.0` — disambiguates "never attempted" from "low confidence"
 - Backfill runs on every `check` cycle: any `ai_scored=false` torrent across all statuses is re-scored
+- Debug logs: `scorer.request` (includes `user_prompt` and `compressed_history`), `scorer.response` (includes `duration_ms`, `score`, `reason`, `match_confidence`, `raw_response`), `scorer.clamped` (out-of-range score clamped to 0.0–1.0)
 
-### 4. Storage (`internal/storage/storage.go`)
+#### History Aggregator (`history.go`)
 
-SQLite database with three tables and idempotent `ALTER TABLE` migrations:
+- `BuildShowSummaries` aggregates `activity_log` entries into per-show `ShowSummary` structs
+- Each summary tracks: approve/reject weighted counts, last action date, dominant quality, and a truncated example title
+- `formatShortSummary` renders each show as a compact one-liner for prompt injection
+- Candidate show is prioritised (included first regardless of activity rank); top 3 other shows by total activity weight follow
 
-- **`staged_torrents`** — pending/approved/rejected torrent queue with AI score columns
+### 4. Log Buffer (`internal/logbuffer/buffer.go`)
+
+In-memory ring buffer for structured application events; shared across all server subsystems via `*logbuffer.Buffer` wired at startup.
+
+- **Log ring** — circular buffer of last N log entries; powers `/api/logs` and `/api/logs/stream` SSE
+- **Jobs fan-out** — `EmitJobEvent` / `SubscribeJobs` — independent ring + subscriber map for job events; powers `/api/jobs/stream` SSE
+- **Alerts fan-out** — `EmitAlertEvent` / `SubscribeAlerts` / `RecentAlerts` — ring (cap 50), subscriber map, ID counter; powers `/api/alerts` and `/api/alerts/stream` SSE
+- New SSE clients receive full ring snapshot (backfill) before live events
+
+### 5. Storage (`internal/storage/storage.go`)
+
+SQLite database with four tables and idempotent `ALTER TABLE` migrations:
+
+- **`staged_torrents`** — pending/approved/rejected torrent queue with AI score and match confidence columns
 - **`activity_log`** — immutable record of human approve/reject decisions (Scorer training data)
 - **`raw_feed_items`** — 24h sliding window of all RSS items seen (powers Feed Stream in Web UI)
+- **`jobs`** — background task records: type (`feed_check` / `rescore` / `rescore_backfill`), status (`running` / `completed` / `failed`), start/end times, `summary_json` (items found/matched/scored/queued + error message)
 
 Full schema and relationships: [docs/ARCHITECTURE.md — Data Model](./ARCHITECTURE.md#data-model)
 
-### 5. HTTP API Server (`internal/api/server.go`)
+### 6. HTTP API Server (`internal/api/server.go`)
 
 Started with `curator serve`. Serves both the REST API and the Web UI static files.
 
@@ -93,30 +116,43 @@ Started with `curator serve`. Serves both the REST API and the Web UI static fil
 | `GET` | `/api/torrents?status=` | List torrents (default: `pending`) |
 | `POST` | `/api/torrents/{id}/approve` | Approve → LogActivity + qBit add |
 | `POST` | `/api/torrents/{id}/reject` | Reject → LogActivity |
+| `POST` | `/api/torrents/rescore` | Trigger on-demand rescore of all pending torrents |
 | `GET` | `/api/health` | Health check |
 | `GET` | `/api/activity` | Approve/reject history with pagination |
 | `GET` | `/api/stats` | 24h windowed counts: seen, staged, approved, rejected, queued, pending |
 | `GET` | `/api/feed/stream` | Raw RSS feed items (last 24h, pre-filter) |
 | `GET` | `/api/logs` | Buffered log entries as JSON; accepts `?since=<id>` |
-| `GET` | `/api/logs/stream` | Live log stream via Server-Sent Events (`text/event-stream`) |
+| `GET` | `/api/logs/stream` | Live log stream via SSE (`text/event-stream`) |
+| `GET` | `/api/jobs` | List all jobs (JSON) |
+| `GET` | `/api/jobs/{id}` | Get single job by ID (JSON) |
+| `GET` | `/api/jobs/stream` | Live job event stream via SSE |
+| `GET` | `/api/alerts` | Ring snapshot of recent alerts (JSON) |
+| `GET` | `/api/alerts/stream` | Live alert event stream via SSE (backfills ring on connect) |
 | `GET` | `/` | Serves Web UI (`web/index.html`) |
+
+**Background workers started by `cmdServe`:**
+- `startAlertPoller` — 15s ticker reading the `jobs` table for new `failed` and `completed feed_check` jobs; emits `job_failed` and `staged` alerts bridging the `cmdCheck` → `cmdServe` process gap
 
 Port configured via `CURATOR_API_PORT` (default `8081`). qBittorrent connection is optional at startup.
 
-### 6. Web UI (`web/`)
+### 7. Web UI (`web/`)
 
 Vue.js 3 single-page application served directly by the API server.
 
 - Pending torrent queue with approve/reject buttons
 - AI score badge `⚡ N%` on each card (shown when `ai_scored=true`; tooltip shows `ai_reason`)
+- Low match-confidence badge `⚠ low confidence` (amber, with reason tooltip) when `match_confidence < 0.5`
 - Torrents sorted by `ai_score` descending when any scores are present
 - Activity log view, feed stream view
 - Stats mini-panel in sidebar: 6 live tiles (pending + 5 × 24h windowed counts)
-- Log drawer: DevTools-style bottom panel streaming live application logs over SSE;
-  level badges (INFO/WARN/ERROR), text filter, auto-scroll toggle
+- Log drawer: DevTools-style bottom panel streaming live application logs over SSE; level badges (INFO/WARN/ERROR), text filter, auto-scroll toggle
+- **Fixed top nav bar** — wordmark, jobs icon with animated badge (green pulse = running, red = failed), alerts bell with amber unread-count badge (shows "9+" above 9)
+- **Jobs popover** — lists 5 most recent jobs with type, status dot, relative time, summary excerpt, "Go to Jobs →" link; mutually exclusive with alerts popover
+- **Alerts popover** — lists 5 most recent alerts with action colour dot, message, relative time, match_reason when present; "clear" button; unread count tracked via `localStorage` key `rss-curator-alerts-read-at`
+- `web/jobs.html` — standalone Jobs page: always-open SSE badge, three tabs (All / Active / Failed with live counts), expandable job rows
 - Dark mode / light mode
 
-### 7. qBittorrent Client (`internal/client/qbittorrent.go`)
+### 8. qBittorrent Client (`internal/client/qbittorrent.go`)
 
 Thin wrapper around the qBittorrent Web API: authenticate, add torrent by URL/magnet, pause/resume by title. Non-fatal on startup.
 
@@ -148,11 +184,14 @@ rss-curator/
 │   └── main.go              CLI entry point, all command dispatch, cmdCheck pipeline
 ├── internal/
 │   ├── ai/
-│   │   ├── provider.go      Provider interface + Ollama, OpenAI, noop implementations
+│   │   ├── provider.go      Provider interface + Ollama, OpenAI, noop implementations; FormatSetter interface
 │   │   ├── enricher.go      LLM metadata gap-fill (ShowName / Season fallback)
-│   │   └── scorer.go        Approval probability scorer (0.0–1.0)
+│   │   ├── scorer.go        Approval probability scorer with structured output + debug logging
+│   │   └── history.go       ShowSummary aggregator for compact scorer history context
 │   ├── api/
-│   │   └── server.go        HTTP API server, handlers, JSON response types
+│   │   └── server.go        HTTP API server, handlers, jobs/alerts SSE, alert poller
+│   ├── logbuffer/
+│   │   └── buffer.go        In-memory ring buffer — logs, jobs fan-out, alerts fan-out
 │   ├── client/
 │   │   └── qbittorrent.go   qBittorrent Web API client
 │   ├── feed/
@@ -162,9 +201,10 @@ rss-curator/
 │   └── storage/
 │       └── storage.go       Store interface + SQLite implementation + migrations
 ├── pkg/models/
-│   └── types.go             Shared types: FeedItem, StagedTorrent, Activity, ShowsConfig
+│   └── types.go             Shared types: FeedItem, StagedTorrent, Activity, ShowsConfig, JobRecord, JobSummary, AlertRecord
 ├── web/
 │   ├── index.html           Vue.js dashboard
+│   ├── jobs.html            Standalone Jobs page (Vue.js)
 │   ├── app.js               Application logic
 │   └── style.css            Tailwind-based styles
 ├── docs/
@@ -195,7 +235,7 @@ rss-curator/
 |---|---|
 | [`autobrr/go-qbittorrent`](https://github.com/autobrr/go-qbittorrent) | qBittorrent Web API client |
 | [`mattn/go-sqlite3`](https://github.com/mattn/go-sqlite3) | SQLite driver (CGO) |
-| [`go.uber.org/zap`](https://github.com/uber-go/zap) | Structured logging in API server |
+| [`go.uber.org/zap`](https://github.com/uber-go/zap) | Structured logging in API server and AI subsystem |
 
 ---
 
@@ -211,19 +251,16 @@ rss-curator/
 
 ## Roadmap
 
+- [x] **Scorer `match_confidence` signal** — scorer returns `match_confidence` (0.0–1.0) and `match_confidence_reason`; UI shows amber ⚠ `low confidence` badge with tooltip when `match_confidence < 0.5`
+- [x] **Jobs system** — background task tracking for `feed_check`, `rescore`, `rescore_backfill`; jobs SSE fan-out; standalone `/jobs` page
+- [x] **Alerts system** — ephemeral in-memory ring (cap 50); approve/reject/queue/staged/job_failed alert types; bell UI with unread badge; SSE fan-out with ring backfill; unread persistence via `localStorage`
+- [x] **Compact show-history summaries** — `BuildShowSummaries` aggregator for token-efficient scorer history; eliminates recency bias
+- [x] **Ollama structured output** — `FormatSetter` interface; JSON Schema enforcement eliminating schema hallucination; `num_ctx`/`num_predict` configurable
 - [ ] YAML configuration file support
 - [ ] Webhook notifications (on approve/stage)
 - [ ] Season pack handling
 - [ ] Multi-tracker aggregate feed support
 - [ ] Custom metadata extraction patterns
-- [ ] **Scorer match-confidence signal** — currently the scorer is instructed to treat the matcher's match reason as authoritative and not re-evaluate it; this creates a blind spot where a structurally valid match (rule fired, quality met, preferred group present) is semantically wrong (e.g. a broad substring rule firing on an unrelated title)
-  - Add a separate `match_confidence` output field to the scorer response, distinct from `score`; the scorer assesses whether the matched rule plausibly describes the actual content, without overriding release-quality scoring
-  - Low `match_confidence` can surface as a UI warning, suppress auto-queue, or route to a dedicated review state — the response to it is a product decision, not baked into the scorer
-  - Keeps the scorer's role general: any rule-vs-title divergence (substring collision, regex too broad, franchise spin-off, franchise reboot with shared keywords) benefits from the same signal
-- [ ] **Suggester engine** (`POST /api/suggestions` stub already in place)
-  - Analyse accept/reject history to infer franchise, genre, and creator patterns
-  - Surface suggested `shows.json` rules *proactively* — before matching episodes ever appear in the feed
-  - Distinguish between two rule-generation modes:
-    - **Exact-show rule** — new title clearly not covered by any existing rule (e.g. a spin-off whose name doesn't overlap with the parent)
-    - **Franchise broadening** — an existing rule is catching a spin-off via loose substring match (e.g. `Yellowstone` matching `Marshals: A Yellowstone Story`); suggest a dedicated rule for the spin-off rather than widening the parent regex
-  - Rank suggestions by confidence; include a human-readable rationale for each so the user can accept or dismiss with context
+- [ ] **Candidate-focused retrieval** — embeddings or fuzzy matching to select the most relevant history summaries for a candidate at score time
+- [ ] **App-level Prometheus metrics** — expose `/metrics` endpoint; track scorer latency, error rate, clamp frequency, model/algorithm version
+- [ ] **Suggester engine** — analyse accept/reject history to infer franchise/genre/creator patterns; surface suggested `shows.json` rules proactively before matching episodes appear in the feed

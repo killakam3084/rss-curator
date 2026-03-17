@@ -119,18 +119,82 @@ For show names with multiple words or special characters, the boundary check nee
 
 ---
 
-## Systems / Architecture
+## AI Prompt Engineering
 
-### Async Job Queues
-**Context:** Deferred roadmap item — AI scoring currently blocks the feed-processing loop; a queue would decouple ingestion from inference.
+### Compact Show-History Summaries
+**Context:** AI scorer was suffering from recency bias — the last raw activity log entry (e.g. `[REJECT] Beachfront Bargain Hunt Renovation`) appeared immediately before the task instruction, causing the model to anchor on it as the subject to score rather than the actual candidate.
 
-The producer-consumer pattern: a fast producer (feed parser) enqueues work items; one or more slow consumers (AI scorers) drain the queue at their own pace. Decoupling means the feed loop never blocks on inference latency.
+Rather than sending raw log lines, history is now aggregated into per-show `ShowSummary` structs and rendered as compact one-liners:
+
+```
+NOVA: +0 -1 | last:2026-03-12 | q=1080P | ex=Beachfront Bargain Hunt Renovation S12E03 1080p HEVC x265...
+Tulsa King: +4 -0 | last:2026-03-07 | q=2160P | ex=Tulsa King S01E08 Adobe Walls 2160p AMZN WEB-DL DDP5 1 H...
+```
+
+This approach:
+- Reduces token count significantly compared to raw log lines
+- Eliminates the "last entry bias" — no single entry dominates proximity to the task instruction
+- Provides richer signal per token (approval ratio, recency, quality preference, example title)
+- Pins the candidate show's own history first, regardless of activity rank
 
 **Go deeper:**
-- Go channels as in-process queues; when to use buffered vs. unbuffered
-- `errgroup` and worker pool patterns in Go for bounded concurrency
-- At-least-once vs. exactly-once delivery semantics and why they matter for idempotent operations like scoring
+- "Lost in the middle" problem in LLMs — models attend best to content at the beginning and end of the context window; placing candidate last (immediately before the instruction) is intentional
+- Few-shot prompting vs. history injection — the activity summaries act as implicit few-shot examples per-show
+- Token budget management: compact representations allow more shows in context within the same `num_ctx` window
 
 ---
 
-*Last updated: 2026-03-11*
+### Structured Output with Ollama
+**Context:** llama3.2 was hallucinating a JSON Schema definition instead of a scored response when using `format: "json"` (loose JSON mode). The model inferred it should *describe* the schema rather than *populate* it.
+
+Ollama supports passing a full JSON Schema object as the `format` field, which constrains the model to exactly the declared shape and types:
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "score": { "type": "number", "minimum": 0, "maximum": 1 },
+    "reason": { "type": "string" },
+    "match_confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+    "match_confidence_reason": { "type": "string" }
+  },
+  "required": ["score", "reason", "match_confidence", "match_confidence_reason"]
+}
+```
+
+The `FormatSetter` interface was added to the `ai.Provider` layer so the scorer can configure structured output without changing the `Provider` interface signature — only providers that support it (currently `ollamaProvider`) implement it; the scorer uses a type assertion at construction time.
+
+**Go deeper:**
+- JSON Schema as a type system for LLM outputs — `minimum`/`maximum` on numeric fields acts as soft constraints; clamping in application code provides a hard guarantee
+- Constrained decoding / grammar-based sampling as the mechanism behind structured outputs in local LLMs
+- OpenAI's equivalent: `response_format: { type: "json_schema", json_schema: { ... } }`
+
+---
+
+## Observability
+
+### Prometheus + Netdata for Host Metrics
+**Context:** TrueNAS SCALE host running the curator stack; Prometheus scraping Netdata at `/api/v1/allmetrics?format=prometheus`; CPU, memory, and load average alerting.
+
+Key Netdata metric names for Prometheus:
+
+| Metric | Dimensions | Notes |
+|---|---|---|
+| `netdata_system_cpu_percentage_average` | `user`, `system`, `idle`, `iowait`, ... | Exclude `idle`; use `sum(...{dimension=~"user\|system"}) by (instance)` for active CPU |
+| `netdata_system_ram_MiB_average` | `used`, `free`, `cached`, `buffers` | Use used/(used+free) for utilisation ratio |
+| `netdata_system_load_load_average` | `load1`, `load5`, `load15` | `load1` is noisy; prefer `load5` or avg of all three for alerting |
+
+**Key insights:**
+- Direct `+` between metrics with different `dimension=` labels fails in PromQL — use `sum(...) by (instance)` to aggregate across dimensions first
+- `load1` is highly variable; `load5` provides a better signal-to-noise ratio; average of all three gives the smoothest signal
+- Load alert thresholds should be relative to CPU core count
+- Place `alerts.yml` in your Prometheus config directory and reference it via `rule_files:` in `prometheus.yml`
+
+**Go deeper:**
+- Prometheus data model: labels as dimensions; why label cardinality matters for query performance
+- `avg_over_time()` vs. `rate()` — use `avg_over_time` for gauges (CPU%, RAM); `rate()` for counters (bytes transferred)
+- Alertmanager for routing, silencing, and grouping alerts from Prometheus rules
+
+---
+
+*Last updated: 2026-03-16*
