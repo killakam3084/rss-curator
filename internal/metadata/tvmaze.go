@@ -33,9 +33,9 @@ func (p *tvmazeProvider) Name() string { return "tvmaze" }
 
 // tvmazeShow is the relevant subset of the TVMaze singlesearch JSON response.
 type tvmazeShow struct {
-	ID      int    `json:"id"`
-	Name    string `json:"name"`
-	Status  string `json:"status"`
+	ID      int      `json:"id"`
+	Name    string   `json:"name"`
+	Status  string   `json:"status"`
 	Genres  []string `json:"genres"`
 	Network *struct {
 		Name string `json:"name"`
