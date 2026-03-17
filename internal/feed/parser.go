@@ -153,8 +153,8 @@ func extractMetadata(item *models.FeedItem) {
 		item.Quality = strings.ToUpper(matches[1])
 	}
 
-	// Extract codec (x264, x265, H264, H265, HEVC)
-	codecRe := regexp.MustCompile(`(?i)\b(x264|x265|H\.?264|H\.?265|HEVC)\b`)
+	// Extract codec (x264, x265, H264/H.264/H 264, H265/H.265/H 265, HEVC)
+	codecRe := regexp.MustCompile(`(?i)\b(x264|x265|H[\s\.]?264|H[\s\.]?265|HEVC)\b`)
 	if matches := codecRe.FindStringSubmatch(title); len(matches) > 0 {
 		codec := strings.ToUpper(matches[1])
 		// Normalize codec names

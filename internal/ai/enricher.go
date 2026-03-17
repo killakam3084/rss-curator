@@ -19,17 +19,26 @@ Fields:
   show_name  (string)  - human-readable show name, e.g. "The Last of Us"
   season     (int)     - season number, 0 if unknown
   episode    (int)     - episode number, 0 if unknown
-  year       (int)     - release year, 0 if unknown`
+  year       (int)     - release year, 0 if unknown
+  quality    (string)  - one of 2160P, 1080P, 720P, 4K, or "" if unknown
+  codec      (string)  - one of x265, x264, or "" if unknown
+  source     (string)  - e.g. WEB-DL, BluRay, HDTV, WEBRip, AMZN, NF, DSNP, HMAX, ATVP, or "" if unknown
+  release_group (string) - release group suffix, e.g. NTb, FLUX, or "" if unknown`
 
 type enrichResult struct {
-	ShowName string `json:"show_name"`
-	Season   int    `json:"season"`
-	Episode  int    `json:"episode"`
-	Year     int    `json:"year"`
+	ShowName     string `json:"show_name"`
+	Season       int    `json:"season"`
+	Episode      int    `json:"episode"`
+	Year         int    `json:"year"`
+	Quality      string `json:"quality"`
+	Codec        string `json:"codec"`
+	Source       string `json:"source"`
+	ReleaseGroup string `json:"release_group"`
 }
 
 // Enricher uses an LLM to fill in FeedItem fields the regex parser could not determine.
-// It is intentionally a fallback - it only fires when ShowName is empty or Season is 0.
+// It is intentionally a fallback - it only fires when one or more key metadata
+// fields are missing.
 type Enricher struct {
 	provider    Provider
 	timeoutSecs int         // per-request LLM timeout; read from CURATOR_AI_TIMEOUT_SECS
@@ -50,12 +59,17 @@ func NewEnricher(p Provider, logger *zap.Logger) *Enricher {
 	return &Enricher{provider: p, timeoutSecs: timeout, logger: logger}
 }
 
-// Enrich attempts to fill in missing ShowName / Season / Episode using the LLM.
+// Enrich attempts to fill in missing title metadata using the LLM.
 // It is safe to call on every item - it no-ops if the regex already parsed the
 // title successfully, or if the provider is unreachable.
 func (e *Enricher) Enrich(item *models.FeedItem) {
-	// Only enrich if the regex left ShowName empty or Season unparsed.
-	if item.ShowName != "" && item.Season > 0 {
+	// Only enrich if at least one key field is missing.
+	if item.ShowName != "" &&
+		item.Season > 0 &&
+		item.Quality != "" &&
+		item.Codec != "" &&
+		item.Source != "" &&
+		item.ReleaseGroup != "" {
 		return
 	}
 
@@ -119,6 +133,10 @@ func (e *Enricher) Enrich(item *models.FeedItem) {
 			zap.String("show_name", result.ShowName),
 			zap.Int("season", result.Season),
 			zap.Int("episode", result.Episode),
+			zap.String("quality", result.Quality),
+			zap.String("codec", result.Codec),
+			zap.String("source", result.Source),
+			zap.String("release_group", result.ReleaseGroup),
 		)
 	}
 
@@ -130,5 +148,22 @@ func (e *Enricher) Enrich(item *models.FeedItem) {
 	}
 	if result.Episode > 0 && item.Episode == 0 {
 		item.Episode = result.Episode
+	}
+	if result.Quality != "" && item.Quality == "" {
+		item.Quality = strings.ToUpper(strings.TrimSpace(result.Quality))
+	}
+	if result.Codec != "" && item.Codec == "" {
+		codec := strings.ToUpper(strings.TrimSpace(result.Codec))
+		if strings.Contains(codec, "265") || codec == "HEVC" {
+			item.Codec = "x265"
+		} else if strings.Contains(codec, "264") {
+			item.Codec = "x264"
+		}
+	}
+	if result.Source != "" && item.Source == "" {
+		item.Source = strings.TrimSpace(result.Source)
+	}
+	if result.ReleaseGroup != "" && item.ReleaseGroup == "" {
+		item.ReleaseGroup = strings.TrimSpace(result.ReleaseGroup)
 	}
 }
