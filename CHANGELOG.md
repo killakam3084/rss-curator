@@ -6,6 +6,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+## [0.24.1] - 2026-03-16
+
+### Added
+- Rematch UI now supports `force_ai_enrich` as an explicit option, allowing AI title enrichment to override already-parsed fields before matcher evaluation.
+
+### Changed
+- Rematch API accepts `force_ai_enrich` and uses forced enricher mode when requested, making ambiguous-title diagnostics and AI-assisted re-evaluation easier from the dashboard.
+
+
 ## [0.24.0] - 2026-03-16
 
 ### Added
