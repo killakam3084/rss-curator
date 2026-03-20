@@ -130,6 +130,11 @@ func (m *Matcher) matchLegacy(item models.FeedItem) (bool, string) {
 // complete word (word-boundary match, case-insensitive). This prevents
 // substrings like "NOVA" from matching within "Renovation".
 func matchShowName(itemShowName, ruleName string) bool {
+	ruleName = strings.TrimSpace(ruleName)
+	if ruleName == "" {
+		return false
+	}
+
 	pattern := `(?i)\b` + regexp.QuoteMeta(ruleName) + `\b`
 	re, err := regexp.Compile(pattern)
 	if err != nil {
@@ -143,7 +148,7 @@ func matchShowName(itemShowName, ruleName string) bool {
 // word-boundary matching.
 func matchesShowName(showName string, showNames []string) bool {
 	if len(showNames) == 0 {
-		return true
+		return false
 	}
 	for _, name := range showNames {
 		if matchShowName(showName, name) {

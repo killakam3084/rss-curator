@@ -6,6 +6,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+## [0.24.2] - 2026-03-19
+
+### Added
+- Startup config logs now explicitly report when `shows.json` could not be loaded and the app is falling back to legacy environment-variable matching rules.
+- Regression tests added for CSV env parsing and legacy matcher behavior around empty watchlists/rule names.
+
+### Fixed
+- Legacy matching no longer treats an unset `SHOW_NAMES` value as a wildcard that matches every feed item.
+- Empty/whitespace entries in `SHOW_NAMES`, `EXCLUDE_GROUPS`, and `PREFERRED_GROUPS` are now trimmed out during config parsing.
+
+
 ## [0.24.1] - 2026-03-16
 
 ### Added

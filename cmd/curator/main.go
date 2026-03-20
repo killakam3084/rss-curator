@@ -23,7 +23,7 @@ import (
 )
 
 const (
-	version = "0.24.1"
+	version = "0.24.2"
 )
 
 func main() {
@@ -454,11 +454,11 @@ func loadConfig() (models.Config, error) {
 			AddPaused: getEnv("QBITTORRENT_ADD_PAUSED", "true") == "true",
 		},
 		MatchRules: models.MatchRule{
-			ShowNames:       strings.Split(os.Getenv("SHOW_NAMES"), ","),
+			ShowNames:       parseCSV(os.Getenv("SHOW_NAMES")),
 			MinQuality:      getEnv("MIN_QUALITY", "1080p"),
 			PreferredCodec:  getEnv("PREFERRED_CODEC", "x265"),
-			ExcludeGroups:   strings.Split(os.Getenv("EXCLUDE_GROUPS"), ","),
-			PreferredGroups: strings.Split(os.Getenv("PREFERRED_GROUPS"), ","),
+			ExcludeGroups:   parseCSV(os.Getenv("EXCLUDE_GROUPS")),
+			PreferredGroups: parseCSV(os.Getenv("PREFERRED_GROUPS")),
 		},
 		StoragePath: getEnv("STORAGE_PATH", filepath.Join(homeDir, ".curator.db")),
 	}
@@ -493,6 +493,8 @@ func loadConfig() (models.Config, error) {
 	showsConfig, err := loadShowsConfig()
 	if err == nil {
 		cfg.ShowsConfig = showsConfig
+	} else {
+		fmt.Printf("[Config] shows.json not loaded (%v); using environment variable rules fallback\n", err)
 	}
 
 	return cfg, nil
@@ -532,6 +534,23 @@ func getEnv(key, defaultValue string) string {
 		return value
 	}
 	return defaultValue
+}
+
+func parseCSV(value string) []string {
+	if strings.TrimSpace(value) == "" {
+		return nil
+	}
+
+	parts := strings.Split(value, ",")
+	out := make([]string, 0, len(parts))
+	for _, part := range parts {
+		trimmed := strings.TrimSpace(part)
+		if trimmed != "" {
+			out = append(out, trimmed)
+		}
+	}
+
+	return out
 }
 
 func printUsage() {
