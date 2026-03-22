@@ -52,6 +52,10 @@
                 </a>
                 <span class="text-gray-700">|</span>
                 <span class="text-lg font-bold font-mono text-curator-500">jobs</span>
+                                <!-- progress -->
+                                <td class="px-4 py-3 font-mono text-xs text-gray-400">{{ jobSummaryLine(job) }}</td>
+                                <!-- progress -->
+                                <td class="px-4 py-3 font-mono text-xs text-gray-400">{{ jobSummaryLine(job) }}</td>
             </div>
             <!-- Right: live indicator + logout -->
             <div class="flex items-center gap-4">
@@ -72,6 +76,65 @@
                 <h1 class="text-2xl font-bold font-mono text-curator-500 mb-1">> jobs</h1>
                 <p class="text-sm text-gray-500 font-mono">background task history — feed checks, rescores, backfills</p>
             </div>
+
+            <!-- Global Jobs Rail -->
+            <section v-if="jobsRailVisible" class="bg-gray-900 border border-gray-800 rounded-lg shadow-lg p-4 mb-6">
+                <div class="flex items-start justify-between gap-4 flex-wrap">
+                    <div>
+                        <h2 class="text-sm font-mono font-bold text-curator-500 uppercase">async jobs</h2>
+                        <p class="text-xs font-mono text-gray-500 mt-1">live queue state and latest terminal result</p>
+                    </div>
+                    <span class="text-xs font-mono text-gray-600 uppercase">global surface</span>
+                </div>
+
+                <div class="flex flex-wrap gap-2 mt-3">
+                    <span class="px-2.5 py-1 rounded border border-curator-500/30 bg-curator-500/10 text-curator-400 text-xs font-mono">{{ runningJobs.length }} running</span>
+                    <span class="px-2.5 py-1 rounded border border-red-500/30 bg-red-500/10 text-red-300 text-xs font-mono">{{ failedJobs.length }} failed</span>
+                    <span class="px-2.5 py-1 rounded border border-amber-500/30 bg-amber-500/10 text-amber-300 text-xs font-mono">{{ cancelledJobs.length }} cancelled</span>
+                </div>
+
+                <div class="grid grid-cols-1 xl:grid-cols-2 gap-3 mt-4">
+                    <div class="bg-gray-950/60 border border-gray-800 rounded-lg p-3">
+                        <div class="flex items-center justify-between gap-2 mb-2">
+                            <span class="text-xs font-mono font-bold text-gray-300 uppercase">running now</span>
+                            <span class="text-xs font-mono text-gray-600">{{ railRunningJobs.length }}</span>
+                        </div>
+                        <div v-if="railRunningJobs.length === 0" class="text-xs font-mono text-gray-600">no live jobs</div>
+                        <ul v-else class="space-y-2">
+                            <li v-for="job in railRunningJobs" :key="job.id" class="flex items-start gap-3">
+                                <span class="mt-1 w-2 h-2 rounded-full bg-curator-500 animate-pulse-dot shrink-0"></span>
+                                <div class="min-w-0 flex-1">
+                                    <div class="flex items-center justify-between gap-2">
+                                        <span class="text-xs font-mono text-gray-300 truncate">{{ job.type }} #{{ job.id }}</span>
+                                        <span class="text-xs font-mono text-gray-600 shrink-0">{{ formatRelative(job.started_at) }}</span>
+                                    </div>
+                                    <p class="text-xs font-mono text-curator-500/80 truncate">{{ jobSummaryLine(job) }}</p>
+                                </div>
+                            </li>
+                        </ul>
+                    </div>
+
+                    <div class="bg-gray-950/60 border border-gray-800 rounded-lg p-3">
+                        <div class="flex items-center justify-between gap-2 mb-2">
+                            <span class="text-xs font-mono font-bold text-gray-300 uppercase">latest terminal</span>
+                            <span v-if="latestTerminalJob" class="text-xs font-mono text-gray-600">{{ formatRelative(latestTerminalJob.completed_at || latestTerminalJob.started_at) }}</span>
+                        </div>
+                        <div v-if="!latestTerminalJob" class="text-xs font-mono text-gray-600">no terminal jobs yet</div>
+                        <div v-else class="space-y-1">
+                            <div class="flex items-center gap-2">
+                                <span :class="[
+                                    'w-2 h-2 rounded-full shrink-0',
+                                    latestTerminalJob.status === 'completed' ? 'bg-emerald-500' :
+                                    latestTerminalJob.status === 'cancelled' ? 'bg-amber-500' : 'bg-red-500'
+                                ]"></span>
+                                <span class="text-xs font-mono text-gray-300">{{ latestTerminalJob.type }} #{{ latestTerminalJob.id }}</span>
+                                <span class="text-xs font-mono uppercase text-gray-600">{{ latestTerminalJob.status }}</span>
+                            </div>
+                            <p class="text-xs font-mono text-gray-500">{{ jobSummaryLine(latestTerminalJob) }}</p>
+                        </div>
+                    </div>
+                </div>
+            </section>
 
             <!-- Tabs -->
             <div class="flex gap-1 mb-4 bg-gray-900 border border-gray-800 rounded-lg p-1 w-fit">
@@ -113,6 +176,7 @@
                             <th class="text-left px-4 py-3">status</th>
                             <th class="text-left px-4 py-3">started</th>
                             <th class="text-left px-4 py-3">duration</th>
+                            <th class="text-left px-4 py-3">progress</th>
                             <th class="text-left px-4 py-3">found</th>
                             <th class="text-left px-4 py-3">matched</th>
                             <th class="text-left px-4 py-3">scored</th>
@@ -173,11 +237,12 @@
                             </tr>
                             <!-- Expanded row -->
                             <tr v-if="expandedIds.has(job.id)" class="bg-gray-950/50">
-                                <td colspan="10" class="px-8 py-4">
+                                <td colspan="11" class="px-8 py-4">
                                     <div class="font-mono text-xs text-gray-400 space-y-1">
                                         <p><span class="text-gray-600">id:</span> {{ job.id }}</p>
                                         <p><span class="text-gray-600">started_at:</span> {{ job.started_at }}</p>
                                         <p v-if="job.completed_at"><span class="text-gray-600">completed_at:</span> {{ job.completed_at }}</p>
+                                        <p v-if="job.progress"><span class="text-gray-600">progress:</span> {{ job.progress }}</p>
                                         <p v-if="job.summary?.error_message" class="text-red-400"><span class="text-gray-600">error:</span> {{ job.summary.error_message }}</p>
                                         <p><span class="text-gray-600">summary:</span> {{ JSON.stringify(job.summary) }}</p>
                                     </div>
@@ -204,6 +269,18 @@
             const cancelingIds = reactive(new Set());
             const sseConnected = ref(false);
             let eventSource = null;
+
+            const runningJobs = computed(() => jobs.value.filter(j => j.status === 'running'));
+            const failedJobs = computed(() => jobs.value.filter(j => j.status === 'failed'));
+            const cancelledJobs = computed(() => jobs.value.filter(j => j.status === 'cancelled'));
+            const latestTerminalJob = computed(() => jobs.value.find(j => j.status !== 'running') || null);
+            const railRunningJobs = computed(() => runningJobs.value.slice(0, 3));
+            const jobsRailVisible = computed(() =>
+                runningJobs.value.length > 0 ||
+                failedJobs.value.length > 0 ||
+                cancelledJobs.value.length > 0 ||
+                latestTerminalJob.value !== null
+            );
 
             // Dark mode: always dark on this page (follow system)
             const applyDark = () => {
@@ -256,6 +333,24 @@
                 return jobs.value;
             });
 
+            const jobSummaryLine = (job) => {
+                if (!job) return '—';
+                if (job.status === 'running') return job.progress || 'running…';
+                if (job.status === 'failed') return job.summary?.error_message || 'failed';
+                if (job.status === 'cancelled') {
+                    const parts = [];
+                    if ((job.summary?.items_matched || 0) > 0) parts.push(`${job.summary.items_matched} matched`);
+                    if ((job.summary?.items_scored || 0) > 0) parts.push(`${job.summary.items_scored} scored`);
+                    return parts.length ? `cancelled — ${parts.join(' · ')}` : 'cancelled';
+                }
+                const parts = [];
+                if ((job.summary?.items_found || 0) > 0) parts.push(`${job.summary.items_found} found`);
+                if ((job.summary?.items_matched || 0) > 0) parts.push(`${job.summary.items_matched} matched`);
+                if ((job.summary?.items_scored || 0) > 0) parts.push(`${job.summary.items_scored} scored`);
+                if ((job.summary?.items_queued || 0) > 0) parts.push(`${job.summary.items_queued} queued`);
+                return parts.length ? parts.join(' · ') : 'completed';
+            };
+
             const toggleExpand = (id) => {
                 if (expandedIds.has(id)) expandedIds.delete(id);
                 else expandedIds.add(id);
@@ -302,7 +397,9 @@
             return {
                 jobs, activeTab, expandedIds, sseConnected,
                 filteredJobs, tabCount, toggleExpand,
-                formatRelative, duration, cancelJob, cancelingIds
+                formatRelative, duration, cancelJob, cancelingIds,
+                runningJobs, failedJobs, cancelledJobs, latestTerminalJob,
+                railRunningJobs, jobsRailVisible, jobSummaryLine
             };
         }
     }).mount('#jobs-app');

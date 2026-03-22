@@ -106,7 +106,16 @@ const app = createApp({
         // Jobs computed
         const runningJobs = computed(() => jobs.value.filter(j => j.status === 'running'));
         const failedJobs  = computed(() => jobs.value.filter(j => j.status === 'failed'));
+        const cancelledJobs = computed(() => jobs.value.filter(j => j.status === 'cancelled'));
         const recentJobs  = computed(() => jobs.value.slice(0, 5));
+        const latestTerminalJob = computed(() => jobs.value.find(j => j.status !== 'running') || null);
+        const railRunningJobs = computed(() => runningJobs.value.slice(0, 3));
+        const jobsRailVisible = computed(() =>
+            runningJobs.value.length > 0 ||
+            failedJobs.value.length > 0 ||
+            cancelledJobs.value.length > 0 ||
+            latestTerminalJob.value !== null
+        );
         // Flat list of in-flight jobs for the notification strip (safe Map→Array for v-for).
         // Cross-references the live jobs array to pick up mid-loop progress updates from SSE.
         const activeJobList = computed(() =>
@@ -873,6 +882,24 @@ const app = createApp({
             return Math.floor(diff / 86400000) + 'd ago';
         };
 
+        const jobSummaryLine = (job) => {
+            if (!job) return '—';
+            if (job.status === 'running') return job.progress || 'running…';
+            if (job.status === 'failed') return job.summary?.error_message || 'failed';
+            if (job.status === 'cancelled') {
+                const parts = [];
+                if ((job.summary?.items_matched || 0) > 0) parts.push(`${job.summary.items_matched} matched`);
+                if ((job.summary?.items_scored || 0) > 0) parts.push(`${job.summary.items_scored} scored`);
+                return parts.length ? `cancelled — ${parts.join(' · ')}` : 'cancelled';
+            }
+            const parts = [];
+            if ((job.summary?.items_found || 0) > 0) parts.push(`${job.summary.items_found} found`);
+            if ((job.summary?.items_matched || 0) > 0) parts.push(`${job.summary.items_matched} matched`);
+            if ((job.summary?.items_scored || 0) > 0) parts.push(`${job.summary.items_scored} scored`);
+            if ((job.summary?.items_queued || 0) > 0) parts.push(`${job.summary.items_queued} queued`);
+            return parts.length ? parts.join(' · ') : 'completed';
+        };
+
         // Alerts helpers
         const fetchAlerts = async () => {
             try {
@@ -1030,9 +1057,14 @@ const app = createApp({
             dismissJob,
             runningJobs,
             failedJobs,
+            cancelledJobs,
             recentJobs,
+            latestTerminalJob,
+            railRunningJobs,
+            jobsRailVisible,
             fetchJobs,
             formatRelative,
+            jobSummaryLine,
             selectAll,
             alerts,
             alertsPopoverOpen,
