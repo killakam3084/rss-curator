@@ -6,6 +6,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+## [0.28.0] - 2026-03-22
+
+### Added
+- **Sort bar** in each torrent view — sort by Date Staged (default), Pub Date, Title, Size, or AI Score. Clicking the active field toggles asc/desc; selecting a new field resets to descending.
+- **Pagination** — page-size selector (25 / 50 / 100 / all) and prev/next controls with item-range counter. Hidden when all items fit on one page. Resets to page 1 on tab switch, sort change, or page-size change.
+- `select all N` button continues to select the full view (not just the current page), keeping bulk operations consistent.
+
+
 ## [0.27.0] - 2026-03-22
 
 ### Added
