@@ -256,6 +256,24 @@
                             </button>
                         </div>
 
+                        <!-- Active Job Notification Strip -->
+                        <div v-if="activeJobList.length > 0" class="flex flex-col gap-1 mb-4">
+                            <div
+                                v-for="job in activeJobList"
+                                :key="job.id"
+                                class="flex items-center gap-3 px-4 py-2 bg-gray-800 border border-curator-500/40 rounded text-xs font-mono"
+                            >
+                                <span class="w-2 h-2 rounded-full bg-curator-500 animate-pulse shrink-0"></span>
+                                <span class="text-curator-400 font-bold">{{ job.label }}</span>
+                                <span class="text-gray-500">job #{{ job.id }} running…</span>
+                                <button
+                                    @click.stop="dismissJob(job.id)"
+                                    class="ml-auto text-gray-600 hover:text-gray-300 transition-colors"
+                                    title="Dismiss"
+                                >&#10005;</button>
+                            </div>
+                        </div>
+
                         <!-- Bulk Actions -->
                         <div v-if="selectedCount > 0" class="flex items-center gap-4 p-4 bg-gray-800 border border-gray-700 rounded-lg mb-6">
                             <span class="text-sm font-mono font-bold text-curator-500">// {{ selectedCount }} selected</span>
@@ -287,24 +305,29 @@
                                     <span v-if="bulkLoading" class="inline-block w-4 h-4 border-2 border-gray-900 border-t-transparent rounded-full animate-spin"></span>
                                     {{ bulkLoading ? 'queuing...' : '&#8595; queue selected' }}
                                 </button>
-                                <button 
-                                    @click="rematchSelected" 
-                                    :disabled="rematchLoading"
-                                    class="px-4 py-2 bg-indigo-700 hover:bg-indigo-600 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded font-mono font-bold text-sm transition-colors duration-200 flex items-center gap-2 uppercase"
-                                    title="Re-run parser and matcher on selected torrents"
-                                >
-                                    <span v-if="rematchLoading" class="inline-block w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
-                                    {{ rematchLoading ? 'matching...' : '&#10227; re-match' }}
-                                </button>
-                                <button 
-                                    @click="rescoreSelected" 
-                                    :disabled="rescoreLoading"
-                                    class="px-4 py-2 bg-blue-700 hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded font-mono font-bold text-sm transition-colors duration-200 flex items-center gap-2 uppercase"
-                                    title="Re-run AI scoring on selected torrents"
-                                >
-                                    <span v-if="rescoreLoading" class="inline-block w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
-                                    {{ rescoreLoading ? 'scoring...' : '&#9889; re-score' }}
-                                </button>
+                                <!-- Actions dropdown: Re-match + Re-score -->
+                                <div class="relative" @click.stop>
+                                    <button
+                                        @click="actionsDropdownOpen = !actionsDropdownOpen"
+                                        :disabled="rematchLoading || rescoreLoading"
+                                        class="px-4 py-2 bg-indigo-700 hover:bg-indigo-600 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded font-mono font-bold text-sm transition-colors duration-200 flex items-center gap-2 uppercase"
+                                    >
+                                        <span v-if="rematchLoading || rescoreLoading" class="inline-block w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
+                                        {{ rematchLoading ? 'matching…' : rescoreLoading ? 'scoring…' : 'Actions ▾' }}
+                                    </button>
+                                    <div v-if="actionsDropdownOpen" class="absolute right-0 mt-1 w-44 bg-gray-800 border border-gray-700 rounded shadow-xl z-20">
+                                        <button
+                                            @click="actionsDropdownOpen = false; rematchSelected()"
+                                            class="w-full px-4 py-2 text-left text-sm font-mono text-gray-200 hover:bg-gray-700 flex items-center gap-2"
+                                            title="Re-run parser and matcher on selected torrents"
+                                        >&#10227; Re-match</button>
+                                        <button
+                                            @click="actionsDropdownOpen = false; rescoreSelected()"
+                                            class="w-full px-4 py-2 text-left text-sm font-mono text-gray-200 hover:bg-gray-700 flex items-center gap-2"
+                                            title="Re-run AI scoring on selected torrents"
+                                        >&#9889; Re-score</button>
+                                    </div>
+                                </div>
                                 <button
                                     @click="selectedIds.clear()"
                                     class="px-3 py-2 bg-gray-700 hover:bg-gray-600 text-gray-400 hover:text-gray-200 rounded font-mono font-bold text-sm transition-colors duration-200 uppercase"
@@ -329,7 +352,21 @@
                     </div>
 
                     <!-- Torrents Grid -->
-                    <div v-else class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div v-else>
+                        <!-- Select-all / deselect-all toggle -->
+                        <div class="flex items-center justify-end mb-2 px-1">
+                            <button
+                                v-if="selectedCount < displayedTorrents.length"
+                                @click="selectAll()"
+                                class="text-xs font-mono text-gray-500 hover:text-curator-400 transition-colors"
+                            >select all {{ displayedTorrents.length }}</button>
+                            <button
+                                v-else
+                                @click="selectedIds.clear()"
+                                class="text-xs font-mono text-gray-500 hover:text-red-400 transition-colors"
+                            >deselect all</button>
+                        </div>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                         <div 
                             v-for="torrent in displayedTorrents" 
                             :key="torrent.id"
@@ -440,7 +477,8 @@
                                 </div>
                             </div>
                         </div>
-                    </div>
+                        </div><!-- end grid -->
+                    </div><!-- end v-else wrapper -->
                 </main>
             </div>
         </div>

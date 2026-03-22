@@ -26,7 +26,11 @@ const app = createApp({
         // Jobs state
         const jobs = ref([]);
         const jobsPopoverOpen = ref(false);
+        const activeJobIds = ref(new Map()); // job_id → { type, label } for in-flight jobs started from this session
         let jobsEventSource = null;
+
+        // Bulk-actions dropdown state (Phase B)
+        const actionsDropdownOpen = ref(false);
 
         // Alerts state
         const alerts = ref([]);
@@ -87,6 +91,10 @@ const app = createApp({
         const runningJobs = computed(() => jobs.value.filter(j => j.status === 'running'));
         const failedJobs  = computed(() => jobs.value.filter(j => j.status === 'failed'));
         const recentJobs  = computed(() => jobs.value.slice(0, 5));
+        // Flat list of in-flight jobs for the notification strip (safe Map→Array for v-for)
+        const activeJobList = computed(() =>
+            [...activeJobIds.value.entries()].map(([id, info]) => ({ id, ...info }))
+        );
 
         // Alerts computed
         const unreadAlerts = computed(() =>
@@ -568,6 +576,10 @@ const app = createApp({
             openRematchModal(ids);
         };
 
+        const selectAll = () => {
+            displayedTorrents.value.forEach(t => selectedIds.value.add(t.id));
+        };
+
         const submitRematch = async () => {
             if (rematchIds.value.length === 0) return;
 
@@ -586,7 +598,8 @@ const app = createApp({
                 if (!response.ok) {
                     showToast(data.error || 'Re-match failed', 'error');
                 } else if (response.status === 202) {
-                    showToast(`Re-match queued (job #${data.job_id}) — watch the Jobs log`, 'success');
+                    activeJobIds.value = new Map(activeJobIds.value).set(data.job_id, { type: 'rematch', label: 'Re-match' });
+                    showToast(`Re-match queued (job #${data.job_id})`, 'info');
                     selectedIds.value = new Set();
                     closeRematchModal();
                 } else {
@@ -627,7 +640,8 @@ const app = createApp({
                 if (!response.ok) {
                     showToast(data.error || 'Re-score failed', 'error');
                 } else if (response.status === 202) {
-                    showToast(`Re-score queued (job #${data.job_id}) — watch the Jobs log`, 'success');
+                    activeJobIds.value = new Map(activeJobIds.value).set(data.job_id, { type: 'rescore', label: 'Re-score' });
+                    showToast(`Re-score queued (job #${data.job_id})`, 'info');
                 } else {
                     if (Array.isArray(data.torrents)) {
                         data.torrents.forEach(updated => {
@@ -658,7 +672,8 @@ const app = createApp({
                 if (!response.ok) {
                     showToast(data.error || 'Re-score failed', 'error');
                 } else if (response.status === 202) {
-                    showToast(`Re-score queued (job #${data.job_id}) — watch the Jobs log`, 'success');
+                    activeJobIds.value = new Map(activeJobIds.value).set(data.job_id, { type: 'rescore', label: 'Re-score' });
+                    showToast(`Re-score queued (job #${data.job_id})`, 'info');
                     selectedIds.value = new Set();
                 } else {
                     // Merge updated scores back into torrents in-place
@@ -710,7 +725,10 @@ const app = createApp({
             });
 
             // Close any open kebab menu when clicking outside a card
-            document.addEventListener('click', () => { openMenuId.value = null; });
+            document.addEventListener('click', () => {
+                openMenuId.value = null;
+                actionsDropdownOpen.value = false;
+            });
             
             fetchAllTorrents();
             fetchActivities();
@@ -741,6 +759,35 @@ const app = createApp({
             }
         };
 
+        // Called when an SSE event closes a job that this session started.
+        // Shows a summary toast and refreshes the torrent list.
+        const onJobResolved = (job) => {
+            const info = activeJobIds.value.get(job.id);
+            if (!info) return;
+            const next = new Map(activeJobIds.value);
+            next.delete(job.id);
+            activeJobIds.value = next;
+            if (job.status === 'failed') {
+                const msg = job.summary?.error_message || `${info.label} job #${job.id} failed`;
+                showToast(msg, 'error');
+            } else {
+                const s = job.summary || {};
+                const parts = [];
+                if (s.items_matched != null) parts.push(`${s.items_matched} matched`);
+                if (s.items_scored  != null) parts.push(`${s.items_scored} scored`);
+                if (s.items_queued  != null && s.items_queued > 0) parts.push(`${s.items_queued} queued`);
+                const detail = parts.length ? ` — ${parts.join(', ')}` : '';
+                showToast(`${info.label} complete${detail}`, 'success');
+            }
+            fetchAllTorrents();
+        };
+
+        const dismissJob = (id) => {
+            const next = new Map(activeJobIds.value);
+            next.delete(id);
+            activeJobIds.value = next;
+        };
+
         const openJobsStream = () => {
             if (jobsEventSource) return; // already open
             jobsEventSource = new EventSource('/api/jobs/stream');
@@ -755,6 +802,10 @@ const app = createApp({
                     }
                     // Keep list bounded
                     if (jobs.value.length > 100) jobs.value.splice(100);
+                    // Resolve any job this session started
+                    if (activeJobIds.value.has(job.id) && (job.status === 'completed' || job.status === 'failed')) {
+                        onJobResolved(job);
+                    }
                 } catch (_) {}
             };
             jobsEventSource.onerror = () => {
@@ -917,11 +968,16 @@ const app = createApp({
             toggleSidebarCollapse,
             jobs,
             jobsPopoverOpen,
+            activeJobIds,
+            activeJobList,
+            actionsDropdownOpen,
+            dismissJob,
             runningJobs,
             failedJobs,
             recentJobs,
             fetchJobs,
             formatRelative,
+            selectAll,
             alerts,
             alertsPopoverOpen,
             unreadAlerts,
