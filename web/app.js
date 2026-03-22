@@ -107,6 +107,7 @@ const app = createApp({
         const runningJobs = computed(() => jobs.value.filter(j => j.status === 'running'));
         const failedJobs  = computed(() => jobs.value.filter(j => j.status === 'failed'));
         const cancelledJobs = computed(() => jobs.value.filter(j => j.status === 'cancelled'));
+        const completedJobs = computed(() => jobs.value.filter(j => j.status === 'completed'));
         const recentJobs  = computed(() => jobs.value.slice(0, 5));
         const latestTerminalJob = computed(() => jobs.value.find(j => j.status !== 'running') || null);
         const railRunningJobs = computed(() => runningJobs.value.slice(0, 3));
@@ -116,6 +117,21 @@ const app = createApp({
             cancelledJobs.value.length > 0 ||
             latestTerminalJob.value !== null
         );
+        // Batch progress tracking — counts jobs in the current/latest session
+        // (jobs started within ~1s of the latest started_at time).
+        const batchStats = computed(() => {
+            const batchableTypes = ['rematch', 'rescore'];
+            const allBatchJobs = jobs.value.filter(j => batchableTypes.includes(j.type));
+            if (allBatchJobs.length === 0) return { total: 0, completed: 0, running: 0 };
+            const latestStartTime = new Date(allBatchJobs[0].started_at).getTime();
+            const batchWindow = 2000; // 2s window to detect batch boundaries
+            const batchJobs = allBatchJobs.filter(j =>
+                Math.abs(new Date(j.started_at).getTime() - latestStartTime) <= batchWindow
+            );
+            const running = batchJobs.filter(j => j.status === 'running').length;
+            const completed = batchJobs.filter(j => j.status === 'completed').length;
+            return { total: batchJobs.length, running, completed };
+        });
         // Persistent list of running UI-relevant jobs for the torrent-view strip.
         // This derives from live SSE-backed jobs state so it survives refresh/navigation.
         const activeJobList = computed(() =>

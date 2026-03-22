@@ -264,6 +264,9 @@
                             <span class="px-2.5 py-1 rounded border border-amber-500/30 bg-amber-500/10 text-amber-300 text-xs font-mono">
                                 {{ cancelledJobs.length }} cancelled
                             </span>
+                            <span v-if="batchStats.total > 0" class="px-2.5 py-1 rounded border border-emerald-500/30 bg-emerald-500/10 text-emerald-300 text-xs font-mono">
+                                {{ batchStats.completed }}/{{ batchStats.total }} complete
+                            </span>
                         </div>
 
                         <div class="grid grid-cols-1 xl:grid-cols-2 gap-3 mt-4">
