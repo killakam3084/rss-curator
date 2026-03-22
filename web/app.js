@@ -137,18 +137,20 @@ const app = createApp({
             const filtered = torrents.value.filter(t => t.status === activeTab.value);
             const dir = sortDir.value === 'asc' ? 1 : -1;
             return filtered.slice().sort((a, b) => {
+                const af = a.feed_item || {};
+                const bf = b.feed_item || {};
                 switch (sortField.value) {
                     case 'title':
-                        return dir * (a.feed_item.title || '').localeCompare(b.feed_item.title || '');
+                        return dir * (af.title || '').localeCompare(bf.title || '');
                     case 'pub_date':
-                        return dir * (new Date(a.feed_item.pub_date) - new Date(b.feed_item.pub_date));
+                        return dir * (new Date(af.pub_date || 0) - new Date(bf.pub_date || 0));
                     case 'size':
-                        return dir * ((a.feed_item.size || 0) - (b.feed_item.size || 0));
+                        return dir * ((af.size || 0) - (bf.size || 0));
                     case 'ai_score':
                         return dir * ((a.ai_score || 0) - (b.ai_score || 0));
                     case 'staged_at':
                     default:
-                        return dir * (new Date(a.staged_at) - new Date(b.staged_at));
+                        return dir * (new Date(a.staged_at || 0) - new Date(b.staged_at || 0));
                 }
             });
         });
