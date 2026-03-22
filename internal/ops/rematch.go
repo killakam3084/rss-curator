@@ -19,6 +19,7 @@ type RematchOptions struct {
 	IDs           []int
 	AutoRescore   bool
 	ForceAIEnrich bool
+	JobID         int // when non-zero, caller has already created the job record and emitted the initial event
 }
 
 // RematchResult holds the outcome of a RunRematch call.
@@ -50,15 +51,21 @@ func RunRematch(ctx context.Context, opts RematchOptions, deps RematchDeps) (Rem
 		log = zap.NewNop()
 	}
 
-	jobID, _ := deps.Store.CreateJob("rematch")
+	var jobID int
 	startedAt := time.Now()
-	if deps.LogBuffer != nil {
-		deps.LogBuffer.EmitJobEvent(models.JobRecord{
-			ID:        jobID,
-			Type:      "rematch",
-			Status:    "running",
-			StartedAt: startedAt,
-		})
+	if opts.JobID > 0 {
+		// Caller pre-allocated the job record and already emitted the initial event.
+		jobID = opts.JobID
+	} else {
+		jobID, _ = deps.Store.CreateJob("rematch")
+		if deps.LogBuffer != nil {
+			deps.LogBuffer.EmitJobEvent(models.JobRecord{
+				ID:        jobID,
+				Type:      "rematch",
+				Status:    "running",
+				StartedAt: startedAt,
+			})
+		}
 	}
 
 	canRescore := opts.AutoRescore && deps.Scorer != nil && deps.Provider != nil && deps.Provider.Available()

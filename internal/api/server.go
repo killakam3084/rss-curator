@@ -165,6 +165,11 @@ type SchedulerRunResponse struct {
 	Type   string `json:"type"`
 }
 
+type JobAcceptedResponse struct {
+	JobID  int    `json:"job_id"`
+	Status string `json:"status"`
+}
+
 type FeedStreamItem struct {
 	ID           int    `json:"id"`
 	Title        string `json:"title"`
@@ -918,6 +923,8 @@ func (s *Server) handleFeedStream(w http.ResponseWriter, r *http.Request) {
 // handleRescore force re-scores a specific set of torrents on demand,
 // bypassing the ai_scored gate used by the background backfill.
 // POST /api/torrents/rescore  body: {"ids":[1,2,3]}
+// When a queue is available returns 202 {"job_id":N,"status":"queued"};
+// otherwise executes synchronously and returns the full RescoreResponse.
 func (s *Server) handleRescore(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
@@ -938,14 +945,38 @@ func (s *Server) handleRescore(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	updated, _ := ops.RunRescore(r.Context(), ops.RescoreOptions{IDs: req.IDs}, ops.RescoreDeps{
+	rescoreDeps := ops.RescoreDeps{
 		Store:     s.store,
 		Scorer:    s.scorer,
 		Provider:  s.aiProvider,
 		LogBuffer: s.logBuffer,
 		Logger:    s.logger,
-	})
+	}
 
+	if s.queue != nil {
+		jobID, err := s.store.CreateJob("rescore")
+		if err == nil {
+			now := time.Now()
+			if s.logBuffer != nil {
+				s.logBuffer.EmitJobEvent(models.JobRecord{
+					ID:        jobID,
+					Type:      "rescore",
+					Status:    "running",
+					StartedAt: now,
+				})
+			}
+			opts := ops.RescoreOptions{IDs: req.IDs, JobID: jobID}
+			_ = s.queue.Submit("rescore", true, func(ctx context.Context) {
+				ops.RunRescore(ctx, opts, rescoreDeps)
+			})
+			w.WriteHeader(http.StatusAccepted)
+			json.NewEncoder(w).Encode(JobAcceptedResponse{JobID: jobID, Status: "queued"})
+			return
+		}
+	}
+
+	// Synchronous fallback (no queue or job allocation failed).
+	updated, _ := ops.RunRescore(r.Context(), ops.RescoreOptions{IDs: req.IDs}, rescoreDeps)
 	var responses []TorrentResponse
 	for _, t := range updated {
 		responses = append(responses, torrentToResponse(t))
@@ -960,6 +991,8 @@ func (s *Server) handleRescore(w http.ResponseWriter, r *http.Request) {
 // match_reason/status in place. Optional auto_rescore can re-run AI scoring on
 // items that still match after rematch.
 // POST /api/torrents/rematch  body: {"ids":[1,2,3],"auto_rescore":true}
+// When a queue is available returns 202 {"job_id":N,"status":"queued"};
+// otherwise executes synchronously and returns the full RematchResponse.
 func (s *Server) handleRematch(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
@@ -980,11 +1013,7 @@ func (s *Server) handleRematch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	result, _ := ops.RunRematch(r.Context(), ops.RematchOptions{
-		IDs:           req.IDs,
-		AutoRescore:   req.AutoRescore,
-		ForceAIEnrich: req.ForceAIEnrich,
-	}, ops.RematchDeps{
+	rematchDeps := ops.RematchDeps{
 		Store:     s.store,
 		Matcher:   s.matcher,
 		Enricher:  s.enricher,
@@ -992,8 +1021,41 @@ func (s *Server) handleRematch(w http.ResponseWriter, r *http.Request) {
 		Provider:  s.aiProvider,
 		LogBuffer: s.logBuffer,
 		Logger:    s.logger,
-	})
+	}
 
+	if s.queue != nil {
+		jobID, err := s.store.CreateJob("rematch")
+		if err == nil {
+			now := time.Now()
+			if s.logBuffer != nil {
+				s.logBuffer.EmitJobEvent(models.JobRecord{
+					ID:        jobID,
+					Type:      "rematch",
+					Status:    "running",
+					StartedAt: now,
+				})
+			}
+			opts := ops.RematchOptions{
+				IDs:           req.IDs,
+				AutoRescore:   req.AutoRescore,
+				ForceAIEnrich: req.ForceAIEnrich,
+				JobID:         jobID,
+			}
+			_ = s.queue.Submit("rematch", true, func(ctx context.Context) {
+				ops.RunRematch(ctx, opts, rematchDeps)
+			})
+			w.WriteHeader(http.StatusAccepted)
+			json.NewEncoder(w).Encode(JobAcceptedResponse{JobID: jobID, Status: "queued"})
+			return
+		}
+	}
+
+	// Synchronous fallback (no queue or job allocation failed).
+	result, _ := ops.RunRematch(r.Context(), ops.RematchOptions{
+		IDs:           req.IDs,
+		AutoRescore:   req.AutoRescore,
+		ForceAIEnrich: req.ForceAIEnrich,
+	}, rematchDeps)
 	var responses []TorrentResponse
 	for _, t := range result.Updated {
 		responses = append(responses, torrentToResponse(t))

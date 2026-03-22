@@ -13,7 +13,8 @@ import (
 
 // RescoreOptions specifies which torrents to re-score.
 type RescoreOptions struct {
-	IDs []int
+	IDs   []int
+	JobID int // when non-zero, caller has already created the job record and emitted the initial event
 }
 
 // RescoreDeps holds service dependencies for RunRescore.
@@ -34,15 +35,21 @@ func RunRescore(ctx context.Context, opts RescoreOptions, deps RescoreDeps) ([]m
 		log = zap.NewNop()
 	}
 
-	jobID, _ := deps.Store.CreateJob("rescore")
+	var jobID int
 	startedAt := time.Now()
-	if deps.LogBuffer != nil {
-		deps.LogBuffer.EmitJobEvent(models.JobRecord{
-			ID:        jobID,
-			Type:      "rescore",
-			Status:    "running",
-			StartedAt: startedAt,
-		})
+	if opts.JobID > 0 {
+		// Caller pre-allocated the job record and already emitted the initial event.
+		jobID = opts.JobID
+	} else {
+		jobID, _ = deps.Store.CreateJob("rescore")
+		if deps.LogBuffer != nil {
+			deps.LogBuffer.EmitJobEvent(models.JobRecord{
+				ID:        jobID,
+				Type:      "rescore",
+				Status:    "running",
+				StartedAt: startedAt,
+			})
+		}
 	}
 
 	history, _ := deps.Store.GetActivity(50, 0, "")

@@ -583,7 +583,13 @@ const app = createApp({
                     })
                 });
                 const data = await response.json();
-                if (response.ok) {
+                if (!response.ok) {
+                    showToast(data.error || 'Re-match failed', 'error');
+                } else if (response.status === 202) {
+                    showToast(`Re-match queued (job #${data.job_id}) — watch the Jobs log`, 'success');
+                    selectedIds.value = new Set();
+                    closeRematchModal();
+                } else {
                     if (Array.isArray(data.torrents)) {
                         data.torrents.forEach(updated => {
                             const idx = torrents.value.findIndex(t => t.id === updated.id);
@@ -598,8 +604,6 @@ const app = createApp({
 
                     selectedIds.value = new Set();
                     closeRematchModal();
-                } else {
-                    showToast(data.error || 'Re-match failed', 'error');
                 }
             } catch (error) {
                 console.error('Error during rematch:', error);
@@ -620,7 +624,11 @@ const app = createApp({
                     body: JSON.stringify({ ids: [id] })
                 });
                 const data = await response.json();
-                if (response.ok) {
+                if (!response.ok) {
+                    showToast(data.error || 'Re-score failed', 'error');
+                } else if (response.status === 202) {
+                    showToast(`Re-score queued (job #${data.job_id}) — watch the Jobs log`, 'success');
+                } else {
                     if (Array.isArray(data.torrents)) {
                         data.torrents.forEach(updated => {
                             const idx = torrents.value.findIndex(t => t.id === updated.id);
@@ -628,8 +636,6 @@ const app = createApp({
                         });
                     }
                     showToast('Re-score complete', 'success');
-                } else {
-                    showToast(data.error || 'Re-score failed', 'error');
                 }
             } catch (error) {
                 console.error('Error during rescore:', error);
@@ -649,7 +655,12 @@ const app = createApp({
                     body: JSON.stringify({ ids })
                 });
                 const data = await response.json();
-                if (response.ok) {
+                if (!response.ok) {
+                    showToast(data.error || 'Re-score failed', 'error');
+                } else if (response.status === 202) {
+                    showToast(`Re-score queued (job #${data.job_id}) — watch the Jobs log`, 'success');
+                    selectedIds.value = new Set();
+                } else {
                     // Merge updated scores back into torrents in-place
                     if (Array.isArray(data.torrents)) {
                         data.torrents.forEach(updated => {
@@ -661,8 +672,6 @@ const app = createApp({
                     }
                     showToast(`Re-scored ${data.rescored} torrent${data.rescored !== 1 ? 's' : ''}`, 'success');
                     selectedIds.value = new Set();
-                } else {
-                    showToast(data.error || 'Re-score failed', 'error');
                 }
             } catch (error) {
                 console.error('Error during rescore:', error);
