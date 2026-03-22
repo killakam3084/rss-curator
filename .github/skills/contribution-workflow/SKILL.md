@@ -79,6 +79,51 @@ Phase 6: docs + CHANGELOG   — user-facing summary + release tag
 - Build/push jobs must depend on passing test/lint phases.
 - Do not bypass failing test/lint checks.
 
+## Functional (E2E) Test Coverage
+
+Every contribution that adds or changes an API endpoint, auth behaviour, or scheduler/job interaction must include corresponding Hurl smoke test coverage. This is not optional — the E2E suite is a publish gate on tagged releases.
+
+### Where tests live
+
+```
+tests/e2e/smoke/    — shape-safe assertions; run against CI and live TrueNAS
+tests/e2e/auth/     — auth flow tests; run separately (no shared cookie jar)
+```
+
+### Coverage expectations by change type
+
+| Change type | Required coverage |
+|---|---|
+| New `GET` endpoint | New or updated `smoke/NN-<name>.hurl` asserting status 200 and response shape |
+| New `POST` endpoint | Smoke test for validation error paths (400/405); mutation test if it mutates state |
+| Auth behavour change | Update `auth/auth-flow.hurl` to reflect new rules |
+| Scheduler/job change | Update `smoke/07-scheduler.hurl` or relevant job assertions |
+| Bug fix | Add a regression assertion to the relevant smoke file |
+
+### Hurl authoring rules
+
+- Use `{{base}}`, `{{username}}`, `{{password}}` template variables — never hardcode hosts or credentials.
+- Prefer `jsonpath "$.field" isString` / `isInteger` / `isCollection` shape assertions over exact-value assertions where the value varies by environment.
+- Exact-value assertions (`== "healthy"`, `== "accepted"`) are fine when the value is a constant defined in the Go source.
+- Use `HTTP *` + `status >= 400` when the exact status code legitimately differs between CI and live (e.g. 503 when AI is absent vs 400 when it is present).
+- Keep each `.hurl` file limited to one logical concern; add a new file rather than appending unrelated requests to an existing one.
+- Number files with a two-digit prefix (`NN-`) so execution order is deterministic.
+
+### Running locally
+
+```bash
+# Full CI stack (fresh DB, no auth)
+make test-e2e
+
+# Against live TrueNAS stack
+export CURATOR_USERNAME=admin CURATOR_PASSWORD=<secret>
+make validate-smoke
+```
+
+### Phase placement
+
+E2E test files are part of the same phase as the API change they cover. A new endpoint in Phase 3 (`internal/api`) gets its smoke test committed in Phase 3 — not deferred to a later phase. The final release phase (`chore: CHANGELOG and version bump`) should not be the first time E2E coverage appears.
+
 ## Safety Rules
 - Never commit secrets or local env files.
 - Never modify unrelated files to satisfy checks.
