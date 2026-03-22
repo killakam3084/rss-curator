@@ -91,9 +91,13 @@ const app = createApp({
         const runningJobs = computed(() => jobs.value.filter(j => j.status === 'running'));
         const failedJobs  = computed(() => jobs.value.filter(j => j.status === 'failed'));
         const recentJobs  = computed(() => jobs.value.slice(0, 5));
-        // Flat list of in-flight jobs for the notification strip (safe Map→Array for v-for)
+        // Flat list of in-flight jobs for the notification strip (safe Map→Array for v-for).
+        // Cross-references the live jobs array to pick up mid-loop progress updates from SSE.
         const activeJobList = computed(() =>
-            [...activeJobIds.value.entries()].map(([id, info]) => ({ id, ...info }))
+            [...activeJobIds.value.entries()].map(([id, info]) => {
+                const live = jobs.value.find(j => j.id === id);
+                return { id, ...info, progress: live?.progress || null };
+            })
         );
 
         // Alerts computed

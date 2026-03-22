@@ -128,6 +128,7 @@
                                         <span class="text-xs font-mono text-gray-600 shrink-0">{{ formatRelative(job.started_at) }}</span>
                                     </div>
                                     <p v-if="job.summary && job.summary.error_message" class="text-xs text-red-400 truncate">{{ job.summary.error_message }}</p>
+                                    <p v-else-if="job.status === 'running' && job.progress" class="text-xs text-curator-500/70">{{ job.progress }}</p>
                                     <p v-else-if="job.status === 'completed'" class="text-xs text-gray-500">
                                         found {{ job.summary.items_found ?? '—' }} · matched {{ job.summary.items_matched ?? '—' }}
                                     </p>
@@ -265,7 +266,10 @@
                             >
                                 <span class="w-2 h-2 rounded-full bg-curator-500 animate-pulse shrink-0"></span>
                                 <span class="text-curator-400 font-bold">{{ job.label }}</span>
-                                <span class="text-gray-500">job #{{ job.id }} running…</span>
+                                <span class="text-gray-500">
+                                    <span v-if="job.progress">{{ job.progress }}</span>
+                                    <span v-else>starting…</span>
+                                </span>
                                 <button
                                     @click.stop="dismissJob(job.id)"
                                     class="ml-auto text-gray-600 hover:text-gray-300 transition-colors"
