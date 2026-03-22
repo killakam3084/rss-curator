@@ -79,9 +79,20 @@ func RunRematch(ctx context.Context, opts RematchOptions, deps RematchDeps) (Rem
 		lastErr error
 	)
 
-	for _, id := range opts.IDs {
+	total := len(opts.IDs)
+	for i, id := range opts.IDs {
 		if ctx.Err() != nil {
 			break
+		}
+		// Emit a progress event on the first item and then every 10 items.
+		if deps.LogBuffer != nil && (i == 0 || i%10 == 0) {
+			deps.LogBuffer.EmitJobEvent(models.JobRecord{
+				ID:        jobID,
+				Type:      "rematch",
+				Status:    "running",
+				StartedAt: startedAt,
+				Progress:  fmt.Sprintf("%d / %d", i+1, total),
+			})
 		}
 		t, err := deps.Store.GetByID(id)
 		if err != nil || t == nil {

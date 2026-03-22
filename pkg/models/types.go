@@ -146,6 +146,7 @@ type JobRecord struct {
 	ID          int        `json:"id"`
 	Type        string     `json:"type"`
 	Status      string     `json:"status"`
+	Progress    string     `json:"progress,omitempty"` // human-readable mid-job status; only set on running events
 	StartedAt   time.Time  `json:"started_at"`
 	CompletedAt *time.Time `json:"completed_at,omitempty"`
 	Summary     JobSummary `json:"summary"`

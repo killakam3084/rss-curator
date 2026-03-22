@@ -2,6 +2,7 @@ package ops
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/killakam3084/rss-curator/internal/ai"
@@ -57,9 +58,20 @@ func RunRescore(ctx context.Context, opts RescoreOptions, deps RescoreDeps) ([]m
 	var updated []models.StagedTorrent
 	var lastErr error
 
-	for _, id := range opts.IDs {
+	total := len(opts.IDs)
+	for i, id := range opts.IDs {
 		if ctx.Err() != nil {
 			break
+		}
+		// Emit a progress event on the first item and then every 10 items.
+		if deps.LogBuffer != nil && (i == 0 || i%10 == 0) {
+			deps.LogBuffer.EmitJobEvent(models.JobRecord{
+				ID:        jobID,
+				Type:      "rescore",
+				Status:    "running",
+				StartedAt: startedAt,
+				Progress:  fmt.Sprintf("%d / %d", i+1, total),
+			})
 		}
 		t, err := deps.Store.GetByID(id)
 		if err != nil || t == nil {
