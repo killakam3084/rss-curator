@@ -116,13 +116,17 @@ const app = createApp({
             cancelledJobs.value.length > 0 ||
             latestTerminalJob.value !== null
         );
-        // Flat list of in-flight jobs for the notification strip (safe Map→Array for v-for).
-        // Cross-references the live jobs array to pick up mid-loop progress updates from SSE.
+        // Persistent list of running UI-relevant jobs for the torrent-view strip.
+        // This derives from live SSE-backed jobs state so it survives refresh/navigation.
         const activeJobList = computed(() =>
-            [...activeJobIds.value.entries()].map(([id, info]) => {
-                const live = jobs.value.find(j => j.id === id);
-                return { id, ...info, progress: live?.progress || null };
-            })
+            runningJobs.value
+                .filter(job => job.type === 'rematch' || job.type === 'rescore')
+                .map(job => ({
+                    id: job.id,
+                    type: job.type,
+                    label: job.type === 'rematch' ? 'Re-match' : 'Re-score',
+                    progress: job.progress || null,
+                }))
         );
 
         // Alerts computed

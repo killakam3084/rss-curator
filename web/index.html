@@ -341,11 +341,6 @@
                                     <span v-if="job.progress">{{ job.progress }}</span>
                                     <span v-else>starting…</span>
                                 </span>
-                                <button
-                                    @click.stop="dismissJob(job.id)"
-                                    class="ml-auto text-gray-600 hover:text-gray-300 transition-colors"
-                                    title="Dismiss"
-                                >&#10005;</button>
                             </div>
                         </div>
 
