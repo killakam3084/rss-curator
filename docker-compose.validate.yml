@@ -1,0 +1,52 @@
+version: "3.8"
+
+# TrueNAS / live-stack sidecar validator.
+#
+# Run alongside your live rss-curator stack to smoke-test it in place.
+# Requires the live stack to be already running on port 8081 with auth enabled.
+#
+# Prerequisites:
+#   export CURATOR_USERNAME=<your username>
+#   export CURATOR_PASSWORD=<your password>
+#
+# Usage:
+#   make validate-smoke
+#
+# The Hurl container uses host networking to reach the curator API on localhost.
+# HURL_* env vars are automatically picked up as Hurl template variables.
+#
+# Two sequential Hurl runs:
+#   1. smoke/ with --cookie-jar  (login → cookie → API tests)
+#   2. auth/auth-flow.hurl       (fresh session, tests 401 / login flow)
+
+services:
+  hurl:
+    image: ghcr.io/orange-opensource/hurl:4.3.0
+    network_mode: host
+    entrypoint: ["/bin/sh", "-c"]
+    volumes:
+      - ./tests:/tests
+      - ./tests/e2e/results:/results
+    environment:
+      HURL_base: http://localhost:8081
+      HURL_username: ${CURATOR_USERNAME:?CURATOR_USERNAME must be set}
+      HURL_password: ${CURATOR_PASSWORD:?CURATOR_PASSWORD must be set}
+    command: >
+      hurl --test
+      --cookie-jar /tmp/hurl_cookies.jar
+      --report-junit /results/validate-smoke.xml
+      /tests/e2e/smoke/00-login.hurl
+      /tests/e2e/smoke/01-health.hurl
+      /tests/e2e/smoke/02-stats.hurl
+      /tests/e2e/smoke/03-activity.hurl
+      /tests/e2e/smoke/04-jobs.hurl
+      /tests/e2e/smoke/05-torrents.hurl
+      /tests/e2e/smoke/06-feed-stream.hurl
+      /tests/e2e/smoke/07-scheduler.hurl
+      /tests/e2e/smoke/08-rescore-errors.hurl
+      /tests/e2e/smoke/09-rematch-errors.hurl
+      /tests/e2e/smoke/10-alerts.hurl
+      &&
+      hurl --test
+      --report-junit /results/validate-auth.xml
+      /tests/e2e/auth/auth-flow.hurl

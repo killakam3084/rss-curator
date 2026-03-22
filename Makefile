@@ -1,6 +1,7 @@
 .PHONY: build clean install test help run \
         dev-up dev-down dev-logs dev-rebuild dev-clean \
-        image-build image-push image-clean
+        image-build image-push image-clean \
+        test-e2e validate-smoke
 
 BINARY_NAME=curator
 INSTALL_PATH=/usr/local/bin
@@ -29,9 +30,14 @@ help:
 	@echo "  make run           Build and run (requires ~/.curator.env)"
 	@echo ""
 	@echo "Image targets (production, push to GHCR):"
-	@echo "  make image-build   Build OCI image"
-	@echo "  make image-push    Push image to registry (requires auth)"
-	@echo "  make image-clean   Remove local image"
+	@echo "  make image-build    Build OCI image"
+	@echo "  make image-push     Push image to registry (requires auth)"
+	@echo "  make image-clean    Remove local image"
+	@echo ""
+	@echo "E2E / functional validation:"
+	@echo "  make test-e2e       Build fresh stack + run smoke suite (CI)"
+	@echo "  make validate-smoke Run smoke+auth tests against live stack (TrueNAS)"
+	@echo "                      Requires: export CURATOR_USERNAME=... CURATOR_PASSWORD=..."
 	@echo ""
 	@echo "Override container runtime: make dev-up CTR=docker"
 
@@ -109,3 +115,28 @@ image-push:
 image-clean:
 	$(CTR) rmi $(IMAGE):latest 2>/dev/null || true
 	@echo "✓ Removed $(IMAGE):latest"
+
+# ── E2E / functional validation ──────────────────────────────────────────
+
+# test-e2e: spin up a fresh curator container + Hurl sidecar, run smoke suite,
+# tear everything down. Fails loudly if any Hurl assertion fails.
+test-e2e:
+	@mkdir -p tests/e2e/results
+	docker compose -f docker-compose.test.yml up --build --abort-on-container-exit --exit-code-from hurl
+	docker compose -f docker-compose.test.yml down --volumes
+
+# validate-smoke: run smoke + auth tests against the LIVE stack on TrueNAS
+# (or any already-running curator instance). Requires CURATOR_USERNAME and
+# CURATOR_PASSWORD to be exported in the calling shell.
+#
+# Example:
+#   export CURATOR_USERNAME=admin CURATOR_PASSWORD=secret
+#   make validate-smoke
+validate-smoke:
+	@if [ -z "$${CURATOR_USERNAME}" ] || [ -z "$${CURATOR_PASSWORD}" ]; then \
+		echo "Error: CURATOR_USERNAME and CURATOR_PASSWORD must be exported"; \
+		exit 1; \
+	fi
+	@mkdir -p tests/e2e/results
+	docker compose -f docker-compose.validate.yml up --abort-on-container-exit --exit-code-from hurl
+	docker compose -f docker-compose.validate.yml down

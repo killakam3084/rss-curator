@@ -1,0 +1,63 @@
+version: "3.8"
+
+# CI E2E test stack.
+#
+# Builds a fresh curator image, boots it with an ephemeral SQLite DB and no
+# auth, waits for the healthcheck, then runs the smoke suite via Hurl.
+#
+# Usage:
+#   make test-e2e
+#
+# Environment variables injected into the Hurl container via HURL_* prefix so
+# Hurl picks them up automatically as template variables (no --variable flags
+# needed on the command line):
+#   HURL_base        → {{base}} in .hurl files
+#   HURL_username    → {{username}}
+#   HURL_password    → {{password}}
+
+services:
+  curator-test:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    # Bypass start.sh — run the API server only (no background scheduler loop).
+    entrypoint: ["/app/curator", "serve"]
+    environment:
+      STORAGE_PATH: /tmp/test.db
+      CHECK_INTERVAL: "999999"
+      SHOW_NAMES: TestShow
+      # CURATOR_PASSWORD intentionally absent — auth middleware is disabled.
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8081/api/health"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+
+  hurl:
+    image: ghcr.io/orange-opensource/hurl:4.3.0
+    entrypoint: ["/bin/sh", "-c"]
+    depends_on:
+      curator-test:
+        condition: service_healthy
+    volumes:
+      - ./tests:/tests
+      - ./tests/e2e/results:/results
+    environment:
+      HURL_base: http://curator-test:8081
+      HURL_username: unused
+      HURL_password: unused
+    command: >
+      hurl --test
+      --report-junit /results/e2e.xml
+      /tests/e2e/smoke/00-login.hurl
+      /tests/e2e/smoke/01-health.hurl
+      /tests/e2e/smoke/02-stats.hurl
+      /tests/e2e/smoke/03-activity.hurl
+      /tests/e2e/smoke/04-jobs.hurl
+      /tests/e2e/smoke/05-torrents.hurl
+      /tests/e2e/smoke/06-feed-stream.hurl
+      /tests/e2e/smoke/07-scheduler.hurl
+      /tests/e2e/smoke/08-rescore-errors.hurl
+      /tests/e2e/smoke/09-rematch-errors.hurl
+      /tests/e2e/smoke/10-alerts.hurl
