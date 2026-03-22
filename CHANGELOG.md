@@ -6,7 +6,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
-## [Unreleased]
+## [0.25.0] - 2026-03-22
 
 ### Added
 - `internal/scheduler`: new in-process scheduler package — registers named `Task` values with configurable intervals; one goroutine per task; atomic CAS deduplication ensures a task cannot overlap itself; `RunNow`, `SetEnabled`, `SetInterval` for runtime control.
@@ -15,6 +15,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `POST /api/scheduler/run/{type}`: on-demand task dispatch; 202 Accepted on success, 409 Conflict if already running or task unknown.
 - `feed_check` task auto-registered at serve startup with interval from `CHECK_INTERVAL` env var (defaults 3600 s); replaces reliance on external `scheduler.sh` cron.
 - `Server.WithScheduler` / `Server.WithQueue` builder methods for attaching scheduler and queue without changing `NewServer` signature.
+- `internal/ops.RescoreOptions.JobID` / `RematchOptions.JobID`: callers may pre-allocate a job record and the function skips re-creating it.
+
+### Changed
+- `POST /api/torrents/rescore` and `POST /api/torrents/rematch` now return **202 Accepted** `{"job_id": N, "status": "queued"}` when the server has a job queue wired in. The synchronous 200 path is retained as a fallback when no queue is configured.
+- Frontend (`app.js`) rescore and rematch handlers check `response.status === 202` and show a queued toast with the job ID, directing users to the Jobs log for progress.
 
 
 ## [0.24.2] - 2026-03-19
