@@ -1082,6 +1082,7 @@ const app = createApp({
             latestTerminalJob,
             railRunningJobs,
             jobsRailVisible,
+            batchStats,
             fetchJobs,
             formatRelative,
             jobSummaryLine,
