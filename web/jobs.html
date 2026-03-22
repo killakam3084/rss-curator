@@ -52,10 +52,6 @@
                 </a>
                 <span class="text-gray-700">|</span>
                 <span class="text-lg font-bold font-mono text-curator-500">jobs</span>
-                                <!-- progress -->
-                                <td class="px-4 py-3 font-mono text-xs text-gray-400">{{ jobSummaryLine(job) }}</td>
-                                <!-- progress -->
-                                <td class="px-4 py-3 font-mono text-xs text-gray-400">{{ jobSummaryLine(job) }}</td>
             </div>
             <!-- Right: live indicator + logout -->
             <div class="flex items-center gap-4">
@@ -78,66 +74,20 @@
             </div>
 
             <!-- Global Jobs Rail -->
-            <section v-if="jobsRailVisible" class="bg-gray-900 border border-gray-800 rounded-lg shadow-lg p-4 mb-6">
-                <div class="flex items-start justify-between gap-4 flex-wrap">
-                    <div>
-                        <h2 class="text-sm font-mono font-bold text-curator-500 uppercase">async jobs</h2>
-                        <p class="text-xs font-mono text-gray-500 mt-1">live queue state and latest terminal result</p>
-                    </div>
-                    <span class="text-xs font-mono text-gray-600 uppercase">global surface</span>
-                </div>
-
-                <div class="flex flex-wrap gap-2 mt-3">
-                    <span class="px-2.5 py-1 rounded border border-curator-500/30 bg-curator-500/10 text-curator-400 text-xs font-mono">{{ runningJobs.length }} running</span>
-                    <span class="px-2.5 py-1 rounded border border-red-500/30 bg-red-500/10 text-red-300 text-xs font-mono">{{ failedJobs.length }} failed</span>
-                    <span class="px-2.5 py-1 rounded border border-amber-500/30 bg-amber-500/10 text-amber-300 text-xs font-mono">{{ cancelledJobs.length }} cancelled</span>
-                    <span v-if="batchStats.total > 0" class="px-2.5 py-1 rounded border border-emerald-500/30 bg-emerald-500/10 text-emerald-300 text-xs font-mono">
-                        {{ batchStats.completed }}/{{ batchStats.total }} complete
-                    </span>
-                </div>
-
-                <div class="grid grid-cols-1 xl:grid-cols-2 gap-3 mt-4">
-                    <div class="bg-gray-950/60 border border-gray-800 rounded-lg p-3">
-                        <div class="flex items-center justify-between gap-2 mb-2">
-                            <span class="text-xs font-mono font-bold text-gray-300 uppercase">running now</span>
-                            <span class="text-xs font-mono text-gray-600">{{ railRunningJobs.length }}</span>
-                        </div>
-                        <div v-if="railRunningJobs.length === 0" class="text-xs font-mono text-gray-600">no live jobs</div>
-                        <ul v-else class="space-y-2">
-                            <li v-for="job in railRunningJobs" :key="job.id" class="flex items-start gap-3">
-                                <span class="mt-1 w-2 h-2 rounded-full bg-curator-500 animate-pulse-dot shrink-0"></span>
-                                <div class="min-w-0 flex-1">
-                                    <div class="flex items-center justify-between gap-2">
-                                        <span class="text-xs font-mono text-gray-300 truncate">{{ job.type }} #{{ job.id }}</span>
-                                        <span class="text-xs font-mono text-gray-600 shrink-0">{{ formatRelative(job.started_at) }}</span>
-                                    </div>
-                                    <p class="text-xs font-mono text-curator-500/80 truncate">{{ jobSummaryLine(job) }}</p>
-                                </div>
-                            </li>
-                        </ul>
-                    </div>
-
-                    <div class="bg-gray-950/60 border border-gray-800 rounded-lg p-3">
-                        <div class="flex items-center justify-between gap-2 mb-2">
-                            <span class="text-xs font-mono font-bold text-gray-300 uppercase">latest terminal</span>
-                            <span v-if="latestTerminalJob" class="text-xs font-mono text-gray-600">{{ formatRelative(latestTerminalJob.completed_at || latestTerminalJob.started_at) }}</span>
-                        </div>
-                        <div v-if="!latestTerminalJob" class="text-xs font-mono text-gray-600">no terminal jobs yet</div>
-                        <div v-else class="space-y-1">
-                            <div class="flex items-center gap-2">
-                                <span :class="[
-                                    'w-2 h-2 rounded-full shrink-0',
-                                    latestTerminalJob.status === 'completed' ? 'bg-emerald-500' :
-                                    latestTerminalJob.status === 'cancelled' ? 'bg-amber-500' : 'bg-red-500'
-                                ]"></span>
-                                <span class="text-xs font-mono text-gray-300">{{ latestTerminalJob.type }} #{{ latestTerminalJob.id }}</span>
-                                <span class="text-xs font-mono uppercase text-gray-600">{{ latestTerminalJob.status }}</span>
-                            </div>
-                            <p class="text-xs font-mono text-gray-500">{{ jobSummaryLine(latestTerminalJob) }}</p>
-                        </div>
-                    </div>
-                </div>
-            </section>
+            <jobs-rail
+                v-if="jobsRailVisible"
+                class-name="bg-gray-900 border border-gray-800 rounded-lg shadow-lg p-4 mb-6"
+                subtitle="live queue state and latest terminal result"
+                right-label="global surface"
+                :running-count="runningJobs.length"
+                :failed-count="failedJobs.length"
+                :cancelled-count="cancelledJobs.length"
+                :batch-stats="batchStats"
+                :rail-running-jobs="railRunningJobs"
+                :latest-terminal-job="latestTerminalJob"
+                :format-relative-fn="formatRelative"
+                :job-summary-line-fn="jobSummaryLine"
+            ></jobs-rail>
 
             <!-- Tabs -->
             <div class="flex gap-1 mb-4 bg-gray-900 border border-gray-800 rounded-lg p-1 w-fit">
@@ -261,10 +211,11 @@
         </main>
     </div>
 
+    <script src="components/jobs-rail.js"></script>
     <script>
     const { createApp, ref, computed, onMounted, reactive } = Vue;
 
-    createApp({
+    const jobsApp = createApp({
         setup() {
             const jobs = ref([]);
             const activeTab = ref('all');
@@ -284,6 +235,22 @@
                 cancelledJobs.value.length > 0 ||
                 latestTerminalJob.value !== null
             );
+
+            // Batch progress tracking — counts jobs in the current/latest session
+            // (jobs started within ~2s of the latest started_at time).
+            const batchStats = computed(() => {
+                const batchableTypes = ['rematch', 'rescore'];
+                const allBatchJobs = jobs.value.filter(j => batchableTypes.includes(j.type));
+                if (allBatchJobs.length === 0) return { total: 0, completed: 0, running: 0 };
+                const latestStartTime = new Date(allBatchJobs[0].started_at).getTime();
+                const batchWindow = 2000; // 2s window to detect batch boundaries
+                const batchJobs = allBatchJobs.filter(j =>
+                    Math.abs(new Date(j.started_at).getTime() - latestStartTime) <= batchWindow
+                );
+                const running = batchJobs.filter(j => j.status === 'running').length;
+                const completed = batchJobs.filter(j => j.status === 'completed').length;
+                return { total: batchJobs.length, running, completed };
+            });
 
             // Dark mode: always dark on this page (follow system)
             const applyDark = () => {
@@ -402,10 +369,16 @@
                 filteredJobs, tabCount, toggleExpand,
                 formatRelative, duration, cancelJob, cancelingIds,
                 runningJobs, failedJobs, cancelledJobs, latestTerminalJob,
-                railRunningJobs, jobsRailVisible, jobSummaryLine
+                railRunningJobs, jobsRailVisible, batchStats, jobSummaryLine
             };
         }
-    }).mount('#jobs-app');
+    });
+
+    if (window.registerJobsRailComponent) {
+        window.registerJobsRailComponent(jobsApp);
+    }
+
+    jobsApp.mount('#jobs-app');
     </script>
 </body>
 </html>

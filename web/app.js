@@ -1097,4 +1097,8 @@ const app = createApp({
     }
 });
 
+if (window.registerJobsRailComponent) {
+    window.registerJobsRailComponent(app);
+}
+
 app.mount('#app');
