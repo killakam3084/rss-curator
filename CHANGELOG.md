@@ -6,6 +6,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+## [Unreleased]
+
+### Added
+- `internal/scheduler`: new in-process scheduler package — registers named `Task` values with configurable intervals; one goroutine per task; atomic CAS deduplication ensures a task cannot overlap itself; `RunNow`, `SetEnabled`, `SetInterval` for runtime control.
+- `internal/jobs`: new async job queue package — single worker, dual-lane priority (cap 5 high / cap 50 normal), per-type deduplication via `Submit`/`ErrAlreadyActive`.
+- `GET /api/scheduler/tasks`: returns JSON snapshot of all registered tasks with type, interval, enabled, running, last_run, next_run.
+- `POST /api/scheduler/run/{type}`: on-demand task dispatch; 202 Accepted on success, 409 Conflict if already running or task unknown.
+- `feed_check` task auto-registered at serve startup with interval from `CHECK_INTERVAL` env var (defaults 3600 s); replaces reliance on external `scheduler.sh` cron.
+- `Server.WithScheduler` / `Server.WithQueue` builder methods for attaching scheduler and queue without changing `NewServer` signature.
+
+
 ## [0.24.2] - 2026-03-19
 
 ### Added

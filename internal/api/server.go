@@ -11,9 +11,11 @@ import (
 
 	"github.com/killakam3084/rss-curator/internal/ai"
 	"github.com/killakam3084/rss-curator/internal/client"
+	"github.com/killakam3084/rss-curator/internal/jobs"
 	"github.com/killakam3084/rss-curator/internal/logbuffer"
 	"github.com/killakam3084/rss-curator/internal/matcher"
 	"github.com/killakam3084/rss-curator/internal/ops"
+	"github.com/killakam3084/rss-curator/internal/scheduler"
 	"github.com/killakam3084/rss-curator/internal/storage"
 	"github.com/killakam3084/rss-curator/pkg/models"
 	"go.uber.org/zap"
@@ -45,6 +47,8 @@ type Server struct {
 	authPassword  string
 	sessionSecret []byte
 	sessionTTL    time.Duration
+	scheduler     *scheduler.Scheduler // May be nil if scheduler is not configured
+	queue         *jobs.Queue          // May be nil if queue is not configured
 }
 
 type ErrorResponse struct {
@@ -156,6 +160,11 @@ type SuggestionsResponse struct {
 	Status      string        `json:"status"`
 }
 
+type SchedulerRunResponse struct {
+	Status string `json:"status"`
+	Type   string `json:"type"`
+}
+
 type FeedStreamItem struct {
 	ID           int    `json:"id"`
 	Title        string `json:"title"`
@@ -211,6 +220,20 @@ func NewServer(store storage.Store, client *client.Client, port int, buf *logbuf
 	}
 }
 
+// WithScheduler attaches a Scheduler to the server, enabling the
+// /api/scheduler/* endpoints. Returns the server for call chaining.
+func (s *Server) WithScheduler(sched *scheduler.Scheduler) *Server {
+	s.scheduler = sched
+	return s
+}
+
+// WithQueue attaches a job Queue to the server. Returns the server for
+// call chaining.
+func (s *Server) WithQueue(q *jobs.Queue) *Server {
+	s.queue = q
+	return s
+}
+
 // Start begins listening for HTTP requests
 func (s *Server) Start() error {
 	mux := http.NewServeMux()
@@ -232,6 +255,8 @@ func (s *Server) Start() error {
 	mux.HandleFunc("/api/jobs", s.handleJobs)
 	mux.HandleFunc("/api/alerts/stream", s.handleAlertsStream)
 	mux.HandleFunc("/api/alerts", s.handleAlerts)
+	mux.HandleFunc("/api/scheduler/run/", s.handleSchedulerRun)
+	mux.HandleFunc("/api/scheduler/tasks", s.handleSchedulerTasks)
 
 	// Static files and UI
 	mux.Handle("/style.css", http.FileServer(http.Dir("./web")))
@@ -1233,4 +1258,54 @@ func (s *Server) startAlertPoller() {
 			}
 		}
 	}
+}
+
+// handleSchedulerTasks returns a JSON array of all registered scheduler tasks
+// and their current status.
+func (s *Server) handleSchedulerTasks(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if s.scheduler == nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusServiceUnavailable)
+		json.NewEncoder(w).Encode(ErrorResponse{Error: "scheduler not configured"})
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(s.scheduler.Status())
+}
+
+// handleSchedulerRun dispatches an on-demand execution of the named task.
+// Returns 202 Accepted on success, 409 Conflict if the task is already running,
+// or 404 if the task type is unknown.
+func (s *Server) handleSchedulerRun(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	taskType := strings.TrimPrefix(r.URL.Path, "/api/scheduler/run/")
+	if taskType == "" {
+		http.Error(w, "task type required", http.StatusBadRequest)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+
+	if s.scheduler == nil {
+		w.WriteHeader(http.StatusServiceUnavailable)
+		json.NewEncoder(w).Encode(ErrorResponse{Error: "scheduler not configured"})
+		return
+	}
+
+	accepted := s.scheduler.RunNow(taskType)
+	if !accepted {
+		w.WriteHeader(http.StatusConflict)
+		json.NewEncoder(w).Encode(ErrorResponse{Error: "task already running or not found"})
+		return
+	}
+
+	w.WriteHeader(http.StatusAccepted)
+	json.NewEncoder(w).Encode(SchedulerRunResponse{Status: "accepted", Type: taskType})
 }

@@ -16,10 +16,12 @@ import (
 	"github.com/killakam3084/rss-curator/internal/api"
 	"github.com/killakam3084/rss-curator/internal/client"
 	"github.com/killakam3084/rss-curator/internal/feed"
+	"github.com/killakam3084/rss-curator/internal/jobs"
 	"github.com/killakam3084/rss-curator/internal/logbuffer"
 	"github.com/killakam3084/rss-curator/internal/matcher"
 	"github.com/killakam3084/rss-curator/internal/metadata"
 	"github.com/killakam3084/rss-curator/internal/ops"
+	"github.com/killakam3084/rss-curator/internal/scheduler"
 	"github.com/killakam3084/rss-curator/internal/storage"
 	"github.com/killakam3084/rss-curator/pkg/models"
 )
@@ -674,7 +676,43 @@ func cmdServe(cfg models.Config, store *storage.Storage, buf *logbuffer.Buffer, 
 	}
 
 	// Create and start API server (even if qBittorrent is unavailable)
-	server := api.NewServer(store, qb, port, buf, scorer, scorerProvider, m, enricher, auth)
+
+	// Job queue — single worker, used for on-demand async operations.
+	q := jobs.New(nil)
+	q.Start()
+
+	// Scheduler — periodic feed_check task replacing the external scheduler.sh cron.
+	feedCheckInterval := 3600 * time.Second
+	if v := os.Getenv("CHECK_INTERVAL"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			feedCheckInterval = time.Duration(n) * time.Second
+		}
+	}
+	feedCheckCfg := ops.FeedCheckConfig{
+		FeedURLs: cfg.FeedURLs,
+		Matcher:  m,
+	}
+	feedCheckDeps := ops.FeedCheckDeps{
+		Store:      store,
+		Enricher:   enricher,
+		Scorer:     scorer,
+		ScorerProv: scorerProvider,
+		LogBuffer:  buf,
+	}
+	sched := scheduler.New()
+	sched.Register(&scheduler.Task{
+		Type:     "feed_check",
+		Interval: feedCheckInterval,
+		Enabled:  true,
+		Fn: func(ctx context.Context) {
+			ops.RunFeedCheck(ctx, feedCheckCfg, feedCheckDeps)
+		},
+	})
+	sched.Start()
+
+	server := api.NewServer(store, qb, port, buf, scorer, scorerProvider, m, enricher, auth).
+		WithScheduler(sched).
+		WithQueue(q)
 	fmt.Printf("[Serve] Starting API server on port %d\n", port)
 	if err := server.Start(); err != nil {
 		fmt.Fprintf(os.Stderr, "Error starting API server: %v\n", err)
