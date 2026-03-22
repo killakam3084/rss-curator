@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/killakam3084/rss-curator/internal/ai"
@@ -49,6 +50,14 @@ type Server struct {
 	sessionTTL    time.Duration
 	scheduler     *scheduler.Scheduler // May be nil if scheduler is not configured
 	queue         *jobs.Queue          // May be nil if queue is not configured
+	jobCancelMu   sync.Mutex
+	jobCancels    map[int]*jobCancelState
+}
+
+type jobCancelState struct {
+	jobType         string
+	cancelRequested bool
+	runCancel       context.CancelFunc
 }
 
 type ErrorResponse struct {
@@ -222,6 +231,7 @@ func NewServer(store storage.Store, client *client.Client, port int, buf *logbuf
 		authPassword:  auth.Password,
 		sessionSecret: auth.SessionSecret,
 		sessionTTL:    auth.SessionTTL,
+		jobCancels:    make(map[int]*jobCancelState),
 	}
 }
 
@@ -965,10 +975,37 @@ func (s *Server) handleRescore(w http.ResponseWriter, r *http.Request) {
 					StartedAt: now,
 				})
 			}
+			s.registerJobCancel(jobID, "rescore")
 			opts := ops.RescoreOptions{IDs: req.IDs, JobID: jobID}
-			_ = s.queue.Submit("rescore", true, func(ctx context.Context) {
-				ops.RunRescore(ctx, opts, rescoreDeps)
+			err = s.queue.Submit("rescore", true, func(ctx context.Context) {
+				runCtx, runCancel := context.WithCancel(ctx)
+				if !s.bindRunCancel(jobID, runCancel) {
+					runCancel()
+					return
+				}
+				defer runCancel()
+				defer s.clearJobCancel(jobID)
+				ops.RunRescore(runCtx, opts, rescoreDeps)
 			})
+			if err != nil {
+				s.clearJobCancel(jobID)
+				s.logger.Warn("failed to submit rescore job", zap.Error(err))
+				_ = s.store.FailJob(jobID, err.Error())
+				if s.logBuffer != nil {
+					failedAt := time.Now()
+					s.logBuffer.EmitJobEvent(models.JobRecord{
+						ID:          jobID,
+						Type:        "rescore",
+						Status:      "failed",
+						StartedAt:   now,
+						CompletedAt: &failedAt,
+						Summary:     models.JobSummary{ErrorMessage: err.Error()},
+					})
+				}
+				w.WriteHeader(http.StatusConflict)
+				json.NewEncoder(w).Encode(ErrorResponse{Error: err.Error()})
+				return
+			}
 			w.WriteHeader(http.StatusAccepted)
 			json.NewEncoder(w).Encode(JobAcceptedResponse{JobID: jobID, Status: "queued"})
 			return
@@ -1035,15 +1072,42 @@ func (s *Server) handleRematch(w http.ResponseWriter, r *http.Request) {
 					StartedAt: now,
 				})
 			}
+			s.registerJobCancel(jobID, "rematch")
 			opts := ops.RematchOptions{
 				IDs:           req.IDs,
 				AutoRescore:   req.AutoRescore,
 				ForceAIEnrich: req.ForceAIEnrich,
 				JobID:         jobID,
 			}
-			_ = s.queue.Submit("rematch", true, func(ctx context.Context) {
-				ops.RunRematch(ctx, opts, rematchDeps)
+			err = s.queue.Submit("rematch", true, func(ctx context.Context) {
+				runCtx, runCancel := context.WithCancel(ctx)
+				if !s.bindRunCancel(jobID, runCancel) {
+					runCancel()
+					return
+				}
+				defer runCancel()
+				defer s.clearJobCancel(jobID)
+				ops.RunRematch(runCtx, opts, rematchDeps)
 			})
+			if err != nil {
+				s.clearJobCancel(jobID)
+				s.logger.Warn("failed to submit rematch job", zap.Error(err))
+				_ = s.store.FailJob(jobID, err.Error())
+				if s.logBuffer != nil {
+					failedAt := time.Now()
+					s.logBuffer.EmitJobEvent(models.JobRecord{
+						ID:          jobID,
+						Type:        "rematch",
+						Status:      "failed",
+						StartedAt:   now,
+						CompletedAt: &failedAt,
+						Summary:     models.JobSummary{ErrorMessage: err.Error()},
+					})
+				}
+				w.WriteHeader(http.StatusConflict)
+				json.NewEncoder(w).Encode(ErrorResponse{Error: err.Error()})
+				return
+			}
 			w.WriteHeader(http.StatusAccepted)
 			json.NewEncoder(w).Encode(JobAcceptedResponse{JobID: jobID, Status: "queued"})
 			return
@@ -1067,6 +1131,51 @@ func (s *Server) handleRematch(w http.ResponseWriter, r *http.Request) {
 		Skipped:         result.Skipped,
 		Torrents:        responses,
 	})
+}
+
+func (s *Server) registerJobCancel(jobID int, jobType string) {
+	s.jobCancelMu.Lock()
+	defer s.jobCancelMu.Unlock()
+	s.jobCancels[jobID] = &jobCancelState{jobType: jobType}
+}
+
+func (s *Server) bindRunCancel(jobID int, runCancel context.CancelFunc) bool {
+	s.jobCancelMu.Lock()
+	defer s.jobCancelMu.Unlock()
+	st, ok := s.jobCancels[jobID]
+	if !ok {
+		return false
+	}
+	st.runCancel = runCancel
+	if st.cancelRequested {
+		runCancel()
+	}
+	return true
+}
+
+func (s *Server) requestJobCancel(jobID int) (ok bool, alreadyRequested bool, jobType string) {
+	s.jobCancelMu.Lock()
+	st, ok := s.jobCancels[jobID]
+	if !ok {
+		s.jobCancelMu.Unlock()
+		return false, false, ""
+	}
+	alreadyRequested = st.cancelRequested
+	st.cancelRequested = true
+	jobType = st.jobType
+	runCancel := st.runCancel
+	s.jobCancelMu.Unlock()
+
+	if runCancel != nil {
+		runCancel()
+	}
+	return true, alreadyRequested, jobType
+}
+
+func (s *Server) clearJobCancel(jobID int) {
+	s.jobCancelMu.Lock()
+	defer s.jobCancelMu.Unlock()
+	delete(s.jobCancels, jobID)
 }
 
 // handleJobs returns recent job records as JSON.
@@ -1098,15 +1207,27 @@ func (s *Server) handleJobs(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(jobs)
 }
 
-// handleJob returns a single job record by ID.
+// handleJob returns a single job record by ID or accepts cancellation for a
+// running async job.
 // GET /api/jobs/{id}
+// POST /api/jobs/{id}/cancel
 func (s *Server) handleJob(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
+	path := strings.TrimPrefix(r.URL.Path, "/api/jobs/")
+	isCancel := strings.HasSuffix(path, "/cancel")
+
+	if isCancel {
+		if r.Method != http.MethodPost {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		path = strings.TrimSuffix(path, "/cancel")
+		path = strings.TrimSuffix(path, "/")
+	} else if r.Method != http.MethodGet {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
 
-	idStr := strings.TrimPrefix(r.URL.Path, "/api/jobs/")
+	idStr := path
 	id, err := strconv.Atoi(idStr)
 	if err != nil || id <= 0 {
 		http.Error(w, "invalid id", http.StatusBadRequest)
@@ -1123,6 +1244,39 @@ func (s *Server) handleJob(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "not found", http.StatusNotFound)
 		return
 	}
+
+	if isCancel {
+		if job.Status != "running" {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusConflict)
+			json.NewEncoder(w).Encode(ErrorResponse{Error: "job is not running"})
+			return
+		}
+
+		ok, _, jobType := s.requestJobCancel(id)
+		if !ok {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusConflict)
+			json.NewEncoder(w).Encode(ErrorResponse{Error: "job cannot be cancelled from this process"})
+			return
+		}
+
+		if s.logBuffer != nil {
+			s.logBuffer.EmitJobEvent(models.JobRecord{
+				ID:        id,
+				Type:      jobType,
+				Status:    "running",
+				StartedAt: job.StartedAt,
+				Progress:  "cancel requested",
+			})
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusAccepted)
+		json.NewEncoder(w).Encode(JobAcceptedResponse{JobID: id, Status: "cancelling"})
+		return
+	}
+
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(job)
 }

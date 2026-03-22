@@ -18,6 +18,7 @@ import (
 type mockStorage struct {
 	torrents   map[int]*models.StagedTorrent
 	activities []models.Activity
+	jobs       map[int]*models.JobRecord
 }
 
 // Get returns a torrent by ID
@@ -140,13 +141,42 @@ func (m *mockStorage) GetWindowStats(hours int) (*storage.WindowStats, error) {
 }
 
 // Job stubs — return sensible zero values so tests compile and pass.
-func (m *mockStorage) CreateJob(jobType string) (int, error)               { return 1, nil }
-func (m *mockStorage) CompleteJob(id int, summary models.JobSummary) error { return nil }
-func (m *mockStorage) FailJob(id int, errMsg string) error                 { return nil }
+func (m *mockStorage) CreateJob(jobType string) (int, error) {
+	id := len(m.jobs) + 1
+	m.jobs[id] = &models.JobRecord{ID: id, Type: jobType, Status: "running", StartedAt: time.Now()}
+	return id, nil
+}
+func (m *mockStorage) CompleteJob(id int, summary models.JobSummary) error {
+	if j, ok := m.jobs[id]; ok {
+		now := time.Now()
+		j.Status = "completed"
+		j.CompletedAt = &now
+		j.Summary = summary
+	}
+	return nil
+}
+func (m *mockStorage) FailJob(id int, errMsg string) error {
+	if j, ok := m.jobs[id]; ok {
+		now := time.Now()
+		j.Status = "failed"
+		j.CompletedAt = &now
+		j.Summary = models.JobSummary{ErrorMessage: errMsg}
+	}
+	return nil
+}
+func (m *mockStorage) CancelJob(id int, summary models.JobSummary) error {
+	if j, ok := m.jobs[id]; ok {
+		now := time.Now()
+		j.Status = "cancelled"
+		j.CompletedAt = &now
+		j.Summary = summary
+	}
+	return nil
+}
 func (m *mockStorage) ListJobs(limit int, statusFilter string) ([]models.JobRecord, error) {
 	return []models.JobRecord{}, nil
 }
-func (m *mockStorage) GetJob(id int) (*models.JobRecord, error) { return nil, nil }
+func (m *mockStorage) GetJob(id int) (*models.JobRecord, error) { return m.jobs[id], nil }
 
 // setupTestServer creates a test server instance
 func setupTestServer(t *testing.T) (*Server, *mockStorage) {
@@ -154,6 +184,7 @@ func setupTestServer(t *testing.T) (*Server, *mockStorage) {
 	store := &mockStorage{
 		torrents:   make(map[int]*models.StagedTorrent),
 		activities: []models.Activity{},
+		jobs:       make(map[int]*models.JobRecord),
 	}
 
 	return &Server{
@@ -423,5 +454,43 @@ func TestMultipleStatusTransitions(t *testing.T) {
 
 	if w3.Code != http.StatusBadRequest {
 		t.Fatalf("expected 400 when rejecting accepted torrent, got %d", w3.Code)
+	}
+}
+
+func TestHandleJobCancelInvalidID(t *testing.T) {
+	server, _ := setupTestServer(t)
+	req := httptest.NewRequest("POST", "/api/jobs/nope/cancel", nil)
+	w := httptest.NewRecorder()
+
+	server.handleJob(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected status 400, got %d", w.Code)
+	}
+}
+
+func TestHandleJobCancelNotFound(t *testing.T) {
+	server, _ := setupTestServer(t)
+	req := httptest.NewRequest("POST", "/api/jobs/999/cancel", nil)
+	w := httptest.NewRecorder()
+
+	server.handleJob(w, req)
+
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("expected status 404, got %d", w.Code)
+	}
+}
+
+func TestHandleJobCancelNotRunning(t *testing.T) {
+	server, mockStore := setupTestServer(t)
+	mockStore.jobs[12] = &models.JobRecord{ID: 12, Type: "rematch", Status: "completed", StartedAt: time.Now()}
+
+	req := httptest.NewRequest("POST", "/api/jobs/12/cancel", nil)
+	w := httptest.NewRecorder()
+
+	server.handleJob(w, req)
+
+	if w.Code != http.StatusConflict {
+		t.Fatalf("expected status 409, got %d", w.Code)
 	}
 }

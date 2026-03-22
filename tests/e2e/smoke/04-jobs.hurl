@@ -14,3 +14,15 @@ jsonpath "$" isCollection
 GET {{base}}/api/jobs/99999
 
 HTTP 404
+
+
+# Cancel requires numeric ID
+POST {{base}}/api/jobs/nope/cancel
+
+HTTP 400
+
+
+# Cancelling a non-existent job should return 404
+POST {{base}}/api/jobs/99999/cancel
+
+HTTP 404
