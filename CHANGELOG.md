@@ -6,6 +6,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+## [0.26.0] - 2026-03-22
+
+### Added
+- Hurl-based E2E functional validation suite (`tests/e2e/`) covering all stable API endpoints: health, stats, activity, jobs, torrents, feed stream, scheduler (task list + on-demand run + unknown-type conflict), rescore/rematch validation errors, and alerts.
+- `tests/e2e/auth/auth-flow.hurl`: standalone session-cookie auth-flow test — unauthenticated 401, bad-credential redirect, correct-credential login+cookie capture, authenticated request.
+- `docker-compose.test.yml`: CI test stack — builds a fresh curator image with an ephemeral SQLite DB and no auth; Hurl container waits on healthcheck then runs the full smoke suite.
+- `docker-compose.validate.yml`: TrueNAS/live-stack sidecar — host-network Hurl container that runs the smoke suite (with cookie jar) then the auth-flow test against an already-running curator instance; credentials injected via `CURATOR_USERNAME` / `CURATOR_PASSWORD` shell env.
+- `.github/workflows/e2e.yml`: GitHub Actions workflow that runs `make test-e2e` on every push/PR to `main`.
+- `Makefile`: `test-e2e` (CI; builds + runs + tears down) and `validate-smoke` (TrueNAS live) targets.
+
+
 ## [0.25.0] - 2026-03-22
 
 ### Added
