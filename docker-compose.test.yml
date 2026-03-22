@@ -26,6 +26,7 @@ services:
       STORAGE_PATH: /tmp/test.db
       CHECK_INTERVAL: "999999"
       SHOW_NAMES: TestShow
+      RSS_FEED_URL: http://example.com/feed.rss
       # CURATOR_PASSWORD intentionally absent — auth middleware is disabled.
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:8081/api/health"]
