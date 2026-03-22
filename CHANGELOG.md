@@ -6,6 +6,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+## [0.29.0] - 2026-03-22
+
+### Added
+- **Cancelable async jobs** — running `rematch` and `rescore` jobs can now be cancelled from the jobs UI via `POST /api/jobs/{id}/cancel`.
+- **Cancelled job terminal state** — jobs now support `cancelled` as a terminal status with partial summary stats preserved in SQLite and surfaced over SSE.
+- Jobs page adds a per-row `cancel` action for running jobs and shows a temporary `cancelling…` state while the request is in flight.
+- Dashboard and jobs views now render cancelled jobs with distinct amber status styling.
+
+### Changed
+- Rematch/rescore workers now finalize with `cancelled` when their context is interrupted instead of reporting a generic failure.
+- Jobs API smoke coverage now includes cancel endpoint validation paths for invalid and missing IDs.
+
+
 ## [0.28.1] - 2026-03-22
 
 ### Fixed
