@@ -357,6 +357,39 @@
 
                     <!-- Torrents Grid -->
                     <div v-else>
+                        <!-- Sort bar -->
+                        <div class="flex flex-wrap items-center gap-2 mb-3 px-1">
+                            <span class="text-xs font-mono text-gray-600 uppercase shrink-0">sort</span>
+                            <button
+                                v-for="f in sortFields"
+                                :key="f.key"
+                                @click="sortField === f.key ? sortDir = (sortDir === 'asc' ? 'desc' : 'asc') : (sortField = f.key, sortDir = 'desc')"
+                                :class="[
+                                    'px-2 py-1 rounded text-xs font-mono transition-colors flex items-center gap-1',
+                                    sortField === f.key
+                                        ? 'bg-curator-500/20 text-curator-400 border border-curator-500/40'
+                                        : 'text-gray-600 hover:text-gray-400'
+                                ]"
+                            >
+                                {{ f.label }}
+                                <span v-if="sortField === f.key">{{ sortDir === 'asc' ? '↑' : '↓' }}</span>
+                            </button>
+                            <div class="ml-auto flex items-center gap-1">
+                                <span class="text-xs font-mono text-gray-600">show</span>
+                                <button
+                                    v-for="n in pageSizeOptions"
+                                    :key="n"
+                                    @click="pageSize = n"
+                                    :class="[
+                                        'px-2 py-1 rounded text-xs font-mono transition-colors',
+                                        pageSize === n
+                                            ? 'bg-curator-500/20 text-curator-400 border border-curator-500/40'
+                                            : 'text-gray-600 hover:text-gray-400'
+                                    ]"
+                                >{{ n === 0 ? 'all' : n }}</button>
+                            </div>
+                        </div>
+
                         <!-- Select-all / deselect-all toggle -->
                         <div class="flex items-center justify-end mb-2 px-1">
                             <button
@@ -372,7 +405,7 @@
                         </div>
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                         <div 
-                            v-for="torrent in displayedTorrents" 
+                            v-for="torrent in pagedTorrents" 
                             :key="torrent.id"
                             :class="[
                                 'bg-gray-900 border rounded-lg shadow-md transition-all duration-200 overflow-hidden cursor-pointer relative',
@@ -482,6 +515,26 @@
                             </div>
                         </div>
                         </div><!-- end grid -->
+
+                        <!-- Pagination controls -->
+                        <div v-if="totalPages > 1 || pageSize > 0" class="flex items-center justify-between mt-4 px-1">
+                            <span class="text-xs font-mono text-gray-600">
+                                {{ (currentPage - 1) * pageSize + 1 }}–{{ Math.min(currentPage * pageSize || displayedTorrents.length, displayedTorrents.length) }} of {{ displayedTorrents.length }}
+                            </span>
+                            <div v-if="totalPages > 1" class="flex items-center gap-2">
+                                <button
+                                    @click="currentPage--"
+                                    :disabled="currentPage <= 1"
+                                    class="px-3 py-1 rounded text-xs font-mono bg-gray-800 border border-gray-700 text-gray-400 hover:text-curator-400 hover:border-curator-500/40 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                                >← prev</button>
+                                <span class="text-xs font-mono text-gray-500">{{ currentPage }} / {{ totalPages }}</span>
+                                <button
+                                    @click="currentPage++"
+                                    :disabled="currentPage >= totalPages"
+                                    class="px-3 py-1 rounded text-xs font-mono bg-gray-800 border border-gray-700 text-gray-400 hover:text-curator-400 hover:border-curator-500/40 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                                >next →</button>
+                            </div>
+                        </div>
                     </div><!-- end v-else wrapper -->
                 </main>
             </div>

@@ -74,6 +74,22 @@ const app = createApp({
         const rematchForceAIEnrich = ref(false);
         let toastCounter = 0;
 
+        // Sort + pagination state
+        const sortField = ref('staged_at'); // 'title' | 'staged_at' | 'pub_date' | 'size' | 'ai_score'
+        const sortDir   = ref('desc');      // 'asc' | 'desc'
+        const pageSize  = ref(25);          // items per page; 0 = all
+        const currentPage = ref(1);
+
+        // Sort field display labels
+        const sortFields = [
+            { key: 'staged_at', label: 'Date Staged' },
+            { key: 'pub_date',  label: 'Pub Date' },
+            { key: 'title',     label: 'Title' },
+            { key: 'size',      label: 'Size' },
+            { key: 'ai_score',  label: 'AI Score' },
+        ];
+        const pageSizeOptions = [25, 50, 100, 0]; // 0 = all
+
         // Computed properties
         // pendingCount kept for collapsed sidebar badge
         const pendingCount = computed(() =>
@@ -119,9 +135,31 @@ const app = createApp({
         });
         const displayedTorrents = computed(() => {
             const filtered = torrents.value.filter(t => t.status === activeTab.value);
-            const hasScores = filtered.some(t => t.ai_scored);
-            if (hasScores) return filtered.slice().sort((a, b) => (b.ai_score || 0) - (a.ai_score || 0));
-            return filtered;
+            const dir = sortDir.value === 'asc' ? 1 : -1;
+            return filtered.slice().sort((a, b) => {
+                switch (sortField.value) {
+                    case 'title':
+                        return dir * (a.feed_item.title || '').localeCompare(b.feed_item.title || '');
+                    case 'pub_date':
+                        return dir * (new Date(a.feed_item.pub_date) - new Date(b.feed_item.pub_date));
+                    case 'size':
+                        return dir * ((a.feed_item.size || 0) - (b.feed_item.size || 0));
+                    case 'ai_score':
+                        return dir * ((a.ai_score || 0) - (b.ai_score || 0));
+                    case 'staged_at':
+                    default:
+                        return dir * (new Date(a.staged_at) - new Date(b.staged_at));
+                }
+            });
+        });
+        const totalPages = computed(() => {
+            if (!pageSize.value) return 1;
+            return Math.max(1, Math.ceil(displayedTorrents.value.length / pageSize.value));
+        });
+        const pagedTorrents = computed(() => {
+            if (!pageSize.value) return displayedTorrents.value;
+            const start = (currentPage.value - 1) * pageSize.value;
+            return displayedTorrents.value.slice(start, start + pageSize.value);
         });
         // Sorted torrents for feed stream (most recent first)
         const feedStreamTorrents = computed(() =>
@@ -715,7 +753,11 @@ const app = createApp({
         watch(activeTab, () => {
             selectedIds.value = new Set();
             openMenuId.value = null;
+            currentPage.value = 1;
         });
+
+        // Reset to page 1 when sort changes
+        watch([sortField, sortDir, pageSize], () => { currentPage.value = 1; });
 
         // Load initial data
         onMounted(() => {
@@ -926,6 +968,14 @@ const app = createApp({
             selectedCount,
             multiSelectActive,
             displayedTorrents,
+            pagedTorrents,
+            totalPages,
+            sortField,
+            sortDir,
+            sortFields,
+            pageSize,
+            pageSizeOptions,
+            currentPage,
             fetchTorrents,
             fetchAllTorrents,
             fetchActivities,
