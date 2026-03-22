@@ -6,6 +6,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+## [0.27.0] - 2026-03-22
+
+### Added
+- **Live job progress** — rematch and rescore background jobs now emit mid-loop SSE progress events (`"progress": "47 / 367"`) on the first item and every 10 items thereafter.
+- `JobRecord` gains a `progress` field (`json:"progress,omitempty"`) — set only on running events, never persisted to SQLite.
+- Job notification strip in the dashboard updates in real time as progress events arrive; falls back to "starting…" until the first event.
+- Running rows in the Jobs popover (navbar) also show the live progress string.
+
+
 ## [0.26.0] - 2026-03-22
 
 ### Added
