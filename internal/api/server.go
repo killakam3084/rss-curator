@@ -276,6 +276,7 @@ func (s *Server) Start() error {
 	// Static files and UI
 	mux.Handle("/style.css", http.FileServer(http.Dir("./web")))
 	mux.Handle("/app.js", http.FileServer(http.Dir("./web")))
+	mux.Handle("/components/", http.StripPrefix("/components/", http.FileServer(http.Dir("./web/components"))))
 
 	// Auth routes (registered unconditionally; handleLogin/handleLogout are
 	// no-ops when auth is disabled because the middleware never blocks access)
