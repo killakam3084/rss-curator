@@ -117,6 +117,7 @@
                             <th class="text-left px-4 py-3">matched</th>
                             <th class="text-left px-4 py-3">scored</th>
                             <th class="text-left px-4 py-3">queued</th>
+                            <th class="text-left px-4 py-3">actions</th>
                         </tr>
                     </thead>
                     <tbody class="divide-y divide-gray-800">
@@ -146,7 +147,8 @@
                                         <span :class="[
                                             'w-2 h-2 rounded-full shrink-0',
                                             job.status === 'running'   ? 'bg-curator-500 animate-pulse-dot' :
-                                            job.status === 'completed' ? 'bg-emerald-500' : 'bg-red-500'
+                                            job.status === 'completed' ? 'bg-emerald-500' :
+                                            job.status === 'cancelled' ? 'bg-amber-500' : 'bg-red-500'
                                         ]"></span>
                                         {{ job.status }}
                                     </span>
@@ -160,10 +162,18 @@
                                 <td class="px-4 py-3 font-mono text-xs text-gray-300">{{ job.summary?.items_matched ?? '—' }}</td>
                                 <td class="px-4 py-3 font-mono text-xs text-gray-300">{{ job.summary?.items_scored ?? '—' }}</td>
                                 <td class="px-4 py-3 font-mono text-xs text-gray-300">{{ job.summary?.items_queued ?? '—' }}</td>
+                                <td class="px-4 py-3">
+                                    <button
+                                        v-if="job.status === 'running'"
+                                        @click.stop="cancelJob(job.id)"
+                                        :disabled="cancelingIds.has(job.id)"
+                                        class="px-2 py-1 rounded border border-red-700 text-red-300 hover:bg-red-900/40 disabled:opacity-50 disabled:cursor-not-allowed font-mono text-xs transition-colors"
+                                    >{{ cancelingIds.has(job.id) ? 'cancelling…' : 'cancel' }}</button>
+                                </td>
                             </tr>
                             <!-- Expanded row -->
                             <tr v-if="expandedIds.has(job.id)" class="bg-gray-950/50">
-                                <td colspan="9" class="px-8 py-4">
+                                <td colspan="10" class="px-8 py-4">
                                     <div class="font-mono text-xs text-gray-400 space-y-1">
                                         <p><span class="text-gray-600">id:</span> {{ job.id }}</p>
                                         <p><span class="text-gray-600">started_at:</span> {{ job.started_at }}</p>
@@ -191,6 +201,7 @@
             const jobs = ref([]);
             const activeTab = ref('all');
             const expandedIds = reactive(new Set());
+            const cancelingIds = reactive(new Set());
             const sseConnected = ref(false);
             let eventSource = null;
 
@@ -204,6 +215,7 @@
                 const idx = jobs.value.findIndex(j => j.id === job.id);
                 if (idx >= 0) jobs.value.splice(idx, 1, job);
                 else jobs.value.unshift(job);
+                if (job.status !== 'running') cancelingIds.delete(job.id);
                 if (jobs.value.length > 200) jobs.value.splice(200);
             };
 
@@ -271,6 +283,17 @@
                 return (ms / 1000).toFixed(1) + 's';
             };
 
+            const cancelJob = async (id) => {
+                if (cancelingIds.has(id)) return;
+                cancelingIds.add(id);
+                try {
+                    const res = await fetch(`/api/jobs/${id}/cancel`, { method: 'POST' });
+                    if (!res.ok) cancelingIds.delete(id);
+                } catch (_) {
+                    cancelingIds.delete(id);
+                }
+            };
+
             onMounted(() => {
                 fetchJobs();
                 openStream();
@@ -279,7 +302,7 @@
             return {
                 jobs, activeTab, expandedIds, sseConnected,
                 filteredJobs, tabCount, toggleExpand,
-                formatRelative, duration
+                formatRelative, duration, cancelJob, cancelingIds
             };
         }
     }).mount('#jobs-app');

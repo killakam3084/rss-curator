@@ -120,7 +120,8 @@
                                 <span :class="[
                                     'mt-0.5 w-2.5 h-2.5 rounded-full shrink-0',
                                     job.status === 'running'   ? 'bg-curator-500 animate-pulse' :
-                                    job.status === 'completed' ? 'bg-emerald-500' : 'bg-red-500'
+                                    job.status === 'completed' ? 'bg-emerald-500' :
+                                    job.status === 'cancelled' ? 'bg-amber-500' : 'bg-red-500'
                                 ]"></span>
                                 <div class="min-w-0 flex-1">
                                     <div class="flex items-center justify-between gap-2">
@@ -129,6 +130,7 @@
                                     </div>
                                     <p v-if="job.summary && job.summary.error_message" class="text-xs text-red-400 truncate">{{ job.summary.error_message }}</p>
                                     <p v-else-if="job.status === 'running' && job.progress" class="text-xs text-curator-500/70">{{ job.progress }}</p>
+                                    <p v-else-if="job.status === 'cancelled'" class="text-xs text-amber-400">cancelled</p>
                                     <p v-else-if="job.status === 'completed'" class="text-xs text-gray-500">
                                         found {{ job.summary.items_found ?? '—' }} · matched {{ job.summary.items_matched ?? '—' }}
                                     </p>
