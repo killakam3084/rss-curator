@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/json"
 	"fmt"
@@ -18,6 +19,7 @@ import (
 	"github.com/killakam3084/rss-curator/internal/logbuffer"
 	"github.com/killakam3084/rss-curator/internal/matcher"
 	"github.com/killakam3084/rss-curator/internal/metadata"
+	"github.com/killakam3084/rss-curator/internal/ops"
 	"github.com/killakam3084/rss-curator/internal/storage"
 	"github.com/killakam3084/rss-curator/pkg/models"
 )
@@ -98,24 +100,15 @@ func main() {
 func cmdCheck(cfg models.Config, store *storage.Storage, metaLookup *metadata.Lookup) {
 	fmt.Println("Checking RSS feeds...")
 
-	// Record this run as a job so the UI can track it.
-	jobID, jobErr := store.CreateJob("feed_check")
-	if jobErr != nil {
-		fmt.Fprintf(os.Stderr, "Warning: could not create job record: %v\n", jobErr)
-	}
-
 	// Set up optional AI support — each subsystem uses its own model config.
 	enricherProvider := ai.NewProviderFor("enricher")
 	scorerProvider := ai.NewProviderFor("scorer")
-	enricher := ai.NewEnricher(enricherProvider, nil) // nil logger: CLI stdout is the observable surface
+	enricher := ai.NewEnricher(enricherProvider, nil)
 	scorer := ai.NewScorer(scorerProvider, metaLookup)
 	if enricherProvider.Available() || scorerProvider.Available() {
 		fmt.Println("AI provider available — enrichment and scoring enabled")
 	}
 
-	parser := feed.NewParser().WithEnricher(enricher)
-
-	// Create matcher with shows config or legacy rules
 	var m *matcher.Matcher
 	if cfg.ShowsConfig != nil {
 		m = matcher.NewMatcher(cfg.ShowsConfig, nil)
@@ -125,120 +118,30 @@ func cmdCheck(cfg models.Config, store *storage.Storage, metaLookup *metadata.Lo
 		fmt.Println("Using environment variable config")
 	}
 
-	var (
-		totalNew        int
-		totalDiscovered int
-		totalScored     int
-		feedFailed      bool
-	)
-	now := time.Now()
-	ttl := 24 * time.Hour // Keep raw feed items for 24 hours
-
-	for _, feedURL := range cfg.FeedURLs {
-		fmt.Printf("Fetching: %s\n", feedURL)
-
-		items, err := parser.Parse(feedURL)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error parsing feed: %v\n", err)
-			feedFailed = true
-			continue
-		}
-
-		fmt.Printf("Found %d items\n", len(items))
-
-		// Store all raw feed items for console visibility
-		for _, item := range items {
-			rawItem := models.RawFeedItem{
-				FeedItem:  item,
-				PulledAt:  now,
-				ExpiresAt: now.Add(ttl),
-			}
-			if err := store.AddRawFeedItem(rawItem); err != nil {
-				fmt.Fprintf(os.Stderr, "Warning: Error storing raw feed item: %v\n", err)
-			} else {
-				totalDiscovered++
-			}
-		}
-
-		// Match items
-		matches := m.MatchAll(items)
-		fmt.Printf("Matched %d items\n", len(matches))
-
-		// Score matches using AI (no-op if provider unavailable).
-		if scorerProvider.Available() {
-			history, _ := store.GetActivity(50, 0, "")
-			matches = scorer.ScoreAll(matches, history)
-			totalScored += len(matches)
-		}
-
-		// Stage matches
-		for _, match := range matches {
-			if err := store.Add(match); err != nil {
-				fmt.Fprintf(os.Stderr, "Error staging torrent: %v\n", err)
-			} else {
-				totalNew++
-			}
-		}
+	summary, err := ops.RunFeedCheck(context.Background(), ops.FeedCheckConfig{
+		FeedURLs: cfg.FeedURLs,
+		Matcher:  m,
+	}, ops.FeedCheckDeps{
+		Store:      store,
+		Enricher:   enricher,
+		Scorer:     scorer,
+		ScorerProv: scorerProvider,
+	})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: %v\n", err)
 	}
 
-	if totalDiscovered > 0 {
-		fmt.Printf("\n✓ Discovered %d items from RSS feeds\n", totalDiscovered)
+	if summary.ItemsFound > 0 {
+		fmt.Printf("\n✓ Discovered %d items from RSS feeds\n", summary.ItemsFound)
 	}
-	if totalNew > 0 {
-		fmt.Printf("✓ Staged %d new torrents\n", totalNew)
+	if summary.ItemsMatched > 0 {
+		fmt.Printf("✓ Staged %d new torrents\n", summary.ItemsMatched)
 		fmt.Println("Run 'curator list' to review pending items")
 	} else {
 		fmt.Println("\nNo new matches found")
 	}
-
-	// Complete the feed_check job.
-	if jobErr == nil {
-		summary := models.JobSummary{
-			ItemsFound:   totalDiscovered,
-			ItemsMatched: totalNew,
-			ItemsScored:  totalScored,
-		}
-		if feedFailed {
-			if err := store.FailJob(jobID, "one or more feeds failed to parse"); err != nil {
-				fmt.Fprintf(os.Stderr, "Warning: could not fail job record: %v\n", err)
-			}
-		} else {
-			if err := store.CompleteJob(jobID, summary); err != nil {
-				fmt.Fprintf(os.Stderr, "Warning: could not complete job record: %v\n", err)
-			}
-		}
-	}
-
-	// Backfill AI scores for any torrents that were staged before the provider
-	// was available (ai_scored=false). Covers all statuses so approved/rejected
-	// history is also enriched for trend tracking.
-	if scorerProvider.Available() {
-		backfillJobID, backfillJobErr := store.CreateJob("rescore_backfill")
-
-		all, err := store.List("")
-		if err == nil {
-			history, _ := store.GetActivity(50, 0, "")
-			backfilled := 0
-			for _, t := range all {
-				if t.AIScored {
-					continue
-				}
-				scored := scorer.ScoreAll([]models.StagedTorrent{t}, history)
-				if len(scored) > 0 {
-					if err := store.UpdateAIScore(t.ID, scored[0].AIScore, scored[0].AIReason, scored[0].MatchConfidence, scored[0].MatchConfidenceReason); err == nil {
-						backfilled++
-					}
-				}
-			}
-			if backfilled > 0 {
-				fmt.Printf("✓ Backfilled AI scores for %d torrents\n", backfilled)
-			}
-			if backfillJobErr == nil {
-				_ = store.CompleteJob(backfillJobID, models.JobSummary{ItemsScored: backfilled})
-			}
-		} else if backfillJobErr == nil {
-			_ = store.FailJob(backfillJobID, err.Error())
-		}
+	if summary.ItemsScored > 0 {
+		fmt.Printf("✓ AI scored/backfilled %d torrents\n", summary.ItemsScored)
 	}
 }
 

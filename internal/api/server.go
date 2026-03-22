@@ -11,9 +11,9 @@ import (
 
 	"github.com/killakam3084/rss-curator/internal/ai"
 	"github.com/killakam3084/rss-curator/internal/client"
-	"github.com/killakam3084/rss-curator/internal/feed"
 	"github.com/killakam3084/rss-curator/internal/logbuffer"
 	"github.com/killakam3084/rss-curator/internal/matcher"
+	"github.com/killakam3084/rss-curator/internal/ops"
 	"github.com/killakam3084/rss-curator/internal/storage"
 	"github.com/killakam3084/rss-curator/pkg/models"
 	"go.uber.org/zap"
@@ -130,6 +130,22 @@ type RematchResponse struct {
 	Rescored        int               `json:"rescored"`
 	Skipped         int               `json:"skipped"`
 	Torrents        []TorrentResponse `json:"torrents"`
+}
+
+func torrentToResponse(t models.StagedTorrent) TorrentResponse {
+	return TorrentResponse{
+		ID:                    t.ID,
+		Title:                 t.FeedItem.Title,
+		Size:                  t.FeedItem.Size,
+		MatchReason:           t.MatchReason,
+		Status:                t.Status,
+		Link:                  t.FeedItem.Link,
+		AIScore:               t.AIScore,
+		AIReason:              t.AIReason,
+		AIScored:              t.AIScored,
+		MatchConfidence:       t.MatchConfidence,
+		MatchConfidenceReason: t.MatchConfidenceReason,
+	}
 }
 
 // SuggestionsResponse is the shape returned by POST /api/suggestions.
@@ -897,89 +913,22 @@ func (s *Server) handleRescore(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Record this as a job so the UI can track it.
-	jobID, _ := s.store.CreateJob("rescore")
-	startedAt := time.Now()
-	s.logBuffer.EmitJobEvent(models.JobRecord{
-		ID:        jobID,
-		Type:      "rescore",
-		Status:    "running",
-		StartedAt: startedAt,
+	updated, _ := ops.RunRescore(r.Context(), ops.RescoreOptions{IDs: req.IDs}, ops.RescoreDeps{
+		Store:     s.store,
+		Scorer:    s.scorer,
+		Provider:  s.aiProvider,
+		LogBuffer: s.logBuffer,
+		Logger:    s.logger,
 	})
 
-	history, _ := s.store.GetActivity(50, 0, "")
-
-	var updated []TorrentResponse
-	var rescoreErr error
-	for _, id := range req.IDs {
-		t, err := s.store.GetByID(id)
-		if err != nil || t == nil {
-			continue
-		}
-		scored := s.scorer.ScoreAll([]models.StagedTorrent{*t}, history)
-		if len(scored) == 0 {
-			continue
-		}
-		result := scored[0]
-		if err := s.store.UpdateAIScore(t.ID, result.AIScore, result.AIReason, result.MatchConfidence, result.MatchConfidenceReason); err != nil {
-			s.logger.Error("failed to update AI score", zap.Int("id", t.ID), zap.Error(err))
-			rescoreErr = err
-			continue
-		}
-		updated = append(updated, TorrentResponse{
-			ID:                    result.ID,
-			Title:                 result.FeedItem.Title,
-			Size:                  result.FeedItem.Size,
-			MatchReason:           result.MatchReason,
-			Status:                result.Status,
-			Link:                  result.FeedItem.Link,
-			AIScore:               result.AIScore,
-			AIReason:              result.AIReason,
-			AIScored:              true,
-			MatchConfidence:       result.MatchConfidence,
-			MatchConfidenceReason: result.MatchConfidenceReason,
-		})
+	var responses []TorrentResponse
+	for _, t := range updated {
+		responses = append(responses, torrentToResponse(t))
 	}
-
-	// Complete or fail the job record and fan-out the update.
-	summary := models.JobSummary{ItemsScored: len(updated)}
-	now := time.Now()
-	finalJob := models.JobRecord{
-		ID:          jobID,
-		Type:        "rescore",
-		StartedAt:   startedAt,
-		CompletedAt: &now,
-		Summary:     summary,
-	}
-	if rescoreErr != nil && len(updated) == 0 {
-		finalJob.Status = "failed"
-		finalJob.Summary.ErrorMessage = rescoreErr.Error()
-		_ = s.store.FailJob(jobID, rescoreErr.Error())
-		s.logBuffer.EmitAlertEvent(models.AlertRecord{
-			Action:      "job_failed",
-			Message:     "Rescore failed: " + rescoreErr.Error(),
-			TriggeredAt: now,
-		})
-	} else {
-		finalJob.Status = "completed"
-		_ = s.store.CompleteJob(jobID, summary)
-	}
-	s.logBuffer.EmitJobEvent(finalJob)
-
-	s.logger.Info("torrents rescored", zap.Int("count", len(updated)))
 	json.NewEncoder(w).Encode(RescoreResponse{
-		Rescored: len(updated),
-		Torrents: updated,
+		Rescored: len(responses),
+		Torrents: responses,
 	})
-}
-
-func isRematchEligibleStatus(status string) bool {
-	switch status {
-	case "pending", "accepted", "rejected":
-		return true
-	default:
-		return false
-	}
 }
 
 // handleRematch force re-runs parser+matcher on specific torrents and updates
@@ -1006,154 +955,30 @@ func (s *Server) handleRematch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	jobID, _ := s.store.CreateJob("rematch")
-	startedAt := time.Now()
-	s.logBuffer.EmitJobEvent(models.JobRecord{
-		ID:        jobID,
-		Type:      "rematch",
-		Status:    "running",
-		StartedAt: startedAt,
+	result, _ := ops.RunRematch(r.Context(), ops.RematchOptions{
+		IDs:           req.IDs,
+		AutoRescore:   req.AutoRescore,
+		ForceAIEnrich: req.ForceAIEnrich,
+	}, ops.RematchDeps{
+		Store:     s.store,
+		Matcher:   s.matcher,
+		Enricher:  s.enricher,
+		Scorer:    s.scorer,
+		Provider:  s.aiProvider,
+		LogBuffer: s.logBuffer,
+		Logger:    s.logger,
 	})
 
-	canRescore := req.AutoRescore && s.scorer != nil && s.aiProvider != nil && s.aiProvider.Available()
-	var history []models.Activity
-	if canRescore {
-		history, _ = s.store.GetActivity(50, 0, "")
+	var responses []TorrentResponse
+	for _, t := range result.Updated {
+		responses = append(responses, torrentToResponse(t))
 	}
-
-	var (
-		updated         []TorrentResponse
-		rematchErr      error
-		rematched       int
-		noLongerMatches int
-		rescored        int
-		skipped         int
-	)
-
-	for _, id := range req.IDs {
-		t, err := s.store.GetByID(id)
-		if err != nil || t == nil {
-			skipped++
-			continue
-		}
-		if !isRematchEligibleStatus(t.Status) {
-			skipped++
-			continue
-		}
-
-		item := t.FeedItem
-		feed.ParseTitleMetadata(&item)
-		if s.enricher != nil {
-			if req.ForceAIEnrich {
-				s.enricher.EnrichForce(&item)
-			} else {
-				s.enricher.Enrich(&item)
-			}
-		}
-
-		matches, reason := s.matcher.Match(item)
-		newStatus := t.Status
-		newReason := reason
-		if matches {
-			rematched++
-		} else {
-			noLongerMatches++
-			newStatus = "rejected"
-			if reason != "" {
-				newReason = fmt.Sprintf("rematch: no longer matches current rules (%s)", reason)
-			} else {
-				newReason = "rematch: no longer matches current rules"
-			}
-		}
-
-		if err := s.store.UpdateAfterRematch(t.ID, item, newReason, newStatus); err != nil {
-			s.logger.Error("failed to persist rematch update", zap.Int("id", t.ID), zap.Error(err))
-			rematchErr = err
-			skipped++
-			continue
-		}
-
-		refreshed, err := s.store.GetByID(t.ID)
-		if err != nil || refreshed == nil {
-			skipped++
-			continue
-		}
-
-		if canRescore && matches {
-			scored := s.scorer.ScoreAll([]models.StagedTorrent{*refreshed}, history)
-			if len(scored) > 0 {
-				r := scored[0]
-				if err := s.store.UpdateAIScore(refreshed.ID, r.AIScore, r.AIReason, r.MatchConfidence, r.MatchConfidenceReason); err != nil {
-					s.logger.Error("failed to update AI score after rematch", zap.Int("id", refreshed.ID), zap.Error(err))
-					rematchErr = err
-				} else {
-					rescored++
-					refreshed.AIScore = r.AIScore
-					refreshed.AIReason = r.AIReason
-					refreshed.AIScored = true
-					refreshed.MatchConfidence = r.MatchConfidence
-					refreshed.MatchConfidenceReason = r.MatchConfidenceReason
-				}
-			}
-		}
-
-		updated = append(updated, TorrentResponse{
-			ID:                    refreshed.ID,
-			Title:                 refreshed.FeedItem.Title,
-			Size:                  refreshed.FeedItem.Size,
-			MatchReason:           refreshed.MatchReason,
-			Status:                refreshed.Status,
-			Link:                  refreshed.FeedItem.Link,
-			AIScore:               refreshed.AIScore,
-			AIReason:              refreshed.AIReason,
-			AIScored:              refreshed.AIScored,
-			MatchConfidence:       refreshed.MatchConfidence,
-			MatchConfidenceReason: refreshed.MatchConfidenceReason,
-		})
-	}
-
-	summary := models.JobSummary{
-		ItemsFound:   len(req.IDs),
-		ItemsMatched: rematched,
-		ItemsScored:  rescored,
-	}
-	now := time.Now()
-	finalJob := models.JobRecord{
-		ID:          jobID,
-		Type:        "rematch",
-		StartedAt:   startedAt,
-		CompletedAt: &now,
-		Summary:     summary,
-	}
-	if rematchErr != nil && len(updated) == 0 {
-		finalJob.Status = "failed"
-		finalJob.Summary.ErrorMessage = rematchErr.Error()
-		_ = s.store.FailJob(jobID, rematchErr.Error())
-		s.logBuffer.EmitAlertEvent(models.AlertRecord{
-			Action:      "job_failed",
-			Message:     "Rematch failed: " + rematchErr.Error(),
-			TriggeredAt: now,
-		})
-	} else {
-		finalJob.Status = "completed"
-		_ = s.store.CompleteJob(jobID, summary)
-	}
-	s.logBuffer.EmitJobEvent(finalJob)
-
-	s.logger.Info("torrents rematched",
-		zap.Int("requested", len(req.IDs)),
-		zap.Int("rematched", rematched),
-		zap.Int("no_longer_matches", noLongerMatches),
-		zap.Int("rescored", rescored),
-		zap.Int("skipped", skipped),
-	)
-
 	json.NewEncoder(w).Encode(RematchResponse{
-		Rematched:       rematched,
-		NoLongerMatches: noLongerMatches,
-		Rescored:        rescored,
-		Skipped:         skipped,
-		Torrents:        updated,
+		Rematched:       result.Rematched,
+		NoLongerMatches: result.NoLongerMatches,
+		Rescored:        result.Rescored,
+		Skipped:         result.Skipped,
+		Torrents:        responses,
 	})
 }
 
