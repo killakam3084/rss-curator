@@ -176,7 +176,10 @@ func RunRematch(ctx context.Context, opts RematchOptions, deps RematchDeps) (Rem
 		CompletedAt: &now,
 		Summary:     summary,
 	}
-	if lastErr != nil && len(result.Updated) == 0 {
+	if ctx.Err() != nil {
+		finalJob.Status = "cancelled"
+		_ = deps.Store.CancelJob(jobID, summary)
+	} else if lastErr != nil && len(result.Updated) == 0 {
 		finalJob.Status = "failed"
 		finalJob.Summary.ErrorMessage = lastErr.Error()
 		_ = deps.Store.FailJob(jobID, lastErr.Error())
@@ -202,6 +205,9 @@ func RunRematch(ctx context.Context, opts RematchOptions, deps RematchDeps) (Rem
 		zap.Int("rescored", result.Rescored),
 		zap.Int("skipped", result.Skipped),
 	)
+	if ctx.Err() != nil {
+		return result, ctx.Err()
+	}
 	return result, lastErr
 }
 

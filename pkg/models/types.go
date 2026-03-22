@@ -140,7 +140,7 @@ type AlertRecord struct {
 }
 
 // JobRecord represents a tracked background operation written to the jobs table.
-// Status values: "running", "completed", "failed".
+// Status values: "running", "completed", "failed", "cancelled".
 // Type values: "feed_check", "rescore_backfill", "rescore".
 type JobRecord struct {
 	ID          int        `json:"id"`

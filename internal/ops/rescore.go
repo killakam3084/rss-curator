@@ -100,7 +100,10 @@ func RunRescore(ctx context.Context, opts RescoreOptions, deps RescoreDeps) ([]m
 		CompletedAt: &now,
 		Summary:     summary,
 	}
-	if lastErr != nil && len(updated) == 0 {
+	if ctx.Err() != nil {
+		finalJob.Status = "cancelled"
+		_ = deps.Store.CancelJob(jobID, summary)
+	} else if lastErr != nil && len(updated) == 0 {
 		finalJob.Status = "failed"
 		finalJob.Summary.ErrorMessage = lastErr.Error()
 		_ = deps.Store.FailJob(jobID, lastErr.Error())
@@ -120,5 +123,8 @@ func RunRescore(ctx context.Context, opts RescoreOptions, deps RescoreDeps) ([]m
 	}
 
 	log.Info("torrents rescored", zap.Int("count", len(updated)))
+	if ctx.Err() != nil {
+		return updated, ctx.Err()
+	}
 	return updated, lastErr
 }

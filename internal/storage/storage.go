@@ -44,6 +44,7 @@ type Store interface {
 	CreateJob(jobType string) (int, error)
 	CompleteJob(id int, summary models.JobSummary) error
 	FailJob(id int, errMsg string) error
+	CancelJob(id int, summary models.JobSummary) error
 	ListJobs(limit int, statusFilter string) ([]models.JobRecord, error)
 	GetJob(id int) (*models.JobRecord, error)
 }
@@ -532,6 +533,18 @@ func (s *Storage) FailJob(id int, errMsg string) error {
 	}
 	_, err = s.db.Exec(`
 		UPDATE jobs SET status = 'failed', completed_at = ?, summary_json = ? WHERE id = ?
+	`, time.Now(), string(summaryJSON), id)
+	return err
+}
+
+// CancelJob marks a job as cancelled with partial summary statistics.
+func (s *Storage) CancelJob(id int, summary models.JobSummary) error {
+	summaryJSON, err := json.Marshal(summary)
+	if err != nil {
+		return err
+	}
+	_, err = s.db.Exec(`
+		UPDATE jobs SET status = 'cancelled', completed_at = ?, summary_json = ? WHERE id = ?
 	`, time.Now(), string(summaryJSON), id)
 	return err
 }

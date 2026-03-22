@@ -236,6 +236,31 @@ func TestFailJob(t *testing.T) {
 	}
 }
 
+func TestCancelJob(t *testing.T) {
+	store, tmpDir := setupTestDB(t)
+	defer cleanupTestDB(store, tmpDir)
+
+	id, _ := store.CreateJob("rematch")
+	summary := models.JobSummary{ItemsFound: 100, ItemsMatched: 42, ItemsScored: 9}
+	if err := store.CancelJob(id, summary); err != nil {
+		t.Fatalf("CancelJob: %v", err)
+	}
+
+	job, err := store.GetJob(id)
+	if err != nil {
+		t.Fatalf("GetJob: %v", err)
+	}
+	if job.Status != "cancelled" {
+		t.Errorf("expected status 'cancelled', got %q", job.Status)
+	}
+	if job.CompletedAt == nil {
+		t.Error("expected completed_at to be set")
+	}
+	if job.Summary.ItemsMatched != 42 {
+		t.Errorf("expected items_matched=42, got %d", job.Summary.ItemsMatched)
+	}
+}
+
 func TestListJobs(t *testing.T) {
 	store, tmpDir := setupTestDB(t)
 	defer cleanupTestDB(store, tmpDir)
@@ -274,6 +299,17 @@ func TestListJobs(t *testing.T) {
 	}
 	if len(completed) != 2 {
 		t.Errorf("expected 2 completed jobs, got %d", len(completed))
+	}
+
+	id4, _ := store.CreateJob("rematch")
+	_ = store.CancelJob(id4, models.JobSummary{ItemsFound: 7, ItemsMatched: 3})
+
+	cancelled, err := store.ListJobs(10, "cancelled")
+	if err != nil {
+		t.Fatalf("ListJobs(cancelled): %v", err)
+	}
+	if len(cancelled) != 1 {
+		t.Errorf("expected 1 cancelled job, got %d", len(cancelled))
 	}
 }
 
