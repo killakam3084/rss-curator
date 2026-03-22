@@ -6,6 +6,29 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+## [0.29.3] - 2026-03-22
+
+### Changed
+- Extracted a reusable jobs rail component (`web/components/jobs-rail.js`) and wired both dashboard and jobs pages to use it.
+- Shared async-jobs rail UI is now rendered from one canonical component to keep cross-page behavior in sync.
+
+### Fixed
+- Cleaned stray/corrupted jobs page header markup introduced during earlier rail edits.
+
+
+## [0.29.2] - 2026-03-22
+
+### Fixed
+- Batch progress rail no longer throws `Cannot read properties of undefined (reading 'total')`; `batchStats` is now exposed to the Vue template context.
+
+
+## [0.29.1] - 2026-03-22
+
+### Added
+- Async jobs rail now shows live batch completion progress for rematch/rescore cohorts as `X/Y complete`.
+- Batch progress updates continuously as terminal job events arrive over SSE on both dashboard and jobs pages.
+
+
 ## [0.29.0] - 2026-03-22
 
 ### Added
