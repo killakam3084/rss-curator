@@ -1,5 +1,3 @@
-version: "3.8"
-
 # TrueNAS / live-stack sidecar validator.
 #
 # Run alongside your live rss-curator stack to smoke-test it in place.
@@ -31,22 +29,25 @@ services:
       HURL_base: http://localhost:8081
       HURL_username: ${CURATOR_USERNAME:?CURATOR_USERNAME must be set}
       HURL_password: ${CURATOR_PASSWORD:?CURATOR_PASSWORD must be set}
-    command: >
-      hurl --test
-      --cookie-jar /tmp/hurl_cookies.jar
-      --report-junit /results/validate-smoke.xml
-      /tests/e2e/smoke/00-login.hurl
-      /tests/e2e/smoke/01-health.hurl
-      /tests/e2e/smoke/02-stats.hurl
-      /tests/e2e/smoke/03-activity.hurl
-      /tests/e2e/smoke/04-jobs.hurl
-      /tests/e2e/smoke/05-torrents.hurl
-      /tests/e2e/smoke/06-feed-stream.hurl
-      /tests/e2e/smoke/07-scheduler.hurl
-      /tests/e2e/smoke/08-rescore-errors.hurl
-      /tests/e2e/smoke/09-rematch-errors.hurl
-      /tests/e2e/smoke/10-alerts.hurl
-      &&
-      hurl --test
-      --report-junit /results/validate-auth.xml
-      /tests/e2e/auth/auth-flow.hurl
+    # Single-element list so the entire string is passed as one argument to
+    # /bin/sh -c, preserving the && between the two hurl invocations.
+    command:
+      - >-
+        hurl --test
+        --cookie-jar /tmp/hurl_cookies.jar
+        --report-junit /results/validate-smoke.xml
+        /tests/e2e/smoke/00-login.hurl
+        /tests/e2e/smoke/01-health.hurl
+        /tests/e2e/smoke/02-stats.hurl
+        /tests/e2e/smoke/03-activity.hurl
+        /tests/e2e/smoke/04-jobs.hurl
+        /tests/e2e/smoke/05-torrents.hurl
+        /tests/e2e/smoke/06-feed-stream.hurl
+        /tests/e2e/smoke/07-scheduler.hurl
+        /tests/e2e/smoke/08-rescore-errors.hurl
+        /tests/e2e/smoke/09-rematch-errors.hurl
+        /tests/e2e/smoke/10-alerts.hurl
+        &&
+        hurl --test
+        --report-junit /results/validate-auth.xml
+        /tests/e2e/auth/auth-flow.hurl

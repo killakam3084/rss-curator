@@ -1,5 +1,3 @@
-version: "3.8"
-
 # CI E2E test stack.
 #
 # Builds a fresh curator image, boots it with an ephemeral SQLite DB and no
@@ -37,7 +35,8 @@ services:
 
   hurl:
     image: ghcr.io/orange-opensource/hurl:4.3.0
-    entrypoint: ["/bin/sh", "-c"]
+    # No custom entrypoint — use the native hurl entrypoint so the command list
+    # is passed directly as arguments without shell word-splitting.
     depends_on:
       curator-test:
         condition: service_healthy
@@ -48,17 +47,18 @@ services:
       HURL_base: http://curator-test:8081
       HURL_username: unused
       HURL_password: unused
-    command: >
-      hurl --test
-      --report-junit /results/e2e.xml
-      /tests/e2e/smoke/00-login.hurl
-      /tests/e2e/smoke/01-health.hurl
-      /tests/e2e/smoke/02-stats.hurl
-      /tests/e2e/smoke/03-activity.hurl
-      /tests/e2e/smoke/04-jobs.hurl
-      /tests/e2e/smoke/05-torrents.hurl
-      /tests/e2e/smoke/06-feed-stream.hurl
-      /tests/e2e/smoke/07-scheduler.hurl
-      /tests/e2e/smoke/08-rescore-errors.hurl
-      /tests/e2e/smoke/09-rematch-errors.hurl
-      /tests/e2e/smoke/10-alerts.hurl
+    command:
+      - --test
+      - --report-junit
+      - /results/e2e.xml
+      - /tests/e2e/smoke/00-login.hurl
+      - /tests/e2e/smoke/01-health.hurl
+      - /tests/e2e/smoke/02-stats.hurl
+      - /tests/e2e/smoke/03-activity.hurl
+      - /tests/e2e/smoke/04-jobs.hurl
+      - /tests/e2e/smoke/05-torrents.hurl
+      - /tests/e2e/smoke/06-feed-stream.hurl
+      - /tests/e2e/smoke/07-scheduler.hurl
+      - /tests/e2e/smoke/08-rescore-errors.hurl
+      - /tests/e2e/smoke/09-rematch-errors.hurl
+      - /tests/e2e/smoke/10-alerts.hurl
