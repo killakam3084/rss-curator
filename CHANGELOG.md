@@ -6,6 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+## [0.29.4] - 2026-03-22
+
+### Fixed
+- Added static web routing for `/components/` so shared UI assets (including `jobs-rail.js`) load correctly in production.
+- Resolved production `404` and script MIME failures that prevented `jobs-rail` component registration on dashboard and jobs pages.
+
+
 ## [0.29.3] - 2026-03-22
 
 ### Changed
