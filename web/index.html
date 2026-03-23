@@ -407,18 +407,18 @@
                             </div>
                         </div>
 
-                        <!-- Select-all / deselect-all toggle -->
+                        <!-- Select-all / deselect-all toggle (current page only) -->
                         <div class="flex items-center justify-end mb-2 px-1">
                             <button
-                                v-if="selectedCount < displayedTorrents.length"
+                                v-if="pagedTorrents.length > 0 && pagedTorrents.every(t => !selectedIds.has(t.id))"
                                 @click="selectAll()"
                                 class="text-xs font-mono text-gray-500 hover:text-curator-400 transition-colors"
-                            >select all {{ displayedTorrents.length }}</button>
+                            >select all {{ pagedTorrents.length }} on page</button>
                             <button
-                                v-else
-                                @click="selectedIds.clear()"
+                                v-else-if="pagedTorrents.length > 0"
+                                @click="pagedTorrents.forEach(t => selectedIds.delete(t.id))"
                                 class="text-xs font-mono text-gray-500 hover:text-red-400 transition-colors"
-                            >deselect all</button>
+                            >deselect page</button>
                         </div>
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                         <div 

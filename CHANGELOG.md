@@ -6,6 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+## [0.29.5] - 2026-03-22
+
+### Changed
+- Job progress events now emit on every item completion for smoother real-time progress visualization, instead of batches of 10.
+- Select-all button now operates on current page only (respects pagination), instead of entire filtered list.
+
+
 ## [0.29.4] - 2026-03-22
 
 ### Fixed

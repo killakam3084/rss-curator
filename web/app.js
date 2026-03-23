@@ -650,7 +650,7 @@ const app = createApp({
         };
 
         const selectAll = () => {
-            displayedTorrents.value.forEach(t => selectedIds.value.add(t.id));
+            pagedTorrents.value.forEach(t => selectedIds.value.add(t.id));
         };
 
         const submitRematch = async () => {

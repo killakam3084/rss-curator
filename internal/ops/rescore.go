@@ -63,8 +63,8 @@ func RunRescore(ctx context.Context, opts RescoreOptions, deps RescoreDeps) ([]m
 		if ctx.Err() != nil {
 			break
 		}
-		// Emit a progress event on the first item and then every 10 items.
-		if deps.LogBuffer != nil && (i == 0 || i%10 == 0) {
+		// Emit a progress event on every item.
+		if deps.LogBuffer != nil {
 			deps.LogBuffer.EmitJobEvent(models.JobRecord{
 				ID:        jobID,
 				Type:      "rescore",

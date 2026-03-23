@@ -132,6 +132,7 @@
                             <th class="text-left px-4 py-3">progress</th>
                             <th class="text-left px-4 py-3">found</th>
                             <th class="text-left px-4 py-3">matched</th>
+                            <th class="text-left px-4 py-3">no longer</th>
                             <th class="text-left px-4 py-3">scored</th>
                             <th class="text-left px-4 py-3">queued</th>
                             <th class="text-left px-4 py-3">actions</th>
@@ -174,9 +175,12 @@
                                 <td class="px-4 py-3 font-mono text-xs text-gray-400">{{ formatRelative(job.started_at) }}</td>
                                 <!-- duration -->
                                 <td class="px-4 py-3 font-mono text-xs text-gray-400">{{ duration(job) }}</td>
+                                <!-- progress -->
+                                <td class="px-4 py-3 font-mono text-xs text-gray-400">{{ jobSummaryLine(job) }}</td>
                                 <!-- summary stats -->
                                 <td class="px-4 py-3 font-mono text-xs text-gray-300">{{ job.summary?.items_found ?? '—' }}</td>
                                 <td class="px-4 py-3 font-mono text-xs text-gray-300">{{ job.summary?.items_matched ?? '—' }}</td>
+                                <td class="px-4 py-3 font-mono text-xs text-gray-300">{{ job.type === 'rematch' ? (job.summary?.no_longer_matches ?? '—') : '—' }}</td>
                                 <td class="px-4 py-3 font-mono text-xs text-gray-300">{{ job.summary?.items_scored ?? '—' }}</td>
                                 <td class="px-4 py-3 font-mono text-xs text-gray-300">{{ job.summary?.items_queued ?? '—' }}</td>
                                 <td class="px-4 py-3">
@@ -190,12 +194,13 @@
                             </tr>
                             <!-- Expanded row -->
                             <tr v-if="expandedIds.has(job.id)" class="bg-gray-950/50">
-                                <td colspan="11" class="px-8 py-4">
+                                <td colspan="12" class="px-8 py-4">
                                     <div class="font-mono text-xs text-gray-400 space-y-1">
                                         <p><span class="text-gray-600">id:</span> {{ job.id }}</p>
                                         <p><span class="text-gray-600">started_at:</span> {{ job.started_at }}</p>
                                         <p v-if="job.completed_at"><span class="text-gray-600">completed_at:</span> {{ job.completed_at }}</p>
                                         <p v-if="job.progress"><span class="text-gray-600">progress:</span> {{ job.progress }}</p>
+                                        <p v-if="job.type === 'rematch' && job.summary?.no_longer_matches !== undefined"><span class="text-gray-600">no_longer_matches:</span> {{ job.summary.no_longer_matches }}</p>
                                         <p v-if="job.summary?.error_message" class="text-red-400"><span class="text-gray-600">error:</span> {{ job.summary.error_message }}</p>
                                         <p><span class="text-gray-600">summary:</span> {{ JSON.stringify(job.summary) }}</p>
                                     </div>
@@ -310,12 +315,14 @@
                 if (job.status === 'cancelled') {
                     const parts = [];
                     if ((job.summary?.items_matched || 0) > 0) parts.push(`${job.summary.items_matched} matched`);
+                    if ((job.summary?.no_longer_matches || 0) > 0) parts.push(`${job.summary.no_longer_matches} no longer`);
                     if ((job.summary?.items_scored || 0) > 0) parts.push(`${job.summary.items_scored} scored`);
                     return parts.length ? `cancelled — ${parts.join(' · ')}` : 'cancelled';
                 }
                 const parts = [];
                 if ((job.summary?.items_found || 0) > 0) parts.push(`${job.summary.items_found} found`);
                 if ((job.summary?.items_matched || 0) > 0) parts.push(`${job.summary.items_matched} matched`);
+                if ((job.summary?.no_longer_matches || 0) > 0) parts.push(`${job.summary.no_longer_matches} no longer`);
                 if ((job.summary?.items_scored || 0) > 0) parts.push(`${job.summary.items_scored} scored`);
                 if ((job.summary?.items_queued || 0) > 0) parts.push(`${job.summary.items_queued} queued`);
                 return parts.length ? parts.join(' · ') : 'completed';
