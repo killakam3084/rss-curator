@@ -16,10 +16,11 @@ import (
 
 // RematchOptions specifies the parameters for a rematch run.
 type RematchOptions struct {
-	IDs           []int
-	AutoRescore   bool
-	ForceAIEnrich bool
-	JobID         int // when non-zero, caller has already created the job record and emitted the initial event
+	IDs              []int
+	AutoRescore      bool
+	ForceAIEnrich    bool
+	JobID            int // when non-zero, caller has already created the job record and emitted the initial event
+	ProgressInterval int // emit progress every N items; 0 or 1 = every item
 }
 
 // RematchResult holds the outcome of a RunRematch call.
@@ -80,12 +81,16 @@ func RunRematch(ctx context.Context, opts RematchOptions, deps RematchDeps) (Rem
 	)
 
 	total := len(opts.IDs)
+	interval := opts.ProgressInterval
+	if interval <= 0 {
+		interval = 1
+	}
 	for i, id := range opts.IDs {
 		if ctx.Err() != nil {
 			break
 		}
-		// Emit a progress event on every item.
-		if deps.LogBuffer != nil {
+		// Emit a progress event on the first item and every interval items.
+		if deps.LogBuffer != nil && (i == 0 || (i+1)%interval == 0) {
 			deps.LogBuffer.EmitJobEvent(models.JobRecord{
 				ID:        jobID,
 				Type:      "rematch",

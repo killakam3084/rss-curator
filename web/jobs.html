@@ -65,6 +65,9 @@
             </div>
         </nav>
 
+        <!-- Ops In-Progress Banner -->
+        <ops-banner :running-jobs="runningJobs" :cancel-job-fn="cancelJob"></ops-banner>
+
         <!-- Content -->
         <main class="pt-14 p-6 max-w-5xl mx-auto">
             <!-- Page heading -->
@@ -216,6 +219,7 @@
         </main>
     </div>
 
+    <script src="components/ops-banner.js"></script>
     <script src="components/jobs-rail.js"></script>
     <script>
     const { createApp, ref, computed, onMounted, reactive } = Vue;
@@ -383,6 +387,9 @@
 
     if (window.registerJobsRailComponent) {
         window.registerJobsRailComponent(jobsApp);
+    }
+    if (window.registerOpsBannerComponent) {
+        window.registerOpsBannerComponent(jobsApp);
     }
 
     jobsApp.mount('#jobs-app');

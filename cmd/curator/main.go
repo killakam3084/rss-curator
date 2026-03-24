@@ -27,7 +27,7 @@ import (
 )
 
 const (
-	version = "0.29.5"
+	version = "0.30.0"
 )
 
 func main() {
@@ -713,6 +713,11 @@ func cmdServe(cfg models.Config, store *storage.Storage, buf *logbuffer.Buffer, 
 	server := api.NewServer(store, qb, port, buf, scorer, scorerProvider, m, enricher, auth).
 		WithScheduler(sched).
 		WithQueue(q)
+	if v := os.Getenv("CURATOR_PROGRESS_INTERVAL"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			server = server.WithProgressInterval(n)
+		}
+	}
 	fmt.Printf("[Serve] Starting API server on port %d\n", port)
 	if err := server.Start(); err != nil {
 		fmt.Fprintf(os.Stderr, "Error starting API server: %v\n", err)

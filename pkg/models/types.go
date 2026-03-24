@@ -137,6 +137,7 @@ type AlertRecord struct {
 	MatchReason  string    `json:"match_reason,omitempty"`
 	Message      string    `json:"message"`
 	TriggeredAt  time.Time `json:"triggered_at"`
+	Dismissed    bool      `json:"dismissed,omitempty"`
 }
 
 // JobRecord represents a tracked background operation written to the jobs table.

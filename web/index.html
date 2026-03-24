@@ -187,14 +187,16 @@
                         </div>
                         <div v-if="recentAlerts.length === 0" class="px-4 py-6 text-center text-xs font-mono text-gray-600">no alerts</div>
                         <ul v-else class="divide-y divide-gray-800 max-h-72 overflow-y-auto">
-                            <li v-for="alert in recentAlerts" :key="alert.id" class="flex items-start gap-3 px-4 py-3">
+                            <li v-for="alert in recentAlerts" :key="alert.id" class="group flex items-start gap-3 px-4 py-3 hover:bg-gray-800/50 transition-colors">
                                 <!-- action dot -->
                                 <span :class="[
                                     'mt-0.5 w-2.5 h-2.5 rounded-full shrink-0',
-                                    alert.action === 'approve'    ? 'bg-emerald-500' :
-                                    alert.action === 'reject'     ? 'bg-red-500' :
-                                    alert.action === 'queue'      ? 'bg-blue-400' :
-                                    alert.action === 'staged'     ? 'bg-curator-500' : 'bg-red-500'
+                                    alert.action === 'approve'       ? 'bg-emerald-500' :
+                                    alert.action === 'reject'        ? 'bg-red-500' :
+                                    alert.action === 'queue'         ? 'bg-blue-400' :
+                                    alert.action === 'staged'        ? 'bg-curator-500' :
+                                    alert.action === 'job_completed' ? 'bg-emerald-400' :
+                                    alert.action === 'job_cancelled' ? 'bg-amber-400' : 'bg-red-500'
                                 ]"></span>
                                 <div class="min-w-0 flex-1">
                                     <div class="flex items-center justify-between gap-2">
@@ -203,6 +205,12 @@
                                     </div>
                                     <p v-if="alert.torrent_title && alert.action !== 'staged' && alert.action !== 'job_failed'" class="text-xs text-gray-600 truncate mt-0.5">{{ alert.match_reason }}</p>
                                 </div>
+                                <!-- per-alert dismiss button -->
+                                <button
+                                    @click.stop="dismissAlert(alert.id)"
+                                    class="opacity-0 group-hover:opacity-100 transition-opacity shrink-0 mt-0.5 text-gray-600 hover:text-red-400 text-sm leading-none"
+                                    title="Dismiss"
+                                >✕</button>
                             </li>
                         </ul>
                     </div>
@@ -220,20 +228,29 @@
         <div v-if="jobsPopoverOpen || alertsPopoverOpen" class="fixed inset-0 z-30" @click="jobsPopoverOpen = false; alertsPopoverOpen = false"></div>
 
         <!-- Toast Notifications -->
-        <div class="fixed top-20 right-6 z-50 flex flex-col gap-3 max-w-sm pointer-events-none">
-            <div 
-                v-for="toast in toasts" 
+        <div class="fixed top-16 right-6 z-50 flex flex-col gap-2 w-80 pointer-events-none">
+            <div
+                v-for="toast in toasts"
                 :key="toast.id"
                 :class="[
-                    'px-4 py-3 rounded-xl font-medium shadow-lg animate-in fade-in slide-in-from-right-4 duration-300 pointer-events-auto',
-                    toast.type === 'success' ? 'bg-emerald-500 text-white' :
-                    toast.type === 'error' ? 'bg-red-500 text-white' :
-                    'bg-blue-500 text-white'
+                    'flex items-start gap-3 px-4 py-3 rounded-lg border border-gray-700 bg-gray-900 shadow-lg shadow-black/50 toast-in pointer-events-auto',
+                    toast.type === 'success' ? 'border-l-4 border-l-curator-500' :
+                    toast.type === 'error'   ? 'border-l-4 border-l-red-500' :
+                                              'border-l-4 border-l-gray-600'
                 ]"
             >
-                {{ toast.message }}
+                <span :class="[
+                    'text-sm shrink-0 mt-0.5',
+                    toast.type === 'success' ? 'text-curator-500' :
+                    toast.type === 'error'   ? 'text-red-400' :
+                                              'text-gray-500'
+                ]">{{ toast.type === 'success' ? '✓' : toast.type === 'error' ? '✗' : 'ℹ' }}</span>
+                <span class="text-sm font-mono text-gray-200 leading-snug">{{ toast.message }}</span>
             </div>
         </div>
+
+        <!-- Ops In-Progress Banner -->
+        <ops-banner :running-jobs="runningJobs" :cancel-job-fn="cancelJob"></ops-banner>
 
         <!-- Full Height Layout with Console -->
         <div class="flex min-h-screen">
@@ -916,6 +933,7 @@
         </div>
     </div>
 
+    <script src="components/ops-banner.js"></script>
     <script src="components/jobs-rail.js"></script>
     <script src="app.js"></script>
 </body>

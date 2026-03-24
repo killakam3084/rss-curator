@@ -936,11 +936,21 @@ const app = createApp({
             alertsEventSource.onmessage = (e) => {
                 try {
                     const alert = JSON.parse(e.data);
+                    // Dismissed alerts are removed from local state.
+                    if (alert.dismissed) {
+                        alerts.value = alerts.value.filter(a => a.id !== alert.id);
+                        return;
+                    }
                     const idx = alerts.value.findIndex(a => a.id === alert.id);
                     if (idx >= 0) {
                         alerts.value.splice(idx, 1, alert);
                     } else {
                         alerts.value.push(alert);
+                        // Auto-clear transient (success/neutral) alerts after 3s.
+                        const autoClearActions = ['approve', 'reject', 'queue', 'staged', 'job_completed', 'job_cancelled'];
+                        if (autoClearActions.includes(alert.action)) {
+                            setTimeout(() => dismissAlert(alert.id), 3000);
+                        }
                     }
                     if (alerts.value.length > 50) alerts.value.shift();
                 } catch (_) {}
@@ -960,6 +970,27 @@ const app = createApp({
         const clearAlerts = () => {
             alerts.value = [];
             markAlertsRead();
+        };
+
+        const dismissAlert = async (id) => {
+            // Optimistically remove from local state, then sync with server.
+            alerts.value = alerts.value.filter(a => a.id !== id);
+            try {
+                await fetch(`/api/alerts/dismiss/${id}`, { method: 'POST' });
+            } catch (_) {}
+        };
+
+        // Job cancellation — calls POST /api/jobs/{id}/cancel
+        const cancelingJobIds = new Set();
+        const cancelJob = async (id) => {
+            if (cancelingJobIds.has(id)) return Promise.resolve();
+            cancelingJobIds.add(id);
+            try {
+                const res = await fetch(`/api/jobs/${id}/cancel`, { method: 'POST' });
+                if (!res.ok) cancelingJobIds.delete(id);
+            } catch (_) {
+                cancelingJobIds.delete(id);
+            }
         };
 
         const toggleDarkMode = () => {
@@ -1093,12 +1124,17 @@ const app = createApp({
             recentAlerts,
             markAlertsRead,
             clearAlerts,
+            dismissAlert,
+            cancelJob,
         };
     }
 });
 
 if (window.registerJobsRailComponent) {
     window.registerJobsRailComponent(app);
+}
+if (window.registerOpsBannerComponent) {
+    window.registerOpsBannerComponent(app);
 }
 
 app.mount('#app');

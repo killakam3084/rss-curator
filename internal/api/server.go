@@ -34,24 +34,25 @@ type AuthConfig struct {
 }
 
 type Server struct {
-	store         storage.Store
-	client        *client.Client // May be nil if qBittorrent is unavailable
-	logger        *zap.Logger
-	logBuffer     *logbuffer.Buffer
-	scorer        *ai.Scorer  // May be nil if AI is disabled
-	aiProvider    ai.Provider // May be nil if AI is disabled
-	matcher       *matcher.Matcher
-	enricher      *ai.Enricher
-	port          int
-	authEnabled   bool
-	authUsername  string
-	authPassword  string
-	sessionSecret []byte
-	sessionTTL    time.Duration
-	scheduler     *scheduler.Scheduler // May be nil if scheduler is not configured
-	queue         *jobs.Queue          // May be nil if queue is not configured
-	jobCancelMu   sync.Mutex
-	jobCancels    map[int]*jobCancelState
+	store            storage.Store
+	client           *client.Client // May be nil if qBittorrent is unavailable
+	logger           *zap.Logger
+	logBuffer        *logbuffer.Buffer
+	scorer           *ai.Scorer  // May be nil if AI is disabled
+	aiProvider       ai.Provider // May be nil if AI is disabled
+	matcher          *matcher.Matcher
+	enricher         *ai.Enricher
+	port             int
+	authEnabled      bool
+	authUsername     string
+	authPassword     string
+	sessionSecret    []byte
+	sessionTTL       time.Duration
+	scheduler        *scheduler.Scheduler // May be nil if scheduler is not configured
+	queue            *jobs.Queue          // May be nil if queue is not configured
+	jobCancelMu      sync.Mutex
+	jobCancels       map[int]*jobCancelState
+	progressInterval int
 }
 
 type jobCancelState struct {
@@ -217,21 +218,22 @@ func NewServer(store storage.Store, client *client.Client, port int, buf *logbuf
 	}
 
 	return &Server{
-		store:         store,
-		client:        client,
-		logger:        logger,
-		logBuffer:     buf,
-		scorer:        scorer,
-		aiProvider:    aiProvider,
-		matcher:       m,
-		enricher:      enricher,
-		port:          port,
-		authEnabled:   auth.Password != "",
-		authUsername:  auth.Username,
-		authPassword:  auth.Password,
-		sessionSecret: auth.SessionSecret,
-		sessionTTL:    auth.SessionTTL,
-		jobCancels:    make(map[int]*jobCancelState),
+		store:            store,
+		client:           client,
+		logger:           logger,
+		logBuffer:        buf,
+		scorer:           scorer,
+		aiProvider:       aiProvider,
+		matcher:          m,
+		enricher:         enricher,
+		port:             port,
+		authEnabled:      auth.Password != "",
+		authUsername:     auth.Username,
+		authPassword:     auth.Password,
+		sessionSecret:    auth.SessionSecret,
+		sessionTTL:       auth.SessionTTL,
+		jobCancels:       make(map[int]*jobCancelState),
+		progressInterval: 5, // default: emit every 5 items
 	}
 }
 
@@ -246,6 +248,13 @@ func (s *Server) WithScheduler(sched *scheduler.Scheduler) *Server {
 // call chaining.
 func (s *Server) WithQueue(q *jobs.Queue) *Server {
 	s.queue = q
+	return s
+}
+
+func (s *Server) WithProgressInterval(n int) *Server {
+	if n > 0 {
+		s.progressInterval = n
+	}
 	return s
 }
 
@@ -268,6 +277,7 @@ func (s *Server) Start() error {
 	mux.HandleFunc("/api/jobs/stream", s.handleJobsStream)
 	mux.HandleFunc("/api/jobs/", s.handleJob)
 	mux.HandleFunc("/api/jobs", s.handleJobs)
+	mux.HandleFunc("/api/alerts/dismiss/", s.handleDismissAlert)
 	mux.HandleFunc("/api/alerts/stream", s.handleAlertsStream)
 	mux.HandleFunc("/api/alerts", s.handleAlerts)
 	mux.HandleFunc("/api/scheduler/run/", s.handleSchedulerRun)
@@ -977,7 +987,7 @@ func (s *Server) handleRescore(w http.ResponseWriter, r *http.Request) {
 				})
 			}
 			s.registerJobCancel(jobID, "rescore")
-			opts := ops.RescoreOptions{IDs: req.IDs, JobID: jobID}
+			opts := ops.RescoreOptions{IDs: req.IDs, JobID: jobID, ProgressInterval: s.progressInterval}
 			err = s.queue.Submit("rescore", true, func(ctx context.Context) {
 				runCtx, runCancel := context.WithCancel(ctx)
 				if !s.bindRunCancel(jobID, runCancel) {
@@ -1014,7 +1024,7 @@ func (s *Server) handleRescore(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Synchronous fallback (no queue or job allocation failed).
-	updated, _ := ops.RunRescore(r.Context(), ops.RescoreOptions{IDs: req.IDs}, rescoreDeps)
+	updated, _ := ops.RunRescore(r.Context(), ops.RescoreOptions{IDs: req.IDs, ProgressInterval: s.progressInterval}, rescoreDeps)
 	var responses []TorrentResponse
 	for _, t := range updated {
 		responses = append(responses, torrentToResponse(t))
@@ -1075,10 +1085,11 @@ func (s *Server) handleRematch(w http.ResponseWriter, r *http.Request) {
 			}
 			s.registerJobCancel(jobID, "rematch")
 			opts := ops.RematchOptions{
-				IDs:           req.IDs,
-				AutoRescore:   req.AutoRescore,
-				ForceAIEnrich: req.ForceAIEnrich,
-				JobID:         jobID,
+				IDs:              req.IDs,
+				AutoRescore:      req.AutoRescore,
+				ForceAIEnrich:    req.ForceAIEnrich,
+				JobID:            jobID,
+				ProgressInterval: s.progressInterval,
 			}
 			err = s.queue.Submit("rematch", true, func(ctx context.Context) {
 				runCtx, runCancel := context.WithCancel(ctx)
@@ -1117,9 +1128,10 @@ func (s *Server) handleRematch(w http.ResponseWriter, r *http.Request) {
 
 	// Synchronous fallback (no queue or job allocation failed).
 	result, _ := ops.RunRematch(r.Context(), ops.RematchOptions{
-		IDs:           req.IDs,
-		AutoRescore:   req.AutoRescore,
-		ForceAIEnrich: req.ForceAIEnrich,
+		IDs:              req.IDs,
+		AutoRescore:      req.AutoRescore,
+		ForceAIEnrich:    req.ForceAIEnrich,
+		ProgressInterval: s.progressInterval,
 	}, rematchDeps)
 	var responses []TorrentResponse
 	for _, t := range result.Updated {
@@ -1342,6 +1354,25 @@ func (s *Server) handleSuggestions(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleAlerts returns buffered alert records as JSON (newest-last chronological order).
+// POST /api/alerts/dismiss/{id}
+func (s *Server) handleDismissAlert(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	idStr := strings.TrimPrefix(r.URL.Path, "/api/alerts/dismiss/")
+	id, err := strconv.ParseUint(idStr, 10, 64)
+	if err != nil || id == 0 {
+		http.Error(w, "invalid alert id", http.StatusBadRequest)
+		return
+	}
+	if !s.logBuffer.DismissAlert(id) {
+		http.Error(w, "alert not found", http.StatusNotFound)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
 // GET /api/alerts
 func (s *Server) handleAlerts(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
@@ -1457,10 +1488,42 @@ func (s *Server) startAlertPoller() {
 					}(),
 				})
 
+			case j.Status == "cancelled":
+				msg := j.Type + " cancelled"
+				if j.Summary.ItemsMatched > 0 {
+					msg += fmt.Sprintf(" (%d/%d processed)", j.Summary.ItemsMatched, j.Summary.ItemsFound)
+				}
+				s.logBuffer.EmitAlertEvent(models.AlertRecord{
+					Action:  "job_cancelled",
+					Message: msg,
+					TriggeredAt: func() time.Time {
+						if j.CompletedAt != nil {
+							return *j.CompletedAt
+						}
+						return time.Now()
+					}(),
+				})
+
 			case j.Status == "completed" && j.Type == "feed_check" && j.Summary.ItemsMatched > 0:
 				s.logBuffer.EmitAlertEvent(models.AlertRecord{
 					Action:  "staged",
 					Message: fmt.Sprintf("Feed check: %d new match(es) staged", j.Summary.ItemsMatched),
+					TriggeredAt: func() time.Time {
+						if j.CompletedAt != nil {
+							return *j.CompletedAt
+						}
+						return time.Now()
+					}(),
+				})
+
+			case j.Status == "completed" && (j.Type == "rematch" || j.Type == "rescore" || j.Type == "rescore_backfill"):
+				msg := j.Type + " completed"
+				if j.Summary.ItemsFound > 0 {
+					msg += fmt.Sprintf(" — %d/%d matched", j.Summary.ItemsMatched, j.Summary.ItemsFound)
+				}
+				s.logBuffer.EmitAlertEvent(models.AlertRecord{
+					Action:  "job_completed",
+					Message: msg,
 					TriggeredAt: func() time.Time {
 						if j.CompletedAt != nil {
 							return *j.CompletedAt

@@ -14,8 +14,9 @@ import (
 
 // RescoreOptions specifies which torrents to re-score.
 type RescoreOptions struct {
-	IDs   []int
-	JobID int // when non-zero, caller has already created the job record and emitted the initial event
+	IDs              []int
+	JobID            int // when non-zero, caller has already created the job record and emitted the initial event
+	ProgressInterval int // emit progress every N items; 0 or 1 = every item
 }
 
 // RescoreDeps holds service dependencies for RunRescore.
@@ -59,12 +60,16 @@ func RunRescore(ctx context.Context, opts RescoreOptions, deps RescoreDeps) ([]m
 	var lastErr error
 
 	total := len(opts.IDs)
+	interval := opts.ProgressInterval
+	if interval <= 0 {
+		interval = 1
+	}
 	for i, id := range opts.IDs {
 		if ctx.Err() != nil {
 			break
 		}
-		// Emit a progress event on every item.
-		if deps.LogBuffer != nil {
+		// Emit a progress event on the first item and every interval items.
+		if deps.LogBuffer != nil && (i == 0 || (i+1)%interval == 0) {
 			deps.LogBuffer.EmitJobEvent(models.JobRecord{
 				ID:        jobID,
 				Type:      "rescore",

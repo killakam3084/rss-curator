@@ -6,6 +6,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+## [0.30.0] - 2026-03-23
+
+### Added
+- **Ops banner** — non-blocking operation banner below the navbar on both dashboard and jobs pages shows live job progress (type, `X / Y` counter, CSS progress bar) with per-job cancel buttons.
+- **Alert dismiss** — each alert in the notification popover now has an ✕ dismiss button; `POST /api/alerts/dismiss/{id}` marks the alert dismissed and fans out the update to all SSE subscribers.
+- **Auto-clear success alerts** — `approve`, `reject`, `queue`, `staged`, `job_completed`, and `job_cancelled` alerts auto-clear from the UI after 3 s.
+- **Job outcome alerts** — completed rematch/rescore jobs and cancelled jobs are now surfaced as `job_completed` / `job_cancelled` alert events via the background alert poller.
+- **Configurable progress interval** — `CURATOR_PROGRESS_INTERVAL` env var (default: `5`) controls how often progress events are emitted during rematch/rescore operations; set to `1` to restore per-item updates.
+
+### Changed
+- Toast notifications restyled with dark card, curator-accent left border, status icons (`✓` / `✗` / `ℹ`), and monospace text to match the curator palette.
+- Alert ring buffer entries now carry a `dismissed` flag; dismissed alerts are excluded from SSE backfill.
+
+
 ## [0.29.5] - 2026-03-22
 
 ### Changed

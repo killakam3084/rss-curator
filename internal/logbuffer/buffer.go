@@ -220,6 +220,43 @@ func (b *Buffer) RecentAlerts() []models.AlertRecord {
 	return result
 }
 
+// DismissAlert marks the alert with the given ID as dismissed in the ring
+// buffer and fans the updated record out to all current SSE subscribers.
+// Returns false if the ID is not found in the current buffer window.
+func (b *Buffer) DismissAlert(id uint64) bool {
+	var updated models.AlertRecord
+	found := false
+
+	b.alertMu.Lock()
+	if b.alertCount > 0 {
+		start := (b.alertHead - b.alertCount + AlertCap) % AlertCap
+		for i := 0; i < b.alertCount; i++ {
+			idx := (start + i) % AlertCap
+			if b.alertEntries[idx].ID == id {
+				b.alertEntries[idx].Dismissed = true
+				updated = b.alertEntries[idx]
+				found = true
+				break
+			}
+		}
+	}
+	b.alertMu.Unlock()
+
+	if !found {
+		return false
+	}
+
+	b.alertSubsMu.Lock()
+	for _, ch := range b.alertSubs {
+		select {
+		case ch <- updated:
+		default:
+		}
+	}
+	b.alertSubsMu.Unlock()
+	return true
+}
+
 // Subscribe registers a new SSE subscriber. It returns a read-only channel
 // that will receive future log entries, and an unsubscribe function that
 // must be called when the subscriber disconnects.

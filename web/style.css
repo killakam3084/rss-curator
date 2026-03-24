@@ -46,6 +46,10 @@
     animation: slideInFromTop 0.4s ease-out forwards;
 }
 
+.toast-in {
+    animation: slideInRight 0.25s ease-out forwards;
+}
+
 /* Smooth scrollbar for activity log */
 .overflow-y-auto::-webkit-scrollbar {
     width: 6px;
