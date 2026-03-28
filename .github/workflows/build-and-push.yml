@@ -65,11 +65,12 @@ jobs:
         run: go build -v ./cmd/curator
 
   e2e:
-    # Run the full E2E suite only on version tags — it is the final gate before
-    # the image is published. Skipped on branch pushes and PRs (those are covered
-    # by the standalone e2e.yml workflow). A skipped job is treated as success by
-    # GitHub Actions, so build-and-push still runs normally on non-tag events.
-    if: startsWith(github.ref, 'refs/tags/v')
+    # Run the full E2E suite only on minor/major version tags (vX.Y.0) — these
+    # represent intentional minor/major cuts and warrant the full gate before
+    # publishing. Patch tags (vX.Y.Z where Z > 0) skip e2e so iteration is fast;
+    # GitHub Actions treats a skipped dependency as success, so build-and-push
+    # still runs normally for patch releases.
+    if: startsWith(github.ref, 'refs/tags/v') && endsWith(github.ref_name, '.0')
     runs-on: ubuntu-latest
 
     steps:
@@ -124,9 +125,9 @@ jobs:
             type=semver,pattern={{major}}.{{minor}}
             # drop SHA tag; branch prefix may be empty for tag events which produced invalid tag
             # type=sha,prefix={{branch}}-
-            # for tag pushes, also tag the image with the literal ref name (e.g. v0.2.0)
-            # NOTE: `type=ref,event=tag` already handles tagging. remove explicit raw tag to avoid empty value issues.
-            type=raw,value=latest,enable={{is_default_branch}}
+            # Publish `latest` on default-branch pushes AND on any version tag push
+            # (includes patch releases which skip e2e for faster iteration).
+            type=raw,value=latest,enable=${{ github.ref == format('refs/heads/{0}', github.event.repository.default_branch) || startsWith(github.ref, 'refs/tags/') }}
       
       - name: Debug metadata
         run: |
