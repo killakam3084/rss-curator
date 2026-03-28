@@ -6,6 +6,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+## [0.31.2] - 2026-03-28
+
+### Changed
+- **Jobs rail cancel** — `cancelJobFn` prop added to `jobs-rail` component; cancel buttons now appear inline in the "running now" panel, replacing the separate ops-banner.
+- **Ops banner removed from dashboard** — the sticky ops-banner and the active-job notification strip below the filter tabs have been removed from `index.html`; job status and cancellation are now fully consolidated in the jobs rail.
+- **CI: patch releases skip e2e** — `vX.Y.0` tags run the full E2E gate; patch tags (`vX.Y.Z`, Z > 0) skip e2e for faster iteration. `latest` Docker tag now publishes on any version tag push.
+
+
 ## [0.31.1] - 2026-03-28
 
 ### Fixed
