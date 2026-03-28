@@ -47,6 +47,10 @@ type Store interface {
 	CancelJob(id int, summary models.JobSummary) error
 	ListJobs(limit int, statusFilter string) ([]models.JobRecord, error)
 	GetJob(id int) (*models.JobRecord, error)
+	// Settings
+	GetSetting(key string) (string, error)
+	SetSetting(key, value string) error
+	GetAllSettings() (map[string]string, error)
 }
 
 // Storage handles persistent storage of staged torrents
@@ -145,6 +149,12 @@ func (s *Storage) migrate() error {
 			started_at DATETIME NOT NULL,
 			completed_at DATETIME,
 			summary_json TEXT NOT NULL DEFAULT '{}'
+		)`,
+		// Migration 7: Settings table for runtime-configurable key/value pairs
+		`CREATE TABLE IF NOT EXISTS settings (
+			key TEXT PRIMARY KEY,
+			value TEXT NOT NULL,
+			updated_at DATETIME NOT NULL
 		)`,
 	}
 
@@ -606,6 +616,45 @@ func (s *Storage) GetJob(id int) (*models.JobRecord, error) {
 		return nil, err
 	}
 	return &j, nil
+}
+
+// GetSetting retrieves a single runtime setting by key. Returns "", nil when the key does not exist.
+func (s *Storage) GetSetting(key string) (string, error) {
+	var value string
+	err := s.db.QueryRow(`SELECT value FROM settings WHERE key = ?`, key).Scan(&value)
+	if err == sql.ErrNoRows {
+		return "", nil
+	}
+	return value, err
+}
+
+// SetSetting persists a single runtime setting by key, upserting the row.
+func (s *Storage) SetSetting(key, value string) error {
+	_, err := s.db.Exec(
+		`INSERT INTO settings(key, value, updated_at) VALUES(?, ?, ?)
+		 ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`,
+		key, value, time.Now(),
+	)
+	return err
+}
+
+// GetAllSettings returns all stored runtime settings as a key/value map.
+func (s *Storage) GetAllSettings() (map[string]string, error) {
+	rows, err := s.db.Query(`SELECT key, value FROM settings`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	out := make(map[string]string)
+	for rows.Next() {
+		var k, v string
+		if err := rows.Scan(&k, &v); err != nil {
+			return nil, err
+		}
+		out[k] = v
+	}
+	return out, rows.Err()
 }
 
 // GetWindowStats returns activity counts for a rolling window of the given hours,

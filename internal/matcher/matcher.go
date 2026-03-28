@@ -4,12 +4,14 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
+	"sync"
 
 	"github.com/killakam3084/rss-curator/pkg/models"
 )
 
 // Matcher filters feed items based on rules
 type Matcher struct {
+	mu          sync.RWMutex
 	showsConfig *models.ShowsConfig
 	legacyRules *models.MatchRule
 }
@@ -33,9 +35,24 @@ func (m *Matcher) Match(item models.FeedItem) (bool, string) {
 	return m.matchLegacy(item)
 }
 
+// SetDefaults replaces the global default rules used when a show has no
+// per-show override. Safe to call concurrently with Match.
+func (m *Matcher) SetDefaults(rules models.DefaultRules) {
+	m.mu.Lock()
+	if m.showsConfig != nil {
+		m.showsConfig.Defaults = rules
+	}
+	m.mu.Unlock()
+}
+
 // matchWithShowsConfig uses the new per-show rules
 func (m *Matcher) matchWithShowsConfig(item models.FeedItem) (bool, string) {
 	reasons := []string{}
+
+	// Snapshot defaults under read lock before any comparisons.
+	m.mu.RLock()
+	defaultRules := m.showsConfig.Defaults
+	m.mu.RUnlock()
 
 	// Find matching show rule
 	var showRule *models.ShowRule
@@ -55,22 +72,22 @@ func (m *Matcher) matchWithShowsConfig(item models.FeedItem) (bool, string) {
 	// Get effective rules (show-specific or defaults)
 	minQuality := showRule.MinQuality
 	if minQuality == "" {
-		minQuality = m.showsConfig.Defaults.MinQuality
+		minQuality = defaultRules.MinQuality
 	}
 
 	preferredCodec := showRule.PreferredCodec
 	if preferredCodec == "" {
-		preferredCodec = m.showsConfig.Defaults.PreferredCodec
+		preferredCodec = defaultRules.PreferredCodec
 	}
 
 	preferredGroups := showRule.PreferredGroups
 	if len(preferredGroups) == 0 {
-		preferredGroups = m.showsConfig.Defaults.PreferredGroups
+		preferredGroups = defaultRules.PreferredGroups
 	}
 
 	excludeGroups := showRule.ExcludeGroups
 	if len(excludeGroups) == 0 {
-		excludeGroups = m.showsConfig.Defaults.ExcludeGroups
+		excludeGroups = defaultRules.ExcludeGroups
 	}
 
 	// Check quality
