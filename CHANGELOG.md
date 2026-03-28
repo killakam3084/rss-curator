@@ -6,6 +6,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+## [0.32.0] - 2026-03-28
+
+### Added
+- **Shows.json editor** — new *shows* tab in the Settings UI with a full CodeMirror 5 JSON editor (material-darker theme, line numbers, JSON syntax highlighting). Edit the watch-list config directly in the browser without touching the filesystem.
+- **File upload** — drag/drop or browse to load a `.json` file directly into the editor; content is validated before display.
+- **Format button** — re-pretty-prints the current editor content with canonical 2-space indentation.
+- **`GET /api/shows`** — returns the current in-memory `ShowsConfig` (or an empty template when no `shows.json` is loaded).
+- **`PUT /api/shows`** — validates and saves JSON to disk, then hot-reloads the matcher instantly — no restart required. Toast shows count of configured shows on success.
+- **`matcher.SetShowsConfig` / `ShowsConfig`** — concurrency-safe accessor and mutator on the `Matcher` type, enabling zero-restart config swaps.
+- **E2E smoke test** — `tests/e2e/smoke/11-shows.hurl` covers GET shape, PUT round-trip, invalid-JSON 400, and method-not-allowed 405.
+
+
 ## [0.31.3] - 2026-03-28
 
 ### Fixed
