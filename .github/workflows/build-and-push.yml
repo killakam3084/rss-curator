@@ -90,6 +90,11 @@ jobs:
 
   build-and-push:
     needs: [test, lint, e2e]
+    # Run if test + lint succeeded regardless of whether e2e was skipped (patch
+    # releases) or succeeded (minor/major releases). `success()` (the default)
+    # would also skip this job when e2e is skipped, so we use the explicit
+    # !failure() && !cancelled() idiom instead.
+    if: ${{ !failure() && !cancelled() }}
     runs-on: ubuntu-latest
     
     permissions:
