@@ -46,12 +46,19 @@ type channel struct {
 	Items []item `xml:"item"`
 }
 
+type enclosure struct {
+	URL    string `xml:"url,attr"`
+	Length int64  `xml:"length,attr"`
+	Type   string `xml:"type,attr"`
+}
+
 type item struct {
-	Title       string `xml:"title"`
-	Link        string `xml:"link"`
-	GUID        string `xml:"guid"`
-	PubDate     string `xml:"pubDate"`
-	Description string `xml:"description"`
+	Title       string    `xml:"title"`
+	Link        string    `xml:"link"`
+	GUID        string    `xml:"guid"`
+	PubDate     string    `xml:"pubDate"`
+	Description string    `xml:"description"`
+	Enclosure   enclosure `xml:"enclosure"`
 }
 
 // Parse fetches and parses an RSS feed
@@ -85,13 +92,27 @@ func (p *Parser) Parse(feedURL string) ([]models.FeedItem, error) {
 			Description: rssItem.Description,
 		}
 
-		// Parse pub date
-		if pubDate, err := time.Parse(time.RFC1123Z, rssItem.PubDate); err == nil {
-			item.PubDate = pubDate
+		// Parse pub date — try common RSS date formats in order
+		pubDateFormats := []string{
+			time.RFC1123Z,                    // Mon, 02 Jan 2006 15:04:05 -0700
+			time.RFC1123,                     // Mon, 02 Jan 2006 15:04:05 MST
+			"Mon, 2 Jan 2006 15:04:05 -0700", // single-digit day, numeric tz
+			"Mon, 2 Jan 2006 15:04:05 MST",   // single-digit day, named tz
+			time.RFC3339,
+		}
+		for _, layout := range pubDateFormats {
+			if t, err := time.Parse(layout, strings.TrimSpace(rssItem.PubDate)); err == nil {
+				item.PubDate = t
+				break
+			}
 		}
 
-		// Parse size from description (e.g., "1.44 GB; TV/Web-DL")
-		item.Size = parseSize(rssItem.Description)
+		// Parse size: prefer <enclosure length="..."> (bytes), fall back to description text
+		if rssItem.Enclosure.Length > 0 {
+			item.Size = rssItem.Enclosure.Length
+		} else {
+			item.Size = parseSize(rssItem.Description)
+		}
 
 		// Extract metadata from title
 		ParseTitleMetadata(&item)

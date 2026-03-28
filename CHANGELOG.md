@@ -6,6 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+## [0.31.3] - 2026-03-28
+
+### Fixed
+- **Sort by Pub Date** — RSS `pubDate` now parses five common date formats (`RFC1123Z`, `RFC1123`, single-digit-day variants, `RFC3339`). Previously only `RFC1123Z` was tried, leaving `pub_date` as a zero value for most real-world feeds.
+- **Sort by Size** — `<enclosure length="...">` (the standard RSS torrent size field, in bytes) is now read first; the description-text regex fallback is retained for feeds that embed human-readable size in the description instead.
+
+
 ## [0.31.2] - 2026-03-28
 
 ### Changed
