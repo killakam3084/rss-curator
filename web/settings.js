@@ -1,4 +1,4 @@
-const { createApp, ref, reactive, computed, onMounted } = Vue;
+const { createApp, ref, reactive, computed, watch, onMounted } = Vue;
 
 createApp({
     setup() {
@@ -15,10 +15,17 @@ createApp({
             { id: 'alerts',    label: 'alerts'    },
             { id: 'match',     label: 'match'     },
             { id: 'auth',      label: 'auth'      },
+            { id: 'shows',     label: 'shows'     },
         ];
         const activeSection = ref('scheduler');
         const loading = ref(true);
         const saving = ref(false);
+
+        // ── Shows editor state ────────────────────────────────────────
+        const showsSaving = ref(false);
+        const showsCount  = ref(null); // null until first load
+        const showsError  = ref('');
+        let   showsCM     = null;      // CodeMirror instance (created lazily)
 
         // Flat form state mirroring AppSettings JSON shape
         const form = reactive({
@@ -161,11 +168,149 @@ createApp({
                 saving.value = false;
             }
         }
+        // ── Shows editor helpers ──────────────────────────────────
 
+        // Initialise (first time) or refresh (tab switch) the CodeMirror editor.
+        // Must be called after the #shows-editor div is in the DOM.
+        function initOrRefreshShowsCM(value) {
+            const el = document.getElementById('shows-editor');
+            if (!el) return;
+            if (!showsCM) {
+                showsCM = CodeMirror(el, {
+                    value: value || '',
+                    mode: { name: 'javascript', json: true },
+                    theme: 'material-darker',
+                    lineNumbers: true,
+                    tabSize: 2,
+                    indentWithTabs: false,
+                    lineWrapping: false,
+                    autofocus: true,
+                    extraKeys: {
+                        'Ctrl-S': () => saveShows(),
+                        'Cmd-S':  () => saveShows(),
+                    },
+                });
+                // Fix height to fill container div
+                showsCM.setSize('100%', '440px');
+            } else {
+                showsCM.setValue(value || '');
+                showsCM.refresh();
+            }
+        }
+
+        async function loadShows() {
+            showsError.value = '';
+            try {
+                const res  = await fetch('/api/shows');
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                const data = await res.json();
+                // data.shows_count exists; strip it before pretty-printing the config
+                const { shows_count, ...cfg } = data;
+                showsCount.value = shows_count ?? (data.shows ? data.shows.length : 0);
+                const pretty = JSON.stringify(cfg, null, 2);
+                // Editor may not be in DOM yet if tab hasn't been opened — store for later
+                if (showsCM) {
+                    showsCM.setValue(pretty);
+                    showsCM.refresh();
+                } else {
+                    // Will be picked up by the watch on activeSection
+                    pendingShowsValue = pretty;
+                }
+            } catch (err) {
+                showsError.value = `failed to load shows.json: ${err.message}`;
+                console.error('loadShows:', err);
+            }
+        }
+
+        // Holds the value to seed the editor with before it has been created.
+        let pendingShowsValue = null;
+
+        function ensureShowsEditor() {
+            // nextTick alternative: queue a microtask so the v-if DOM is rendered
+            Promise.resolve().then(() => {
+                initOrRefreshShowsCM(pendingShowsValue || (showsCM ? showsCM.getValue() : ''));
+                pendingShowsValue = null;
+            });
+        }
+
+        async function saveShows() {
+            showsError.value = '';
+            const raw = showsCM ? showsCM.getValue() : '';
+            let cfg;
+            try {
+                cfg = JSON.parse(raw);
+            } catch (err) {
+                showsError.value = `invalid JSON — ${err.message}`;
+                return;
+            }
+            showsSaving.value = true;
+            try {
+                const res = await fetch('/api/shows', {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(cfg),
+                });
+                const data = await res.json();
+                if (!res.ok) {
+                    showsError.value = data.error || `HTTP ${res.status}`;
+                } else {
+                    showsCount.value = data.shows_count ?? (data.shows ? data.shows.length : 0);
+                    // Normalise editor content to what the server wrote
+                    const { shows_count, ...saved } = data;
+                    const pretty = JSON.stringify(saved, null, 2);
+                    if (showsCM) showsCM.setValue(pretty);
+                    showToast(`shows.json saved (${showsCount.value} show${showsCount.value !== 1 ? 's' : ''})`, 'success');
+                }
+            } catch (err) {
+                showsError.value = `save failed: ${err.message}`;
+                console.error('saveShows:', err);
+            } finally {
+                showsSaving.value = false;
+            }
+        }
+
+        function formatShows() {
+            showsError.value = '';
+            const raw = showsCM ? showsCM.getValue() : '';
+            try {
+                const pretty = JSON.stringify(JSON.parse(raw), null, 2);
+                if (showsCM) showsCM.setValue(pretty);
+            } catch (err) {
+                showsError.value = `invalid JSON — ${err.message}`;
+            }
+        }
+
+        function onShowsFileUpload(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                showsError.value = '';
+                const text = e.target.result;
+                try {
+                    // Validate and reformat
+                    const pretty = JSON.stringify(JSON.parse(text), null, 2);
+                    if (showsCM) showsCM.setValue(pretty);
+                    showToast('file loaded — review and save to apply', 'success');
+                } catch (err) {
+                    showsError.value = `invalid JSON in uploaded file: ${err.message}`;
+                }
+            };
+            reader.readAsText(file);
+            // Reset input so the same file can be re-uploaded
+            event.target.value = '';
+        }
         // ── Lifecycle ────────────────────────────────────────────────
         onMounted(() => {
             document.documentElement.classList.toggle('dark', darkMode.value);
             loadSettings();
+            loadShows();
+        });
+
+        // When the user navigates to the shows tab, lazily create the CM
+        // editor (the #shows-editor div doesn't exist until the v-if renders).
+        watch(activeSection, (section) => {
+            if (section === 'shows') ensureShowsEditor();
         });
 
         return {
@@ -179,6 +324,14 @@ createApp({
             passwordInput,
             toast,
             save,
+            // Shows tab
+            showsSaving,
+            showsCount,
+            showsError,
+            ensureShowsEditor,
+            saveShows,
+            formatShows,
+            onShowsFileUpload,
         };
     }
 }).mount('#settings-app');

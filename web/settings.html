@@ -38,6 +38,11 @@
     </script>
     <link rel="stylesheet" href="style.css">
     <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <!-- CodeMirror 5 for the shows.json editor -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/theme/material-darker.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/javascript/javascript.min.js"></script>
 </head>
 <body class="bg-white dark:bg-gray-950 text-gray-900 dark:text-gray-100 min-h-screen">
     <div id="settings-app">
@@ -302,6 +307,64 @@
                     <button @click="save('auth')" :disabled="saving" class="px-5 py-2 bg-curator-500 hover:bg-curator-600 text-gray-950 font-mono text-sm font-bold rounded transition-colors duration-150 disabled:opacity-50 disabled:cursor-not-allowed">
                         {{ saving ? 'saving…' : 'save auth' }}
                     </button>
+                </section>
+
+                <!-- ── Shows ── -->
+                <section v-if="!loading && activeSection === 'shows'" class="space-y-6">
+                    <div class="flex items-start justify-between">
+                        <div>
+                            <h2 class="text-xl font-bold font-mono text-curator-500 mb-1">> shows.json</h2>
+                            <p class="text-sm text-gray-500 font-mono">per-show watch rules &mdash; edit, upload, or paste JSON then save</p>
+                        </div>
+                        <span v-if="showsCount !== null" class="text-xs font-mono text-gray-500 mt-1 shrink-0">
+                            {{ showsCount }} show{{ showsCount !== 1 ? 's' : '' }} configured
+                        </span>
+                    </div>
+
+                    <!-- Editor container -->
+                    <div class="relative">
+                        <div
+                            id="shows-editor"
+                            class="border border-gray-700 rounded overflow-hidden"
+                            style="height: 440px;"
+                        ></div>
+                        <!-- Inline validation error -->
+                        <div v-if="showsError" class="mt-2 text-xs font-mono text-red-400 flex items-start gap-2">
+                            <svg class="w-3.5 h-3.5 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/>
+                            </svg>
+                            {{ showsError }}
+                        </div>
+                    </div>
+
+                    <!-- Action row -->
+                    <div class="flex flex-wrap items-center gap-3">
+                        <!-- File upload -->
+                        <label class="cursor-pointer flex items-center gap-2 px-4 py-2 rounded border border-gray-700 text-gray-400 hover:text-gray-200 hover:border-gray-500 font-mono text-xs transition-colors">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/>
+                            </svg>
+                            upload .json
+                            <input type="file" accept=".json,application/json" class="hidden" @change="onShowsFileUpload">
+                        </label>
+
+                        <!-- Format -->
+                        <button
+                            @click="formatShows"
+                            class="px-4 py-2 rounded border border-gray-700 text-gray-400 hover:text-gray-200 hover:border-gray-500 font-mono text-xs transition-colors"
+                        >format</button>
+
+                        <div class="flex-1"></div>
+
+                        <!-- Save -->
+                        <button
+                            @click="saveShows"
+                            :disabled="showsSaving"
+                            class="px-5 py-2 bg-curator-500 hover:bg-curator-600 text-gray-950 font-mono text-sm font-bold rounded transition-colors duration-150 disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                            {{ showsSaving ? 'saving…' : 'save shows.json' }}
+                        </button>
+                    </div>
                 </section>
 
             </div>
