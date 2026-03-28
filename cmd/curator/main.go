@@ -22,6 +22,7 @@ import (
 	"github.com/killakam3084/rss-curator/internal/metadata"
 	"github.com/killakam3084/rss-curator/internal/ops"
 	"github.com/killakam3084/rss-curator/internal/scheduler"
+	"github.com/killakam3084/rss-curator/internal/settings"
 	"github.com/killakam3084/rss-curator/internal/storage"
 	"github.com/killakam3084/rss-curator/pkg/models"
 )
@@ -710,14 +711,33 @@ func cmdServe(cfg models.Config, store *storage.Storage, buf *logbuffer.Buffer, 
 	})
 	sched.Start()
 
-	server := api.NewServer(store, qb, port, buf, scorer, scorerProvider, m, enricher, auth).
-		WithScheduler(sched).
-		WithQueue(q)
+	// Settings manager — load DB overrides on top of env-var defaults.
+	// Placed after feedCheckInterval so EnvDefaults can capture it.
+	settingsMgr := settings.NewManager(store)
+	progressIntervalEnv := 0
 	if v := os.Getenv("CURATOR_PROGRESS_INTERVAL"); v != "" {
 		if n, err := strconv.Atoi(v); err == nil && n > 0 {
-			server = server.WithProgressInterval(n)
+			progressIntervalEnv = n
 		}
 	}
+	envDefaults := settings.EnvDefaults{
+		FeedCheckIntervalSecs: int(feedCheckInterval.Seconds()),
+		ProgressInterval:      progressIntervalEnv,
+		MinQuality:            cfg.MatchRules.MinQuality,
+		PreferredCodec:        cfg.MatchRules.PreferredCodec,
+		ExcludeGroups:         cfg.MatchRules.ExcludeGroups,
+		PreferredGroups:       cfg.MatchRules.PreferredGroups,
+		AuthUsername:          authUsername,
+		AuthPassword:          authPassword,
+	}
+	if err := settingsMgr.Load(envDefaults); err != nil {
+		fmt.Fprintf(os.Stderr, "[Serve] Warning: could not load settings from DB: %v\n", err)
+	}
+
+	server := api.NewServer(store, qb, port, buf, scorer, scorerProvider, m, enricher, auth).
+		WithScheduler(sched).
+		WithQueue(q).
+		WithSettings(settingsMgr)
 	fmt.Printf("[Serve] Starting API server on port %d\n", port)
 	if err := server.Start(); err != nil {
 		fmt.Fprintf(os.Stderr, "Error starting API server: %v\n", err)

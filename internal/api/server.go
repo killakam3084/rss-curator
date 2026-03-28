@@ -17,6 +17,7 @@ import (
 	"github.com/killakam3084/rss-curator/internal/matcher"
 	"github.com/killakam3084/rss-curator/internal/ops"
 	"github.com/killakam3084/rss-curator/internal/scheduler"
+	"github.com/killakam3084/rss-curator/internal/settings"
 	"github.com/killakam3084/rss-curator/internal/storage"
 	"github.com/killakam3084/rss-curator/pkg/models"
 	"go.uber.org/zap"
@@ -53,6 +54,7 @@ type Server struct {
 	jobCancelMu      sync.Mutex
 	jobCancels       map[int]*jobCancelState
 	progressInterval int
+	settingsMgr      *settings.Manager // may be nil
 }
 
 type jobCancelState struct {
@@ -258,6 +260,14 @@ func (s *Server) WithProgressInterval(n int) *Server {
 	return s
 }
 
+// WithSettings attaches a settings Manager. The server will apply the current
+// settings immediately via applySettings and honour live updates on PATCH.
+func (s *Server) WithSettings(mgr *settings.Manager) *Server {
+	s.settingsMgr = mgr
+	s.applySettings(mgr.Get())
+	return s
+}
+
 // Start begins listening for HTTP requests
 func (s *Server) Start() error {
 	mux := http.NewServeMux()
@@ -280,6 +290,7 @@ func (s *Server) Start() error {
 	mux.HandleFunc("/api/alerts/dismiss/", s.handleDismissAlert)
 	mux.HandleFunc("/api/alerts/stream", s.handleAlertsStream)
 	mux.HandleFunc("/api/alerts", s.handleAlerts)
+	mux.HandleFunc("/api/settings", s.handleSettings)
 	mux.HandleFunc("/api/scheduler/run/", s.handleSchedulerRun)
 	mux.HandleFunc("/api/scheduler/tasks", s.handleSchedulerTasks)
 
@@ -1442,7 +1453,13 @@ func (s *Server) handleAlertsStream(w http.ResponseWriter, r *http.Request) {
 //   - Any newly failed job (any type) → "job_failed" alert
 //   - Newly completed feed_check job with ItemsMatched > 0 → "staged" alert
 func (s *Server) startAlertPoller() {
-	ticker := time.NewTicker(15 * time.Second)
+	currentInterval := 15 * time.Second
+	if s.settingsMgr != nil {
+		if n := s.settingsMgr.Get().Alerts.AlertPollerIntervalSecs; n > 0 {
+			currentInterval = time.Duration(n) * time.Second
+		}
+	}
+	ticker := time.NewTicker(currentInterval)
 	defer ticker.Stop()
 
 	// Track the highest job ID we have already processed so we only surface new ones.
@@ -1455,6 +1472,17 @@ func (s *Server) startAlertPoller() {
 	}
 
 	for range ticker.C {
+		// Hot-reload alert poller interval from settings.
+		if s.settingsMgr != nil {
+			if n := s.settingsMgr.Get().Alerts.AlertPollerIntervalSecs; n > 0 {
+				newInterval := time.Duration(n) * time.Second
+				if newInterval != currentInterval {
+					ticker.Reset(newInterval)
+					currentInterval = newInterval
+				}
+			}
+		}
+
 		jobs, err := s.store.ListJobs(50, "")
 		if err != nil {
 			s.logger.Warn("alert poller: failed to list jobs", zap.Error(err))
@@ -1537,6 +1565,88 @@ func (s *Server) startAlertPoller() {
 				lastSeenID = j.ID
 			}
 		}
+	}
+}
+
+// applySettings pushes a settings snapshot into the live server state.
+// It is called by WithSettings at startup and by handlePatchSettings after
+// every successful update.
+func (s *Server) applySettings(cfg settings.AppSettings) {
+	// Progress interval
+	if cfg.Alerts.ProgressInterval > 0 {
+		s.progressInterval = cfg.Alerts.ProgressInterval
+	}
+	// Auth credentials
+	if cfg.Auth.Username != "" {
+		s.authUsername = cfg.Auth.Username
+	}
+	if cfg.Auth.Password != "" && cfg.Auth.Password != "***" {
+		s.authPassword = cfg.Auth.Password
+		s.authEnabled = true
+	} else if cfg.Auth.Password == "" {
+		// Explicit clear — disable auth
+		s.authPassword = ""
+		s.authEnabled = false
+	}
+	// Scheduler hot-reload
+	if s.scheduler != nil {
+		s.scheduler.SetInterval("feed_check",
+			time.Duration(cfg.Scheduler.FeedCheckIntervalSecs)*time.Second)
+		s.scheduler.SetEnabled("feed_check", cfg.Scheduler.FeedCheckEnabled)
+		s.scheduler.SetEnabled("rescore_backfill", cfg.Scheduler.RescoreBackfillEnabled)
+	}
+	// Matcher default rules hot-reload
+	if s.matcher != nil {
+		s.matcher.SetDefaults(models.DefaultRules{
+			MinQuality:      cfg.Match.MinQuality,
+			PreferredCodec:  cfg.Match.PreferredCodec,
+			ExcludeGroups:   cfg.Match.ExcludeGroups,
+			PreferredGroups: cfg.Match.PreferredGroups,
+		})
+	}
+}
+
+// handleSettings serves GET /api/settings and PATCH /api/settings.
+func (s *Server) handleSettings(w http.ResponseWriter, r *http.Request) {
+	if s.settingsMgr == nil {
+		http.Error(w, `{"error":"settings not configured"}`, http.StatusServiceUnavailable)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+
+	switch r.Method {
+	case http.MethodGet:
+		cfg := s.settingsMgr.Get()
+		// Mask password in response.
+		if cfg.Auth.Password != "" {
+			cfg.Auth.Password = "***"
+		}
+		json.NewEncoder(w).Encode(cfg)
+
+	case http.MethodPatch:
+		// Start from the current stored settings so omitted fields keep their values.
+		current := s.settingsMgr.Get()
+		if err := json.NewDecoder(r.Body).Decode(&current); err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(ErrorResponse{Error: "invalid JSON: " + err.Error()})
+			return
+		}
+		if err := s.settingsMgr.Update(current); err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(ErrorResponse{Error: err.Error()})
+			return
+		}
+		s.applySettings(s.settingsMgr.Get())
+		// Return updated settings with password masked.
+		updated := s.settingsMgr.Get()
+		if updated.Auth.Password != "" {
+			updated.Auth.Password = "***"
+		}
+		json.NewEncoder(w).Encode(updated)
+
+	default:
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		json.NewEncoder(w).Encode(ErrorResponse{Error: "method not allowed"})
 	}
 }
 
