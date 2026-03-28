@@ -249,9 +249,6 @@
             </div>
         </div>
 
-        <!-- Ops In-Progress Banner -->
-        <ops-banner :running-jobs="runningJobs" :cancel-job-fn="cancelJob"></ops-banner>
-
         <!-- Full Height Layout with Console -->
         <div class="flex min-h-screen">
             <!-- Main Content Area -->
@@ -275,6 +272,7 @@
                         :latest-terminal-job="latestTerminalJob"
                         :format-relative-fn="formatRelative"
                         :job-summary-line-fn="jobSummaryLine"
+                        :cancel-job-fn="cancelJob"
                     ></jobs-rail>
 
                     <!-- Controls -->
@@ -294,22 +292,6 @@
                             >
                                 > {{ tab }}
                             </button>
-                        </div>
-
-                        <!-- Active Job Notification Strip -->
-                        <div v-if="activeJobList.length > 0" class="flex flex-col gap-1 mb-4">
-                            <div
-                                v-for="job in activeJobList"
-                                :key="job.id"
-                                class="flex items-center gap-3 px-4 py-2 bg-gray-800 border border-curator-500/40 rounded text-xs font-mono"
-                            >
-                                <span class="w-2 h-2 rounded-full bg-curator-500 animate-pulse shrink-0"></span>
-                                <span class="text-curator-400 font-bold">{{ job.label }}</span>
-                                <span class="text-gray-500">
-                                    <span v-if="job.progress">{{ job.progress }}</span>
-                                    <span v-else>starting…</span>
-                                </span>
-                            </div>
                         </div>
 
                         <!-- Bulk Actions -->

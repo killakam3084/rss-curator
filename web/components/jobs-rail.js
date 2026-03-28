@@ -5,6 +5,7 @@
                 runningCount: { type: Number, required: true },
                 failedCount: { type: Number, required: true },
                 cancelledCount: { type: Number, required: true },
+                cancelJobFn: { type: Function, default: null },
                 batchStats: {
                     type: Object,
                     required: true,
@@ -21,6 +22,9 @@
                 linkText: { type: String, default: '' },
                 rightLabel: { type: String, default: '' },
                 className: { type: String, default: '' }
+            },
+            data() {
+                return { dismissing: null };
             },
             template: `
                 <section :class="className || 'bg-gray-900 border border-gray-800 rounded-lg shadow-lg p-4'">
@@ -72,6 +76,12 @@
                                         </div>
                                         <p class="text-xs font-mono text-curator-500/80 truncate">{{ jobSummaryLineFn(job) }}</p>
                                     </div>
+                                    <button
+                                        v-if="cancelJobFn"
+                                        @click="dismissing = job.id; cancelJobFn(job.id).finally(() => { dismissing = null; })"
+                                        :disabled="dismissing === job.id"
+                                        class="shrink-0 text-xs font-mono text-gray-600 hover:text-red-400 disabled:opacity-40 transition-colors uppercase tracking-wider"
+                                    >{{ dismissing === job.id ? '…' : 'cancel' }}</button>
                                 </li>
                             </ul>
                         </div>
