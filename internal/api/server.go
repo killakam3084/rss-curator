@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
 	"sync"
@@ -55,6 +56,7 @@ type Server struct {
 	jobCancels       map[int]*jobCancelState
 	progressInterval int
 	settingsMgr      *settings.Manager // may be nil
+	showsPath        string            // path to shows.json on disk; defaults to "shows.json"
 }
 
 type jobCancelState struct {
@@ -264,6 +266,16 @@ func (s *Server) WithProgressInterval(n int) *Server {
 	return s
 }
 
+// WithShowsPath sets the filesystem path that GET/PUT /api/shows reads and
+// writes. If not called the server defaults to "shows.json" (current working
+// directory — the same location the binary looks for it at startup).
+func (s *Server) WithShowsPath(path string) *Server {
+	if path != "" {
+		s.showsPath = path
+	}
+	return s
+}
+
 // WithSettings attaches a settings Manager. The server will apply the current
 // settings immediately via applySettings and honour live updates on PATCH.
 func (s *Server) WithSettings(mgr *settings.Manager) *Server {
@@ -295,6 +307,7 @@ func (s *Server) Start() error {
 	mux.HandleFunc("/api/alerts/stream", s.handleAlertsStream)
 	mux.HandleFunc("/api/alerts", s.handleAlerts)
 	mux.HandleFunc("/api/settings", s.handleSettings)
+	mux.HandleFunc("/api/shows", s.handleShows)
 	mux.HandleFunc("/api/scheduler/run/", s.handleSchedulerRun)
 	mux.HandleFunc("/api/scheduler/tasks", s.handleSchedulerTasks)
 
@@ -1710,4 +1723,81 @@ func (s *Server) handleSchedulerRun(w http.ResponseWriter, r *http.Request) {
 
 	w.WriteHeader(http.StatusAccepted)
 	json.NewEncoder(w).Encode(SchedulerRunResponse{Status: "accepted", Type: taskType})
+}
+
+// ShowsResponse is returned by GET and PUT /api/shows.
+type ShowsResponse struct {
+	models.ShowsConfig
+	ShowsCount int `json:"shows_count"`
+}
+
+// handleShows serves GET /api/shows and PUT /api/shows.
+//
+// GET  — returns the current in-memory ShowsConfig (or a blank template when no
+//
+//	shows.json has been loaded).
+//
+// PUT  — accepts a full ShowsConfig JSON body, validates it, writes it to disk
+//
+//	at s.showsPath, and hot-reloads the matcher without restart.
+func (s *Server) handleShows(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+
+	switch r.Method {
+	case http.MethodGet:
+		cfg := s.matcher.ShowsConfig()
+		if cfg == nil {
+			// Return an empty template so the UI always has a valid starting point.
+			cfg = &models.ShowsConfig{
+				Shows:    []models.ShowRule{},
+				Defaults: models.DefaultRules{},
+			}
+		}
+		json.NewEncoder(w).Encode(ShowsResponse{
+			ShowsConfig: *cfg,
+			ShowsCount:  len(cfg.Shows),
+		})
+
+	case http.MethodPut:
+		var cfg models.ShowsConfig
+		if err := json.NewDecoder(r.Body).Decode(&cfg); err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(ErrorResponse{Error: "invalid JSON: " + err.Error()})
+			return
+		}
+		// Ensure Shows is never null in the serialised output.
+		if cfg.Shows == nil {
+			cfg.Shows = []models.ShowRule{}
+		}
+
+		// Marshal to canonical pretty-printed JSON and write to disk.
+		out, err := json.MarshalIndent(cfg, "", "  ")
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			json.NewEncoder(w).Encode(ErrorResponse{Error: "failed to serialise config: " + err.Error()})
+			return
+		}
+		writePath := s.showsPath
+		if writePath == "" {
+			writePath = "shows.json"
+		}
+		if err := os.WriteFile(writePath, out, 0o644); err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			json.NewEncoder(w).Encode(ErrorResponse{Error: "failed to write shows.json: " + err.Error()})
+			return
+		}
+
+		// Hot-reload the matcher.
+		s.matcher.SetShowsConfig(&cfg)
+		s.logger.Info("shows.json reloaded", zap.Int("shows", len(cfg.Shows)))
+
+		json.NewEncoder(w).Encode(ShowsResponse{
+			ShowsConfig: cfg,
+			ShowsCount:  len(cfg.Shows),
+		})
+
+	default:
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		json.NewEncoder(w).Encode(ErrorResponse{Error: "method not allowed"})
+	}
 }
