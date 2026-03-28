@@ -6,6 +6,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+## [0.31.0] - 2026-03-24
+
+### Added
+- **Runtime config system** — all key operational parameters are now editable at runtime without restarting the server. Settings are persisted to the SQLite `settings` table and survive restarts.
+- **`GET/PATCH /api/settings`** — REST endpoint returns current `AppSettings` (password masked as `***`); PATCH hot-reloads the supplied fields immediately.
+- **Settings UI** — `/settings` page with left-sidebar tab navigation (Scheduler | Alerts | Match | Auth) for managing all runtime config from the browser.
+- **Scheduler hot-reload** — `feed_check_interval_secs` and `feed_check_enabled` changes take effect on the next scheduler tick without restart.
+- **Matcher hot-reload** — `match.*` changes propagate to the matcher via `SetDefaults()` guarded by `sync.RWMutex`.
+- **Alert poller hot-reload** — `alert_poller_interval_secs` changes are picked up by the running poller goroutine via `ticker.Reset()`.
+- **Auth hot-reload** — username/password changes take effect on the next HTTP request.
+- **Settings manager** (`internal/settings`) — priority chain: hardcoded defaults ← env overrides ← DB values.
+
+### Changed
+- `Store` interface extended with `GetSetting`, `SetSetting`, `GetAllSettings`.
+- SQLite migration adds a `settings(key, value, updated_at)` table (Migration 7).
+
+
 ## [0.30.0] - 2026-03-23
 
 ### Added

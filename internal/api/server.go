@@ -309,6 +309,11 @@ func (s *Server) Start() error {
 		http.ServeFile(w, r, "./web/jobs.html")
 	})
 
+	// Settings dedicated page
+	mux.HandleFunc("/settings", func(w http.ResponseWriter, r *http.Request) {
+		http.ServeFile(w, r, "./web/settings.html")
+	})
+
 	// Root and fallback
 	mux.HandleFunc("/", s.handleRoot)
 
