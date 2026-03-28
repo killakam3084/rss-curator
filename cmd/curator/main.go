@@ -435,6 +435,23 @@ func loadShowsConfig() (*models.ShowsConfig, error) {
 	return &config, nil
 }
 
+// resolveShowsPath returns the path that should be used as the authoritative
+// write target for shows.json. It mirrors the load priority order used by
+// loadShowsConfig: if a file already exists at one of the known locations,
+// that path is returned. Otherwise "shows.json" (cwd) is the default.
+func resolveShowsPath() string {
+	candidates := []string{
+		"shows.json",
+		filepath.Join(os.Getenv("HOME"), ".curator-shows.json"),
+	}
+	for _, p := range candidates {
+		if _, err := os.Stat(p); err == nil {
+			return p
+		}
+	}
+	return "shows.json"
+}
+
 func getEnv(key, defaultValue string) string {
 	if value := os.Getenv(key); value != "" {
 		return value
@@ -737,7 +754,8 @@ func cmdServe(cfg models.Config, store *storage.Storage, buf *logbuffer.Buffer, 
 	server := api.NewServer(store, qb, port, buf, scorer, scorerProvider, m, enricher, auth).
 		WithScheduler(sched).
 		WithQueue(q).
-		WithSettings(settingsMgr)
+		WithSettings(settingsMgr).
+		WithShowsPath(resolveShowsPath())
 	fmt.Printf("[Serve] Starting API server on port %d\n", port)
 	if err := server.Start(); err != nil {
 		fmt.Fprintf(os.Stderr, "Error starting API server: %v\n", err)
