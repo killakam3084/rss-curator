@@ -309,8 +309,14 @@ createApp({
 
         // When the user navigates to the shows tab, lazily create the CM
         // editor (the #shows-editor div doesn't exist until the v-if renders).
-        watch(activeSection, (section) => {
-            if (section === 'shows') ensureShowsEditor();
+        // When leaving, v-if destroys the div — null showsCM so the next visit
+        // recreates it in the fresh element rather than calling into a detached node.
+        watch(activeSection, (newSection, oldSection) => {
+            if (oldSection === 'shows' && showsCM) {
+                pendingShowsValue = showsCM.getValue();
+                showsCM = null;
+            }
+            if (newSection === 'shows') ensureShowsEditor();
         });
 
         return {
