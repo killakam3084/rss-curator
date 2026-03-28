@@ -68,17 +68,19 @@ type ErrorResponse struct {
 }
 
 type TorrentResponse struct {
-	ID                    int     `json:"id"`
-	Title                 string  `json:"title"`
-	Size                  int64   `json:"size"`
-	MatchReason           string  `json:"match_reason"`
-	Status                string  `json:"status"`
-	Link                  string  `json:"link"`
-	AIScore               float64 `json:"ai_score"`
-	AIReason              string  `json:"ai_reason"`
-	AIScored              bool    `json:"ai_scored"`
-	MatchConfidence       float64 `json:"match_confidence"`
-	MatchConfidenceReason string  `json:"match_confidence_reason"`
+	ID                    int       `json:"id"`
+	Title                 string    `json:"title"`
+	Size                  int64     `json:"size"`
+	PubDate               time.Time `json:"pub_date"`
+	StagedAt              time.Time `json:"staged_at"`
+	MatchReason           string    `json:"match_reason"`
+	Status                string    `json:"status"`
+	Link                  string    `json:"link"`
+	AIScore               float64   `json:"ai_score"`
+	AIReason              string    `json:"ai_reason"`
+	AIScored              bool      `json:"ai_scored"`
+	MatchConfidence       float64   `json:"match_confidence"`
+	MatchConfidenceReason string    `json:"match_confidence_reason"`
 }
 
 type ListResponse struct {
@@ -153,6 +155,8 @@ func torrentToResponse(t models.StagedTorrent) TorrentResponse {
 		ID:                    t.ID,
 		Title:                 t.FeedItem.Title,
 		Size:                  t.FeedItem.Size,
+		PubDate:               t.FeedItem.PubDate,
+		StagedAt:              t.StagedAt,
 		MatchReason:           t.MatchReason,
 		Status:                t.Status,
 		Link:                  t.FeedItem.Link,
@@ -375,6 +379,8 @@ func (s *Server) handleList(w http.ResponseWriter, r *http.Request) {
 			ID:                    t.ID,
 			Title:                 t.FeedItem.Title,
 			Size:                  t.FeedItem.Size,
+			PubDate:               t.FeedItem.PubDate,
+			StagedAt:              t.StagedAt,
 			MatchReason:           t.MatchReason,
 			Status:                t.Status,
 			Link:                  t.FeedItem.Link,

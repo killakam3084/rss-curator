@@ -164,17 +164,15 @@ const app = createApp({
         });
         const displayedTorrents = computed(() => {
             const filtered = torrents.value.filter(t => t.status === activeTab.value);
-            const dir = sortDir.value === 'asc' ? 1 : -1;
             return filtered.slice().sort((a, b) => {
-                const af = a.feed_item || {};
-                const bf = b.feed_item || {};
+                const dir = sortDir.value === 'asc' ? 1 : -1;
                 switch (sortField.value) {
                     case 'title':
-                        return dir * (af.title || '').localeCompare(bf.title || '');
+                        return dir * (a.title || '').localeCompare(b.title || '');
                     case 'pub_date':
-                        return dir * (new Date(af.pub_date || 0) - new Date(bf.pub_date || 0));
+                        return dir * (new Date(a.pub_date || 0) - new Date(b.pub_date || 0));
                     case 'size':
-                        return dir * ((af.size || 0) - (bf.size || 0));
+                        return dir * ((a.size || 0) - (b.size || 0));
                     case 'ai_score':
                         return dir * ((a.ai_score || 0) - (b.ai_score || 0));
                     case 'staged_at':
