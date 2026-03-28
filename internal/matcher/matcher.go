@@ -45,6 +45,28 @@ func (m *Matcher) SetDefaults(rules models.DefaultRules) {
 	m.mu.Unlock()
 }
 
+// SetShowsConfig atomically replaces the entire shows configuration and
+// switches the matcher to shows-config mode. Pass nil to fall back to legacy
+// rules. Safe to call concurrently with Match.
+func (m *Matcher) SetShowsConfig(cfg *models.ShowsConfig) {
+	m.mu.Lock()
+	m.showsConfig = cfg
+	m.mu.Unlock()
+}
+
+// ShowsConfig returns a copy of the current shows configuration, or nil if
+// the matcher is running in legacy-rules mode. Safe to call concurrently.
+func (m *Matcher) ShowsConfig() *models.ShowsConfig {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	if m.showsConfig == nil {
+		return nil
+	}
+	// Return a shallow copy so the caller cannot mutate internal state.
+	cp := *m.showsConfig
+	return &cp
+}
+
 // matchWithShowsConfig uses the new per-show rules
 func (m *Matcher) matchWithShowsConfig(item models.FeedItem) (bool, string) {
 	reasons := []string{}
