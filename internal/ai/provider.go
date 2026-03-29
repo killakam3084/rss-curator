@@ -73,21 +73,42 @@ func NewProviderFor(subsystem string) Provider {
 		temperature = 0.0
 	}
 
-	// num_ctx: KV cache context window for Ollama. Curator prompts are small
-	// (~400 tokens); 2048 is generous headroom without the cost of 128K default.
+	// num_ctx: KV cache context window for Ollama. Scorer/enricher prompts are
+	// small (~400 tokens); 2048 is generous headroom. Suggester prompts are
+	// much larger (full watchlist + metadata + history), so
+	// CURATOR_AI_{SUBSYSTEM}_NUM_CTX lets callers override per-subsystem
+	// without inflating the KV cache for all other operations.
 	numCtx := 2048
-	if v := os.Getenv("CURATOR_AI_NUM_CTX"); v != "" {
-		if n, err := strconv.Atoi(v); err == nil && n > 0 {
-			numCtx = n
+	if subsystem != "" {
+		if v := os.Getenv("CURATOR_AI_" + strings.ToUpper(subsystem) + "_NUM_CTX"); v != "" {
+			if n, err := strconv.Atoi(v); err == nil && n > 0 {
+				numCtx = n
+			}
+		}
+	}
+	if numCtx == 2048 {
+		if v := os.Getenv("CURATOR_AI_NUM_CTX"); v != "" {
+			if n, err := strconv.Atoi(v); err == nil && n > 0 {
+				numCtx = n
+			}
 		}
 	}
 
-	// num_predict: max tokens to generate. Scorer output is ~80-100 tokens of
-	// JSON; 400 is safe headroom. Enricher/suggester may need more.
+	// num_predict: max tokens to generate. Same subsystem-specific > global
+	// resolution as num_ctx.
 	numPredict := 400
-	if v := os.Getenv("CURATOR_AI_NUM_PREDICT"); v != "" {
-		if n, err := strconv.Atoi(v); err == nil && n > 0 {
-			numPredict = n
+	if subsystem != "" {
+		if v := os.Getenv("CURATOR_AI_" + strings.ToUpper(subsystem) + "_NUM_PREDICT"); v != "" {
+			if n, err := strconv.Atoi(v); err == nil && n > 0 {
+				numPredict = n
+			}
+		}
+	}
+	if numPredict == 400 {
+		if v := os.Getenv("CURATOR_AI_NUM_PREDICT"); v != "" {
+			if n, err := strconv.Atoi(v); err == nil && n > 0 {
+				numPredict = n
+			}
 		}
 	}
 
