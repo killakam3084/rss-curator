@@ -6,6 +6,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+## [0.33.0] - 2026-03-28
+
+### Added
+- **AI Suggester** — new `internal/suggester` package that analyses the current `shows.json` watch list, cached TV metadata (genres, network, status — RAG context), and recent approval history to produce ranked show recommendations via the configured LLM.
+- **`GET /api/suggestions/status`** — lightweight probe returning `{"available": bool, "shows_count": int}`; used by the UI to decide whether to render the suggestions panel.
+- **`POST /api/suggestions`** — calls the Suggester engine and returns `{"suggestions": [...], "status": "ok"}`. Each item carries `show_name`, `reason`, and a ready-to-use `suggested_rule` (with quality/codec inferred from approval history). Returns 503 when AI is unconfigured.
+- **`storage.GetApprovalQualityProfile()`** — SQLite mode query over `staged_torrents` where `status='approved'` to infer the user's preferred quality and codec for use in generated rules.
+- **Suggestions panel in Settings → Shows tab** — probes availability on tab open; "suggest shows" button fires the LLM call with spinner; each result row shows the show name, a one-line reason, and a **+ add** button that splices the suggested rule directly into the CodeMirror editor (no auto-save; user reviews before Save). Duplicate-guard prevents adding a show already in the list.
+- **E2E smoke test** — `tests/e2e/smoke/12-suggestions.hurl` covers status probe shape and POST response contract.
+
+
 ## [0.32.0] - 2026-03-28
 
 ### Added
