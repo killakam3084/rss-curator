@@ -20,6 +20,7 @@ import (
 	"github.com/killakam3084/rss-curator/internal/scheduler"
 	"github.com/killakam3084/rss-curator/internal/settings"
 	"github.com/killakam3084/rss-curator/internal/storage"
+	"github.com/killakam3084/rss-curator/internal/suggester"
 	"github.com/killakam3084/rss-curator/pkg/models"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
@@ -55,8 +56,9 @@ type Server struct {
 	jobCancelMu      sync.Mutex
 	jobCancels       map[int]*jobCancelState
 	progressInterval int
-	settingsMgr      *settings.Manager // may be nil
-	showsPath        string            // path to shows.json on disk; defaults to "shows.json"
+	settingsMgr      *settings.Manager    // may be nil
+	showsPath        string               // path to shows.json on disk; defaults to "shows.json"
+	suggester        *suggester.Suggester // may be nil if AI is disabled
 }
 
 type jobCancelState struct {
@@ -171,11 +173,15 @@ func torrentToResponse(t models.StagedTorrent) TorrentResponse {
 }
 
 // SuggestionsResponse is the shape returned by POST /api/suggestions.
-// Currently returns 501 Not Implemented — the Suggester subsystem is
-// under active development. This stub establishes the API contract.
 type SuggestionsResponse struct {
-	Suggestions []interface{} `json:"suggestions"`
-	Status      string        `json:"status"`
+	Suggestions []suggester.Suggestion `json:"suggestions"`
+	Status      string                 `json:"status"`
+}
+
+// SuggestionsStatusResponse is the shape returned by GET /api/suggestions/status.
+type SuggestionsStatusResponse struct {
+	Available  bool `json:"available"`
+	ShowsCount int  `json:"shows_count"`
 }
 
 type SchedulerRunResponse struct {
@@ -266,6 +272,13 @@ func (s *Server) WithProgressInterval(n int) *Server {
 	return s
 }
 
+// WithSuggester attaches a Suggester to the server, enabling the
+// /api/suggestions endpoints. Returns the server for call chaining.
+func (s *Server) WithSuggester(sg *suggester.Suggester) *Server {
+	s.suggester = sg
+	return s
+}
+
 // WithShowsPath sets the filesystem path that GET/PUT /api/shows reads and
 // writes. If not called the server defaults to "shows.json" (current working
 // directory — the same location the binary looks for it at startup).
@@ -299,6 +312,8 @@ func (s *Server) Start() error {
 	mux.HandleFunc("/api/feed/stream", s.handleFeedStream)
 	mux.HandleFunc("/api/logs", s.handleLogs)
 	mux.HandleFunc("/api/logs/stream", s.handleLogsStream)
+	mux.HandleFunc("/api/suggestions/status", s.handleSuggestionsStatus)
+	mux.HandleFunc("/api/suggestions/status", s.handleSuggestionsStatus)
 	mux.HandleFunc("/api/suggestions", s.handleSuggestions)
 	mux.HandleFunc("/api/jobs/stream", s.handleJobsStream)
 	mux.HandleFunc("/api/jobs/", s.handleJob)
@@ -1373,19 +1388,64 @@ func (s *Server) handleJobsStream(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// handleSuggestions is the stub for the Suggester subsystem.
-// POST /api/suggestions — returns 501 Not Implemented until the engine is live.
-// The response shape is stable: clients can integrate the endpoint now.
+// handleSuggestionsStatus returns a lightweight probe so the UI can decide
+// whether to render the suggestions panel. GET /api/suggestions/status.
+func (s *Server) handleSuggestionsStatus(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	available := s.suggester != nil && s.suggester.Available()
+	showsCount := 0
+	if s.suggester != nil {
+		showsCount = s.suggester.ShowsCount()
+	}
+	json.NewEncoder(w).Encode(SuggestionsStatusResponse{
+		Available:  available,
+		ShowsCount: showsCount,
+	})
+}
+
+// handleSuggestions calls the Suggester engine to produce watchlist
+// recommendations. POST /api/suggestions with optional body {"limit": N}.
 func (s *Server) handleSuggestions(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusNotImplemented)
+
+	if s.suggester == nil || !s.suggester.Available() {
+		w.WriteHeader(http.StatusServiceUnavailable)
+		json.NewEncoder(w).Encode(SuggestionsResponse{
+			Suggestions: []suggester.Suggestion{},
+			Status:      "unavailable",
+		})
+		return
+	}
+
+	// Decode optional request body for limit override.
+	limit := 5
+	if r.ContentLength > 0 {
+		var req struct {
+			Limit int `json:"limit"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err == nil && req.Limit > 0 {
+			limit = req.Limit
+		}
+	}
+
+	suggestions, err := s.suggester.Suggest(r.Context(), limit)
+	if err != nil {
+		s.logger.Error("handleSuggestions: Suggest failed", zap.Error(err))
+		http.Error(w, "suggestion engine error", http.StatusInternalServerError)
+		return
+	}
+
 	json.NewEncoder(w).Encode(SuggestionsResponse{
-		Suggestions: []interface{}{},
-		Status:      "not_implemented",
+		Suggestions: suggestions,
+		Status:      "ok",
 	})
 }
 

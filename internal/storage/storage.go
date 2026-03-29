@@ -51,6 +51,10 @@ type Store interface {
 	GetSetting(key string) (string, error)
 	SetSetting(key, value string) error
 	GetAllSettings() (map[string]string, error)
+	// GetApprovalQualityProfile returns the most common quality and codec seen
+	// in approved torrents (mode query). Returns empty strings when no approved
+	// torrents exist yet.
+	GetApprovalQualityProfile() (quality, codec string, err error)
 }
 
 // Storage handles persistent storage of staged torrents
@@ -655,6 +659,38 @@ func (s *Storage) GetAllSettings() (map[string]string, error) {
 		out[k] = v
 	}
 	return out, rows.Err()
+}
+
+// GetApprovalQualityProfile returns the quality and codec that appear most
+// frequently across all approved torrents. Empty strings are returned when the
+// approved set is empty.
+func (s *Storage) GetApprovalQualityProfile() (quality, codec string, err error) {
+	var q, c sql.NullString
+	row := s.db.QueryRow(`
+		SELECT
+			json_extract(feed_item, '$.quality') AS q,
+			json_extract(feed_item, '$.codec')   AS c,
+			COUNT(*) AS cnt
+		FROM staged_torrents
+		WHERE status = 'approved'
+		GROUP BY 1, 2
+		ORDER BY cnt DESC
+		LIMIT 1
+	`)
+	if scanErr := row.Scan(&q, &c, new(int)); scanErr != nil {
+		// sql.ErrNoRows means no approved torrents yet — not an error for callers.
+		if scanErr == sql.ErrNoRows {
+			return "", "", nil
+		}
+		return "", "", scanErr
+	}
+	if q.Valid {
+		quality = q.String
+	}
+	if c.Valid {
+		codec = c.String
+	}
+	return quality, codec, nil
 }
 
 // GetWindowStats returns activity counts for a rolling window of the given hours,

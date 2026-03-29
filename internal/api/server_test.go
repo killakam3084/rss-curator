@@ -182,6 +182,7 @@ func (m *mockStorage) SetSetting(key, value string) error       { return nil }
 func (m *mockStorage) GetAllSettings() (map[string]string, error) {
 	return map[string]string{}, nil
 }
+func (m *mockStorage) GetApprovalQualityProfile() (string, string, error) { return "", "", nil }
 
 // setupTestServer creates a test server instance
 func setupTestServer(t *testing.T) (*Server, *mockStorage) {

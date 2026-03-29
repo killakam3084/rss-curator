@@ -24,6 +24,7 @@ import (
 	"github.com/killakam3084/rss-curator/internal/scheduler"
 	"github.com/killakam3084/rss-curator/internal/settings"
 	"github.com/killakam3084/rss-curator/internal/storage"
+	"github.com/killakam3084/rss-curator/internal/suggester"
 	"github.com/killakam3084/rss-curator/pkg/models"
 )
 
@@ -633,6 +634,9 @@ func cmdServe(cfg models.Config, store *storage.Storage, buf *logbuffer.Buffer, 
 		fmt.Println("[Serve] AI provider available — on-demand rescore enabled")
 	}
 
+	// Suggester uses its own provider/model config so it can be tuned independently.
+	suggestProvider := ai.NewProviderFor("suggester")
+
 	// Create matcher config once for API rematch operations.
 	var m *matcher.Matcher
 	if cfg.ShowsConfig != nil {
@@ -755,7 +759,8 @@ func cmdServe(cfg models.Config, store *storage.Storage, buf *logbuffer.Buffer, 
 		WithScheduler(sched).
 		WithQueue(q).
 		WithSettings(settingsMgr).
-		WithShowsPath(resolveShowsPath())
+		WithShowsPath(resolveShowsPath()).
+		WithSuggester(suggester.New(store, suggestProvider, m, metaLookup))
 	fmt.Printf("[Serve] Starting API server on port %d\n", port)
 	if err := server.Start(); err != nil {
 		fmt.Fprintf(os.Stderr, "Error starting API server: %v\n", err)
