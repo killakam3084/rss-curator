@@ -14,6 +14,28 @@ import (
 	"github.com/killakam3084/rss-curator/pkg/models"
 )
 
+// suggestOutputSchema pins Ollama to the exact JSON shape we expect, preventing
+// preamble/explanation text from polluting the response.
+var suggestOutputSchema = json.RawMessage(`{
+	"type": "object",
+	"properties": {
+		"suggestions": {
+			"type": "array",
+			"items": {
+				"type": "object",
+				"properties": {
+					"show_name": {"type": "string"},
+					"reason":    {"type": "string"},
+					"quality":   {"type": "string"},
+					"codec":     {"type": "string"}
+				},
+				"required": ["show_name", "reason", "quality", "codec"]
+			}
+		}
+	},
+	"required": ["suggestions"]
+}`)
+
 const systemPrompt = `You are a TV/movie watchlist assistant. You help users discover new shows to add to their watchlist.
 
 You will be given:
@@ -78,6 +100,10 @@ type Suggester struct {
 // New creates a Suggester. All fields are required; nil values are tolerated
 // but will cause Suggest to return an empty slice rather than panic.
 func New(store storage.Store, provider ai.Provider, m *matcher.Matcher, lu *metadata.Lookup) *Suggester {
+	// Pin Ollama to structured output so it cannot emit preamble/explanation text.
+	if fs, ok := provider.(ai.FormatSetter); ok {
+		fs.SetFormat(suggestOutputSchema)
+	}
 	return &Suggester{
 		store:      store,
 		provider:   provider,
@@ -156,7 +182,14 @@ func (sg *Suggester) Suggest(ctx context.Context, limit int) ([]Suggestion, erro
 		return nil, fmt.Errorf("suggester: LLM call failed: %w", err)
 	}
 
-	return sg.parseResponse(raw, defaultQuality, defaultCodec)
+	suggestions, parseErr := sg.parseResponse(raw, defaultQuality, defaultCodec)
+	if parseErr != nil {
+		// LLM returned unparseable output — treat as empty, not a hard error.
+		// The raw response is included so operators can diagnose prompt issues.
+		fmt.Printf("[Suggester] parse error (%v); raw response: %q\n", parseErr, raw)
+		return []Suggestion{}, nil
+	}
+	return suggestions, nil
 }
 
 // buildWatchlistBlock creates the enriched watchlist text block for the prompt.
@@ -218,15 +251,30 @@ func buildHistoryBlock(history []models.Activity, maxEntries int) string {
 	return sb.String()
 }
 
-// parseResponse strips markdown fencing, unmarshals the LLM JSON, and maps
-// each llmSuggestion into a Suggestion with a ready-to-use SuggestedRule.
-// Falls back to defaults for quality/codec when the LLM omits them.
+// parseResponse extracts and unmarshals the LLM JSON. It handles:
+//   - Markdown code fences (```json ... ```)
+//   - Preamble/postamble text (extract first '{' to last '}')
+//   - Falls back to defaults for quality/codec when the LLM omits them.
 func (sg *Suggester) parseResponse(raw, defaultQuality, defaultCodec string) ([]Suggestion, error) {
 	content := strings.TrimSpace(raw)
-	content = strings.TrimPrefix(content, "```json")
-	content = strings.TrimPrefix(content, "```")
-	content = strings.TrimSuffix(content, "```")
-	content = strings.TrimSpace(content)
+
+	// Strip markdown fences if present.
+	if idx := strings.Index(content, "```"); idx >= 0 {
+		content = content[idx:]
+		content = strings.TrimPrefix(content, "```json")
+		content = strings.TrimPrefix(content, "```")
+		if end := strings.LastIndex(content, "```"); end >= 0 {
+			content = content[:end]
+		}
+		content = strings.TrimSpace(content)
+	}
+
+	// Extract the outermost JSON object to survive any remaining preamble.
+	start := strings.Index(content, "{")
+	end := strings.LastIndex(content, "}")
+	if start >= 0 && end > start {
+		content = content[start : end+1]
+	}
 
 	var resp llmResponse
 	if err := json.Unmarshal([]byte(content), &resp); err != nil {

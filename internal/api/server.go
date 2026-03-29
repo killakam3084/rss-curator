@@ -1438,7 +1438,11 @@ func (s *Server) handleSuggestions(w http.ResponseWriter, r *http.Request) {
 	suggestions, err := s.suggester.Suggest(r.Context(), limit)
 	if err != nil {
 		s.logger.Error("handleSuggestions: Suggest failed", zap.Error(err))
-		http.Error(w, "suggestion engine error", http.StatusInternalServerError)
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(SuggestionsResponse{
+			Suggestions: []suggester.Suggestion{},
+			Status:      "error",
+		})
 		return
 	}
 
