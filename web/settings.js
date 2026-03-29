@@ -27,6 +27,12 @@ createApp({
         const showsError  = ref('');
         let   showsCM     = null;      // CodeMirror instance (created lazily)
 
+        // ── Suggestions state ─────────────────────────────────────────
+        const suggestAvailable   = ref(false);
+        const suggestions        = ref([]);
+        const suggestsLoading    = ref(false);
+        const suggestError       = ref('');
+
         // Flat form state mirroring AppSettings JSON shape
         const form = reactive({
             scheduler: {
@@ -300,6 +306,69 @@ createApp({
             // Reset input so the same file can be re-uploaded
             event.target.value = '';
         }
+        // ── Suggestions helpers ───────────────────────────────────────
+
+        async function loadSuggestStatus() {
+            try {
+                const res = await fetch('/api/suggestions/status');
+                if (!res.ok) return;
+                const data = await res.json();
+                suggestAvailable.value = data.available ?? false;
+            } catch (e) {
+                suggestAvailable.value = false;
+            }
+        }
+
+        async function fetchSuggestions() {
+            suggestsLoading.value = true;
+            suggestError.value = '';
+            suggestions.value = [];
+            try {
+                const res = await fetch('/api/suggestions', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ limit: 5 }),
+                });
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+                suggestions.value = data.suggestions || [];
+                if (suggestions.value.length === 0) {
+                    suggestError.value = 'no suggestions returned — the LLM had nothing to add';
+                }
+            } catch (err) {
+                suggestError.value = `suggestions failed: ${err.message}`;
+                console.error('fetchSuggestions:', err);
+            } finally {
+                suggestsLoading.value = false;
+            }
+        }
+
+        function addSuggestion(suggestion) {
+            if (!showsCM) return;
+            const raw = showsCM.getValue();
+            let cfg;
+            try {
+                cfg = JSON.parse(raw);
+            } catch (e) {
+                showsError.value = `invalid JSON — ${e.message}`;
+                return;
+            }
+            if (!Array.isArray(cfg.shows)) cfg.shows = [];
+            const already = cfg.shows.some(s =>
+                s.name.toLowerCase() === suggestion.show_name.toLowerCase()
+            );
+            if (already) {
+                showToast(`"${suggestion.show_name}" is already in the watchlist`, 'error');
+                return;
+            }
+            cfg.shows.push(suggestion.suggested_rule);
+            showsCM.setValue(JSON.stringify(cfg, null, 2));
+            showsCM.refresh();
+            // Remove from suggestions list so the row disappears after add
+            suggestions.value = suggestions.value.filter(s => s.show_name !== suggestion.show_name);
+            showToast(`added "${suggestion.show_name}" — remember to save`, 'success');
+        }
+
         // ── Lifecycle ────────────────────────────────────────────────
         onMounted(() => {
             document.documentElement.classList.toggle('dark', darkMode.value);
@@ -316,7 +385,10 @@ createApp({
                 pendingShowsValue = showsCM.getValue();
                 showsCM = null;
             }
-            if (newSection === 'shows') ensureShowsEditor();
+            if (newSection === 'shows') {
+                ensureShowsEditor();
+                loadSuggestStatus();
+            }
         });
 
         return {
@@ -338,6 +410,13 @@ createApp({
             saveShows,
             formatShows,
             onShowsFileUpload,
+            // Suggestions
+            suggestAvailable,
+            suggestions,
+            suggestsLoading,
+            suggestError,
+            fetchSuggestions,
+            addSuggestion,
         };
     }
 }).mount('#settings-app');

@@ -321,6 +321,51 @@
                         </span>
                     </div>
 
+                    <!-- AI Suggestions panel -->
+                    <div class="border border-gray-700 rounded p-4 space-y-3">
+                        <div class="flex items-center justify-between">
+                            <span class="text-xs font-mono text-gray-400 uppercase tracking-wider">AI suggestions</span>
+                            <template v-if="suggestAvailable">
+                                <button
+                                    @click="fetchSuggestions"
+                                    :disabled="suggestsLoading"
+                                    class="flex items-center gap-2 px-3 py-1.5 rounded border border-gray-600 text-gray-300 hover:text-white hover:border-gray-400 font-mono text-xs transition-colors disabled:opacity-50 disabled:cursor-wait"
+                                >
+                                    <!-- Spinner while loading -->
+                                    <svg v-if="suggestsLoading" class="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
+                                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+                                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/>
+                                    </svg>
+                                    {{ suggestsLoading ? 'thinking…' : 'suggest shows' }}
+                                </button>
+                            </template>
+                            <template v-else>
+                                <span class="text-xs font-mono text-gray-600 italic">unavailable — set CURATOR_AI_PROVIDER to enable</span>
+                            </template>
+                        </div>
+
+                        <!-- Error -->
+                        <div v-if="suggestError" class="text-xs font-mono text-yellow-500">{{ suggestError }}</div>
+
+                        <!-- Suggestion rows -->
+                        <div v-if="suggestions.length > 0" class="space-y-2">
+                            <div
+                                v-for="s in suggestions"
+                                :key="s.show_name"
+                                class="flex items-start justify-between gap-3 py-2 border-t border-gray-800"
+                            >
+                                <div class="min-w-0">
+                                    <p class="text-sm font-mono text-gray-200 truncate">{{ s.show_name }}</p>
+                                    <p class="text-xs font-mono text-gray-500 mt-0.5">{{ s.reason }}</p>
+                                </div>
+                                <button
+                                    @click="addSuggestion(s)"
+                                    class="shrink-0 px-3 py-1 rounded border border-curator-500 text-curator-400 hover:bg-curator-500 hover:text-gray-950 font-mono text-xs transition-colors"
+                                >+ add</button>
+                            </div>
+                        </div>
+                    </div>
+
                     <!-- Editor container -->
                     <div class="relative">
                         <div
