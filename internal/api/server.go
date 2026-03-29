@@ -313,7 +313,6 @@ func (s *Server) Start() error {
 	mux.HandleFunc("/api/logs", s.handleLogs)
 	mux.HandleFunc("/api/logs/stream", s.handleLogsStream)
 	mux.HandleFunc("/api/suggestions/status", s.handleSuggestionsStatus)
-	mux.HandleFunc("/api/suggestions/status", s.handleSuggestionsStatus)
 	mux.HandleFunc("/api/suggestions", s.handleSuggestions)
 	mux.HandleFunc("/api/jobs/stream", s.handleJobsStream)
 	mux.HandleFunc("/api/jobs/", s.handleJob)
