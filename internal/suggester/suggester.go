@@ -38,34 +38,15 @@ var suggestOutputSchema = json.RawMessage(`{
 	"required": ["suggestions"]
 }`)
 
-const systemPrompt = `You are a TV/movie watchlist assistant. You help users discover new shows to add to their watchlist.
+const systemPrompt = `You are a TV/movie watchlist assistant recommending new shows to add.
 
-You will be given:
-1. The user's current watchlist with TV metadata (genres, network, status, premiere year) where available.
-2. Recent show release titles they have explicitly approved — these are strong positive signals about their taste.
-3. Their inferred quality/codec preferences from approval history.
-
-Your task: recommend TV shows or movies the user does NOT already have on their watchlist that they are likely to enjoy, based on their demonstrated tastes.
+Given: the user's watchlist (with genre/network metadata), recent approvals (taste signals), and quality preferences.
 
 Rules:
-- NEVER suggest a show that is already in the user's watchlist (the watchlist is authoritative).
-- Use the correct full title (title case, correct punctuation, correct article placement).
-- Prefer currently-airing or critically-acclaimed ended shows over cancelled/obscure titles.
-- Match genre profile as closely as possible — look for patterns across the watchlist.
-- Include the user's typical quality and codec values on every suggestion.
-
-Respond with a single JSON object. No markdown, no explanation outside the JSON, just raw JSON.
-Format:
-{
-  "suggestions": [
-    {
-      "show_name": "Show Name",
-      "reason": "one-line reason grounded in watchlist patterns",
-      "quality": "quality string matching user preference e.g. 1080p",
-      "codec": "codec string matching user preference e.g. x264"
-    }
-  ]
-}`
+- Never suggest a show already in the watchlist.
+- Match genre patterns from the watchlist.
+- Use the provided quality and codec on every suggestion.
+- Respond with raw JSON only — no explanation, no markdown.`
 
 // Suggestion is a single LLM-proposed show that the user might want to add.
 type Suggestion struct {
@@ -179,7 +160,7 @@ func (sg *Suggester) Suggest(ctx context.Context, limit int) ([]Suggestion, erro
 	if err != nil {
 		history = nil // non-fatal — proceed without history
 	}
-	historyBlock := buildHistoryBlock(history, 30)
+	historyBlock := buildHistoryBlock(history, 10)
 
 	// Infer quality/codec defaults from DB.
 	defaultQuality, defaultCodec, _ := sg.store.GetApprovalQualityProfile()
@@ -216,32 +197,22 @@ func (sg *Suggester) buildWatchlistBlock(ctx context.Context, shows []models.Sho
 		sb.WriteString(fmt.Sprintf("%d. %s", i+1, show.Name))
 
 		// Attempt metadata enrichment (cache-only — no external quota).
+		// Overview is intentionally omitted: it is the largest per-show token
+		// contributor and adds little beyond what genres + network already convey.
 		if sg.metaLookup != nil {
 			if meta := sg.metaLookup.Resolve(ctx, show.Name); meta != nil {
 				var parts []string
 				if len(meta.Genres) > 0 {
-					parts = append(parts, "Genres: "+strings.Join(meta.Genres, ", "))
+					parts = append(parts, strings.Join(meta.Genres, "/"))
 				}
 				if meta.Network != "" {
-					parts = append(parts, "Network: "+meta.Network)
+					parts = append(parts, meta.Network)
 				}
 				if meta.Status != "" {
-					parts = append(parts, "Status: "+meta.Status)
-				}
-				if meta.PremiereYear > 0 {
-					parts = append(parts, fmt.Sprintf("Since: %d", meta.PremiereYear))
-				}
-				if meta.Overview != "" {
-					overview := meta.Overview
-					if dot := strings.Index(overview, ". "); dot >= 0 && dot < 120 {
-						overview = overview[:dot+1]
-					} else if len(overview) > 120 {
-						overview = overview[:120] + "…"
-					}
-					parts = append(parts, "About: "+overview)
+					parts = append(parts, meta.Status)
 				}
 				if len(parts) > 0 {
-					sb.WriteString(" (" + strings.Join(parts, " | ") + ")")
+					sb.WriteString(" [" + strings.Join(parts, ", ") + "]")
 				}
 			}
 		}
@@ -251,21 +222,47 @@ func (sg *Suggester) buildWatchlistBlock(ctx context.Context, shows []models.Sho
 }
 
 // buildHistoryBlock summarises recent approvals as a concise text block.
+// Emits deduplicated show names rather than full torrent titles to keep the
+// history section compact — the LLM needs the show name, not the release group.
 func buildHistoryBlock(history []models.Activity, maxEntries int) string {
 	if len(history) == 0 {
 		return "No recent approvals on record.\n"
 	}
-	if len(history) > maxEntries {
-		history = history[:maxEntries]
-	}
+	seen := make(map[string]bool)
 	var sb strings.Builder
+	count := 0
 	for _, a := range history {
-		sb.WriteString(fmt.Sprintf("- %s (approved %s)\n",
-			a.TorrentTitle,
-			a.ActionAt.Format("Jan 02 2006"),
-		))
+		if count >= maxEntries {
+			break
+		}
+		// Use match_reason show name when available; fall back to full title.
+		name := extractShowName(a.MatchReason)
+		if name == "" {
+			name = a.TorrentTitle
+		}
+		if seen[name] {
+			continue
+		}
+		seen[name] = true
+		sb.WriteString("- " + name + "\n")
+		count++
 	}
 	return sb.String()
+}
+
+// extractShowName pulls the show name from a match_reason string like
+// "matches show: Breaking Bad, quality: 1080P". Returns "" if not found.
+func extractShowName(matchReason string) string {
+	const prefix = "matches show: "
+	idx := strings.Index(matchReason, prefix)
+	if idx < 0 {
+		return ""
+	}
+	rest := matchReason[idx+len(prefix):]
+	if comma := strings.Index(rest, ","); comma >= 0 {
+		return strings.TrimSpace(rest[:comma])
+	}
+	return strings.TrimSpace(rest)
 }
 
 // parseResponse extracts and unmarshals the LLM JSON. It handles:
