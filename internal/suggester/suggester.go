@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -104,12 +106,27 @@ func New(store storage.Store, provider ai.Provider, m *matcher.Matcher, lu *meta
 	if fs, ok := provider.(ai.FormatSetter); ok {
 		fs.SetFormat(suggestOutputSchema)
 	}
+
+	// Timeout: CURATOR_AI_SUGGESTER_TIMEOUT_SECS > CURATOR_AI_TIMEOUT_SECS > 120.
+	// Default is higher than the scorer default (60s) because suggestion prompts
+	// are significantly larger (full watchlist + metadata + history).
+	timeout := 120
+	if v := os.Getenv("CURATOR_AI_SUGGESTER_TIMEOUT_SECS"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			timeout = n
+		}
+	} else if v := os.Getenv("CURATOR_AI_TIMEOUT_SECS"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			timeout = n
+		}
+	}
+
 	return &Suggester{
 		store:      store,
 		provider:   provider,
 		matcher:    m,
 		metaLookup: lu,
-		timeoutSec: 90,
+		timeoutSec: timeout,
 	}
 }
 
