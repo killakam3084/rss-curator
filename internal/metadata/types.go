@@ -6,6 +6,7 @@ import "time"
 // It is always additive — no existing workflow logic depends on it.
 type ShowMetadata struct {
 	ProviderID   string    `json:"provider_id"`
+	ProviderURL  string    `json:"provider_url,omitempty"`
 	ShowName     string    `json:"show_name"`
 	Genres       []string  `json:"genres,omitempty"`
 	Network      string    `json:"network,omitempty"`

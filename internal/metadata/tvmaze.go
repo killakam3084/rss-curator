@@ -35,6 +35,7 @@ func (p *tvmazeProvider) Name() string { return "tvmaze" }
 type tvmazeShow struct {
 	ID      int      `json:"id"`
 	Name    string   `json:"name"`
+	URL     string   `json:"url"`
 	Status  string   `json:"status"`
 	Genres  []string `json:"genres"`
 	Network *struct {
@@ -77,12 +78,13 @@ func (p *tvmazeProvider) Fetch(ctx context.Context, showName string) (*ShowMetad
 	}
 
 	meta := &ShowMetadata{
-		ProviderID: fmt.Sprintf("%d", show.ID),
-		ShowName:   show.Name,
-		Genres:     show.Genres,
-		Status:     show.Status,
-		Overview:   stripHTML(show.Summary),
-		FetchedAt:  time.Now().UTC(),
+		ProviderID:  fmt.Sprintf("%d", show.ID),
+		ProviderURL: show.URL,
+		ShowName:    show.Name,
+		Genres:      show.Genres,
+		Status:      show.Status,
+		Overview:    stripHTML(show.Summary),
+		FetchedAt:   time.Now().UTC(),
 	}
 
 	// Prefer Network name; fall back to WebChannel for streaming-only shows.

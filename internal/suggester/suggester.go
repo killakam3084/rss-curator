@@ -48,11 +48,23 @@ Rules:
 - Use the provided quality and codec on every suggestion.
 - Respond with raw JSON only — no explanation, no markdown.`
 
+// SuggestionMeta holds metadata fetched from the provider for a suggested show.
+// All fields are optional — absent when the provider has no record.
+type SuggestionMeta struct {
+	ProviderURL  string   `json:"provider_url,omitempty"`
+	Genres       []string `json:"genres,omitempty"`
+	Network      string   `json:"network,omitempty"`
+	Status       string   `json:"status,omitempty"`
+	PremiereYear int      `json:"premiere_year,omitempty"`
+	Overview     string   `json:"overview,omitempty"`
+}
+
 // Suggestion is a single LLM-proposed show that the user might want to add.
 type Suggestion struct {
 	ShowName      string          `json:"show_name"`
 	Reason        string          `json:"reason"`
 	SuggestedRule models.ShowRule `json:"suggested_rule"`
+	Meta          *SuggestionMeta `json:"meta,omitempty"`
 }
 
 // llmSuggestion is the raw JSON shape the LLM writes per suggestion.
@@ -187,6 +199,25 @@ func (sg *Suggester) Suggest(ctx context.Context, limit int) ([]Suggestion, erro
 		fmt.Printf("[Suggester] parse error (%v); raw response: %q\n", parseErr, raw)
 		return []Suggestion{}, nil
 	}
+
+	// Enrich each suggestion with provider metadata.
+	// Resolve() is cache-first; for new show names this triggers one provider
+	// fetch per suggestion — acceptable since this is a manual, infrequent action.
+	if sg.metaLookup != nil {
+		for i := range suggestions {
+			if meta := sg.metaLookup.Resolve(ctx, suggestions[i].ShowName); meta != nil {
+				suggestions[i].Meta = &SuggestionMeta{
+					ProviderURL:  meta.ProviderURL,
+					Genres:       meta.Genres,
+					Network:      meta.Network,
+					Status:       meta.Status,
+					PremiereYear: meta.PremiereYear,
+					Overview:     meta.Overview,
+				}
+			}
+		}
+	}
+
 	return suggestions, nil
 }
 

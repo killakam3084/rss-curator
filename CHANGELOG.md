@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+## [0.33.2] - 2026-03-29
+
+### Added
+- **Suggestion metadata enrichment** — after the LLM returns show names, each suggestion is resolved against the metadata provider (cache-first, silent on miss). Results now carry `SuggestionMeta` with genres, network, status, premiere year, overview, and a `provider_url` linking directly to the show's TVMaze page.
+- **Suggestion card provider link** — each suggestion card in the Settings → Shows panel now shows a small external-link icon next to the show name that opens the TVMaze record in a new tab (rendered only when a URL is available).
+
 ## [0.33.1] - 2026-03-28
 
 ### Fixed
