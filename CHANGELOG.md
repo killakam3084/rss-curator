@@ -6,6 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+## [0.33.3] - 2026-03-29
+
+### Fixed
+- **Watchlist leakage in suggestions** — small LLM models regularly ignore the "never suggest existing shows" prompt instruction. Added a deterministic post-parse filter that normalizes names (lowercase, alphanumeric-only) and drops any suggestion already present in `shows.json` before returning results.
+
 ## [0.33.2] - 2026-03-29
 
 ### Added

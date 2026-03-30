@@ -200,6 +200,22 @@ func (sg *Suggester) Suggest(ctx context.Context, limit int) ([]Suggestion, erro
 		return []Suggestion{}, nil
 	}
 
+	// Deterministic deduplication: drop any suggestion that already exists in
+	// the watchlist. Small models regularly ignore the "never suggest existing
+	// shows" instruction regardless of prompt wording — this is a code-level
+	// guarantee that no watchlist show leaks through.
+	existing := make(map[string]bool, len(cfg.Shows))
+	for _, s := range cfg.Shows {
+		existing[normalizeName(s.Name)] = true
+	}
+	filtered := suggestions[:0]
+	for _, s := range suggestions {
+		if !existing[normalizeName(s.ShowName)] {
+			filtered = append(filtered, s)
+		}
+	}
+	suggestions = filtered
+
 	// Enrich each suggestion with provider metadata.
 	// Resolve() is cache-first; for new show names this triggers one provider
 	// fetch per suggestion — acceptable since this is a manual, infrequent action.
@@ -357,4 +373,17 @@ func qualityStr(s string) string {
 		return "not specified"
 	}
 	return s
+}
+
+// normalizeName returns a lowercase alphanumeric-only key used for watchlist
+// deduplication so that punctuation and casing differences don't cause misses
+// (e.g. "Daredevil: Born Again" == "daredevilbornagain").
+func normalizeName(s string) string {
+	var b strings.Builder
+	for _, r := range strings.ToLower(s) {
+		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') {
+			b.WriteRune(r)
+		}
+	}
+	return b.String()
 }
