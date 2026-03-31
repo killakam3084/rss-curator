@@ -219,7 +219,11 @@ func (sg *Suggester) Suggest(ctx context.Context, limit int) ([]Suggestion, erro
 	// Enrich each suggestion with provider metadata.
 	// Resolve() is cache-first; for new show names this triggers one provider
 	// fetch per suggestion — acceptable since this is a manual, infrequent action.
+	// Suggestions that fail to resolve are dropped entirely: a real show name
+	// will always resolve against TVMaze; hallucinated or malformed names (e.g.
+	// "Andor spin-off series, Ahsoka") won't — and we don't want them in results.
 	if sg.metaLookup != nil {
+		validated := suggestions[:0]
 		for i := range suggestions {
 			if meta := sg.metaLookup.Resolve(ctx, suggestions[i].ShowName); meta != nil {
 				suggestions[i].Meta = &SuggestionMeta{
@@ -230,8 +234,10 @@ func (sg *Suggester) Suggest(ctx context.Context, limit int) ([]Suggestion, erro
 					PremiereYear: meta.PremiereYear,
 					Overview:     meta.Overview,
 				}
+				validated = append(validated, suggestions[i])
 			}
 		}
+		suggestions = validated
 	}
 
 	return suggestions, nil

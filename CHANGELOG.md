@@ -6,6 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+## [0.33.5] - 2026-03-30
+
+### Fixed
+- **Hallucinated/malformed suggestions now dropped** — suggestions that fail to resolve against the metadata provider (TVMaze) are filtered out before returning results. Real show names resolve; garbage like `"Andor spin-off series, Ahsoka"` or subtitled variants like `"Severance: The Sound of One Hand Clapping"` don't, and are silently dropped. Gracefully skipped when no metadata provider is configured.
+
 ## [0.33.4] - 2026-03-30
 
 ### Fixed
