@@ -347,14 +347,8 @@ func (sg *Suggester) parseResponse(raw, defaultQuality, defaultCodec string) ([]
 		if s.ShowName == "" {
 			continue
 		}
-		quality := s.Quality
-		if quality == "" {
-			quality = defaultQuality
-		}
-		codec := s.Codec
-		if codec == "" {
-			codec = defaultCodec
-		}
+		quality := sanitizeQuality(s.Quality, defaultQuality)
+		codec := sanitizeCodec(s.Codec, defaultCodec)
 		out = append(out, Suggestion{
 			ShowName: s.ShowName,
 			Reason:   s.Reason,
@@ -373,6 +367,45 @@ func qualityStr(s string) string {
 		return "not specified"
 	}
 	return s
+}
+
+// sanitizeQuality extracts the first recognized resolution token from the
+// LLM-supplied string (case-insensitive). Falls back to defaultQuality when
+// no known token is found. Canonical output is lowercase ("1080p", "2160p").
+func sanitizeQuality(raw, defaultQuality string) string {
+	known := []string{"2160p", "1080p", "720p", "4k"}
+	lower := strings.ToLower(raw)
+	for _, q := range known {
+		if strings.Contains(lower, q) {
+			return q
+		}
+	}
+	if defaultQuality != "" {
+		return defaultQuality
+	}
+	return "1080p"
+}
+
+// sanitizeCodec extracts the first recognized codec token from the
+// LLM-supplied string (case-insensitive). Falls back to defaultCodec when
+// no known token is found. Returns "" (omitted from rule) when both the raw
+// value and the default are unrecognized or empty.
+func sanitizeCodec(raw, defaultCodec string) string {
+	known := []string{"x265", "x264", "h265", "h264", "hevc", "avc", "av1"}
+	lower := strings.ToLower(raw)
+	for _, c := range known {
+		if strings.Contains(lower, c) {
+			return c
+		}
+	}
+	// Fall back to default only if it is itself a known codec.
+	lowerDefault := strings.ToLower(defaultCodec)
+	for _, c := range known {
+		if lowerDefault == c {
+			return c
+		}
+	}
+	return ""
 }
 
 // normalizeName returns a lowercase alphanumeric-only key used for watchlist

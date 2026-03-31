@@ -6,6 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+## [0.33.4] - 2026-03-30
+
+### Fixed
+- **Malformed quality/codec in suggested rules** — LLM models sometimes return combined or hallucinated values (e.g. `"1080P x265"` as `min_quality`, `"Some Good News, Dolby Digital"` as `preferred_codec`). Added `sanitizeQuality` and `sanitizeCodec` helpers that extract the first recognized token from the LLM string and fall back to the inferred DB default, preventing junk values from entering `shows.json`.
+
 ## [0.33.3] - 2026-03-29
 
 ### Fixed
