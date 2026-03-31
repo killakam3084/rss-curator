@@ -32,6 +32,8 @@ createApp({
         const suggestions        = ref([]);
         const suggestsLoading    = ref(false);
         const suggestError       = ref('');
+        const suggestGeneratedAt = ref(null);   // ISO string from cache
+        const suggestRefreshing  = ref(false);  // true while polling refresh job
 
         // Flat form state mirroring AppSettings JSON shape
         const form = reactive({
@@ -314,32 +316,73 @@ createApp({
                 if (!res.ok) return;
                 const data = await res.json();
                 suggestAvailable.value = data.available ?? false;
+                if (data.last_refreshed) suggestGeneratedAt.value = data.last_refreshed;
             } catch (e) {
                 suggestAvailable.value = false;
             }
         }
 
-        async function fetchSuggestions() {
+        async function loadCachedSuggestions() {
             suggestsLoading.value = true;
             suggestError.value = '';
-            suggestions.value = [];
             try {
-                const res = await fetch('/api/suggestions', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ limit: 5 }),
-                });
+                const res = await fetch('/api/suggestions');
                 const data = await res.json();
                 if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
                 suggestions.value = data.suggestions || [];
-                if (suggestions.value.length === 0) {
-                    suggestError.value = 'no suggestions returned — the LLM had nothing to add';
-                }
+                if (data.generated_at) suggestGeneratedAt.value = data.generated_at;
             } catch (err) {
-                suggestError.value = `suggestions failed: ${err.message}`;
-                console.error('fetchSuggestions:', err);
+                suggestError.value = `could not load suggestions: ${err.message}`;
+                console.error('loadCachedSuggestions:', err);
             } finally {
                 suggestsLoading.value = false;
+            }
+        }
+
+        async function refreshSuggestions() {
+            if (suggestRefreshing.value) return;
+            suggestRefreshing.value = true;
+            suggestError.value = '';
+            try {
+                const res = await fetch('/api/suggestions/refresh', { method: 'POST' });
+                if (res.status === 409) {
+                    suggestError.value = 'refresh already running — check back in a moment';
+                    return;
+                }
+                if (res.status === 503) {
+                    suggestError.value = 'AI provider unavailable';
+                    return;
+                }
+                if (!res.ok) {
+                    const d = await res.json().catch(() => ({}));
+                    suggestError.value = `refresh failed: ${d.error || 'HTTP ' + res.status}`;
+                    return;
+                }
+                const { job_id } = await res.json();
+                // Poll until terminal state.
+                let done = false;
+                while (!done) {
+                    await new Promise(r => setTimeout(r, 3000));
+                    try {
+                        const jr = await fetch(`/api/jobs/${job_id}`);
+                        if (!jr.ok) break;
+                        const job = await jr.json();
+                        if (job.status === 'completed') {
+                            done = true;
+                            await loadCachedSuggestions();
+                        } else if (job.status === 'failed' || job.status === 'cancelled') {
+                            done = true;
+                            suggestError.value = `refresh ${job.status}${ job.error ? ': ' + job.error : '' }`;
+                        }
+                    } catch (e) {
+                        break;
+                    }
+                }
+            } catch (err) {
+                suggestError.value = `refresh failed: ${err.message}`;
+                console.error('refreshSuggestions:', err);
+            } finally {
+                suggestRefreshing.value = false;
             }
         }
 
@@ -388,6 +431,7 @@ createApp({
             if (newSection === 'shows') {
                 ensureShowsEditor();
                 loadSuggestStatus();
+                loadCachedSuggestions();
             }
         });
 
@@ -415,7 +459,10 @@ createApp({
             suggestions,
             suggestsLoading,
             suggestError,
-            fetchSuggestions,
+            suggestGeneratedAt,
+            suggestRefreshing,
+            loadCachedSuggestions,
+            refreshSuggestions,
             addSuggestion,
         };
     }

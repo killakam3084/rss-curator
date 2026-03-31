@@ -324,19 +324,26 @@
                     <!-- AI Suggestions panel -->
                     <div class="border border-gray-700 rounded p-4 space-y-3">
                         <div class="flex items-center justify-between">
-                            <span class="text-xs font-mono text-gray-400 uppercase tracking-wider">AI suggestions</span>
+                            <div class="flex items-center gap-3">
+                                <span class="text-xs font-mono text-gray-400 uppercase tracking-wider">AI suggestions</span>
+                                <span v-if="suggestGeneratedAt" class="text-xs font-mono text-gray-600 italic">
+                                    generated {{ new Date(suggestGeneratedAt).toLocaleString() }}
+                                </span>
+                            </div>
                             <template v-if="suggestAvailable">
                                 <button
-                                    @click="fetchSuggestions"
-                                    :disabled="suggestsLoading"
+                                    @click="refreshSuggestions"
+                                    :disabled="suggestsLoading || suggestRefreshing"
                                     class="flex items-center gap-2 px-3 py-1.5 rounded border border-gray-600 text-gray-300 hover:text-white hover:border-gray-400 font-mono text-xs transition-colors disabled:opacity-50 disabled:cursor-wait"
                                 >
-                                    <!-- Spinner while loading -->
-                                    <svg v-if="suggestsLoading" class="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
+                                    <!-- Spinner while loading or refreshing -->
+                                    <svg v-if="suggestsLoading || suggestRefreshing" class="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
                                         <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
                                         <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/>
                                     </svg>
-                                    {{ suggestsLoading ? 'thinking…' : 'suggest shows' }}
+                                    <template v-if="suggestsLoading || suggestRefreshing">thinking…</template>
+                                    <template v-else-if="suggestGeneratedAt">refresh suggestions</template>
+                                    <template v-else>generate suggestions</template>
                                 </button>
                             </template>
                             <template v-else>
@@ -346,6 +353,12 @@
 
                         <!-- Error -->
                         <div v-if="suggestError" class="text-xs font-mono text-yellow-500">{{ suggestError }}</div>
+
+                        <!-- Cold-cache placeholder -->
+                        <div v-if="!suggestsLoading && !suggestRefreshing && suggestions.length === 0 && !suggestError && suggestAvailable && !suggestGeneratedAt"
+                            class="text-xs font-mono text-gray-600 italic">
+                            Suggestions are generated automatically each day — click generate to run now.
+                        </div>
 
                         <!-- Suggestion rows -->
                         <div v-if="suggestions.length > 0" class="space-y-2">
