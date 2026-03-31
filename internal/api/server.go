@@ -172,16 +172,19 @@ func torrentToResponse(t models.StagedTorrent) TorrentResponse {
 	}
 }
 
-// SuggestionsResponse is the shape returned by POST /api/suggestions.
+// SuggestionsResponse is the shape returned by GET /api/suggestions.
 type SuggestionsResponse struct {
 	Suggestions []suggester.Suggestion `json:"suggestions"`
+	GeneratedAt *time.Time             `json:"generated_at,omitempty"`
 	Status      string                 `json:"status"`
 }
 
 // SuggestionsStatusResponse is the shape returned by GET /api/suggestions/status.
 type SuggestionsStatusResponse struct {
-	Available  bool `json:"available"`
-	ShowsCount int  `json:"shows_count"`
+	Available     bool       `json:"available"`
+	ShowsCount    int        `json:"shows_count"`
+	CachedCount   int        `json:"cached_count"`
+	LastRefreshed *time.Time `json:"last_refreshed,omitempty"`
 }
 
 type SchedulerRunResponse struct {
@@ -313,6 +316,7 @@ func (s *Server) Start() error {
 	mux.HandleFunc("/api/logs", s.handleLogs)
 	mux.HandleFunc("/api/logs/stream", s.handleLogsStream)
 	mux.HandleFunc("/api/suggestions/status", s.handleSuggestionsStatus)
+	mux.HandleFunc("/api/suggestions/refresh", s.handleSuggestionsRefresh)
 	mux.HandleFunc("/api/suggestions", s.handleSuggestions)
 	mux.HandleFunc("/api/jobs/stream", s.handleJobsStream)
 	mux.HandleFunc("/api/jobs/", s.handleJob)
@@ -1400,15 +1404,84 @@ func (s *Server) handleSuggestionsStatus(w http.ResponseWriter, r *http.Request)
 	if s.suggester != nil {
 		showsCount = s.suggester.ShowsCount()
 	}
-	json.NewEncoder(w).Encode(SuggestionsStatusResponse{
+	resp := SuggestionsStatusResponse{
 		Available:  available,
 		ShowsCount: showsCount,
-	})
+	}
+	// Attach cache stats when available.
+	if raw, generatedAt, err := s.store.GetCachedSuggestions(); err == nil && raw != nil {
+		var cached []suggester.Suggestion
+		if json.Unmarshal(raw, &cached) == nil {
+			resp.CachedCount = len(cached)
+		}
+		t := generatedAt
+		resp.LastRefreshed = &t
+	}
+	json.NewEncoder(w).Encode(resp)
 }
 
-// handleSuggestions calls the Suggester engine to produce watchlist
-// recommendations. POST /api/suggestions with optional body {"limit": N}.
+// handleSuggestions returns cached watchlist recommendations. GET /api/suggestions.
+// Applies a live watchlist dedup pass so shows added since the last refresh
+// are silently excluded from results.
 func (s *Server) handleSuggestions(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+
+	raw, generatedAt, err := s.store.GetCachedSuggestions()
+	if err != nil {
+		s.logger.Error("handleSuggestions: cache read failed", zap.Error(err))
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(SuggestionsResponse{Suggestions: []suggester.Suggestion{}, Status: "error"})
+		return
+	}
+
+	var suggestions []suggester.Suggestion
+	if raw != nil {
+		if err := json.Unmarshal(raw, &suggestions); err != nil {
+			s.logger.Warn("handleSuggestions: corrupt cache, returning empty", zap.Error(err))
+			suggestions = nil
+		}
+	}
+	if suggestions == nil {
+		suggestions = []suggester.Suggestion{}
+	}
+
+	// Re-filter against the current watchlist in case shows were added after
+	// the last refresh — cheap in-memory pass, no LLM involved.
+	if s.matcher != nil {
+		if cfg := s.matcher.ShowsConfig(); cfg != nil {
+			existing := make(map[string]bool, len(cfg.Shows))
+			for _, show := range cfg.Shows {
+				existing[strings.ToLower(show.Name)] = true
+			}
+			filtered := suggestions[:0]
+			for _, sg := range suggestions {
+				if !existing[strings.ToLower(sg.ShowName)] {
+					filtered = append(filtered, sg)
+				}
+			}
+			suggestions = filtered
+		}
+	}
+
+	resp := SuggestionsResponse{
+		Suggestions: suggestions,
+		Status:      "ok",
+	}
+	if !generatedAt.IsZero() {
+		t := generatedAt
+		resp.GeneratedAt = &t
+	}
+	json.NewEncoder(w).Encode(resp)
+}
+
+// handleSuggestionsRefresh submits a background suggestion refresh job to the
+// queue. POST /api/suggestions/refresh. Returns 202 + job_id on success,
+// 409 if a refresh is already queued/running, 503 if AI is unavailable.
+func (s *Server) handleSuggestionsRefresh(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
@@ -1417,39 +1490,64 @@ func (s *Server) handleSuggestions(w http.ResponseWriter, r *http.Request) {
 
 	if s.suggester == nil || !s.suggester.Available() {
 		w.WriteHeader(http.StatusServiceUnavailable)
-		json.NewEncoder(w).Encode(SuggestionsResponse{
-			Suggestions: []suggester.Suggestion{},
-			Status:      "unavailable",
-		})
+		json.NewEncoder(w).Encode(ErrorResponse{Error: "AI provider unavailable"})
+		return
+	}
+	if s.queue == nil {
+		w.WriteHeader(http.StatusServiceUnavailable)
+		json.NewEncoder(w).Encode(ErrorResponse{Error: "job queue unavailable"})
 		return
 	}
 
-	// Decode optional request body for limit override.
-	limit := 5
-	if r.ContentLength > 0 {
-		var req struct {
-			Limit int `json:"limit"`
-		}
-		if err := json.NewDecoder(r.Body).Decode(&req); err == nil && req.Limit > 0 {
-			limit = req.Limit
-		}
-	}
-
-	suggestions, err := s.suggester.Suggest(r.Context(), limit)
+	jobID, err := s.store.CreateJob("suggest_refresh")
 	if err != nil {
-		s.logger.Error("handleSuggestions: Suggest failed", zap.Error(err))
+		s.logger.Error("handleSuggestionsRefresh: CreateJob failed", zap.Error(err))
 		w.WriteHeader(http.StatusInternalServerError)
-		json.NewEncoder(w).Encode(SuggestionsResponse{
-			Suggestions: []suggester.Suggestion{},
-			Status:      "error",
+		json.NewEncoder(w).Encode(ErrorResponse{Error: err.Error()})
+		return
+	}
+	now := time.Now()
+	if s.logBuffer != nil {
+		s.logBuffer.EmitJobEvent(models.JobRecord{
+			ID: jobID, Type: "suggest_refresh", Status: "running", StartedAt: now,
 		})
+	}
+
+	sg := s.suggester
+	err = s.queue.Submit("suggest_refresh", false, func(ctx context.Context) {
+		refreshErr := sg.RefreshCache(ctx)
+		if refreshErr != nil {
+			s.logger.Error("suggest_refresh job failed", zap.Error(refreshErr))
+			_ = s.store.FailJob(jobID, refreshErr.Error())
+			if s.logBuffer != nil {
+				failedAt := time.Now()
+				s.logBuffer.EmitJobEvent(models.JobRecord{
+					ID: jobID, Type: "suggest_refresh", Status: "failed",
+					StartedAt: now, CompletedAt: &failedAt,
+					Summary: models.JobSummary{ErrorMessage: refreshErr.Error()},
+				})
+			}
+			return
+		}
+		_ = s.store.CompleteJob(jobID, models.JobSummary{})
+		if s.logBuffer != nil {
+			completedAt := time.Now()
+			s.logBuffer.EmitJobEvent(models.JobRecord{
+				ID: jobID, Type: "suggest_refresh", Status: "completed",
+				StartedAt: now, CompletedAt: &completedAt,
+			})
+		}
+	})
+	if err != nil {
+		// Already queued/running — undo the job record.
+		_ = s.store.FailJob(jobID, err.Error())
+		w.WriteHeader(http.StatusConflict)
+		json.NewEncoder(w).Encode(ErrorResponse{Error: err.Error()})
 		return
 	}
 
-	json.NewEncoder(w).Encode(SuggestionsResponse{
-		Suggestions: suggestions,
-		Status:      "ok",
-	})
+	w.WriteHeader(http.StatusAccepted)
+	json.NewEncoder(w).Encode(JobAcceptedResponse{JobID: jobID, Status: "queued"})
 }
 
 // handleAlerts returns buffered alert records as JSON (newest-last chronological order).
