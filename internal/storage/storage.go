@@ -55,6 +55,14 @@ type Store interface {
 	// in approved torrents (mode query). Returns empty strings when no approved
 	// torrents exist yet.
 	GetApprovalQualityProfile() (quality, codec string, err error)
+
+	// GetCachedSuggestions returns the raw JSON blob and generation timestamp
+	// from the last successful suggest_refresh run. Returns nil data and a zero
+	// time when the cache is cold (no row yet).
+	GetCachedSuggestions() (data json.RawMessage, generatedAt time.Time, err error)
+	// SetCachedSuggestions stores a fresh JSON blob from a suggest_refresh run,
+	// replacing any previously cached data (single-row upsert).
+	SetCachedSuggestions(data json.RawMessage) error
 }
 
 // Storage handles persistent storage of staged torrents
@@ -159,6 +167,13 @@ func (s *Storage) migrate() error {
 			key TEXT PRIMARY KEY,
 			value TEXT NOT NULL,
 			updated_at DATETIME NOT NULL
+		)`,
+		// Migration 8: Suggestion cache — single-row table storing the most
+		// recent background-generated suggestions as a JSON blob.
+		`CREATE TABLE IF NOT EXISTS suggestion_cache (
+			id INTEGER PRIMARY KEY CHECK (id = 1),
+			suggestions_json TEXT NOT NULL DEFAULT '[]',
+			generated_at DATETIME NOT NULL
 		)`,
 	}
 
@@ -691,6 +706,31 @@ func (s *Storage) GetApprovalQualityProfile() (quality, codec string, err error)
 		codec = c.String
 	}
 	return quality, codec, nil
+}
+
+// GetCachedSuggestions returns the raw suggestion JSON and its generation
+// timestamp. Returns nil + zero time (no error) when the cache is cold.
+func (s *Storage) GetCachedSuggestions() (json.RawMessage, time.Time, error) {
+	var raw string
+	var generatedAt time.Time
+	err := s.db.QueryRow(`SELECT suggestions_json, generated_at FROM suggestion_cache WHERE id = 1`).Scan(&raw, &generatedAt)
+	if err == sql.ErrNoRows {
+		return nil, time.Time{}, nil
+	}
+	if err != nil {
+		return nil, time.Time{}, err
+	}
+	return json.RawMessage(raw), generatedAt, nil
+}
+
+// SetCachedSuggestions upserts the suggestion JSON blob with the current
+// timestamp. Uses INSERT OR REPLACE so only one row ever exists.
+func (s *Storage) SetCachedSuggestions(data json.RawMessage) error {
+	_, err := s.db.Exec(
+		`INSERT OR REPLACE INTO suggestion_cache (id, suggestions_json, generated_at) VALUES (1, ?, ?)`,
+		string(data), time.Now().UTC(),
+	)
+	return err
 }
 
 // GetWindowStats returns activity counts for a rolling window of the given hours,

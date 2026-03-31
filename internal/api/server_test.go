@@ -183,6 +183,10 @@ func (m *mockStorage) GetAllSettings() (map[string]string, error) {
 	return map[string]string{}, nil
 }
 func (m *mockStorage) GetApprovalQualityProfile() (string, string, error) { return "", "", nil }
+func (m *mockStorage) GetCachedSuggestions() (json.RawMessage, time.Time, error) {
+	return nil, time.Time{}, nil
+}
+func (m *mockStorage) SetCachedSuggestions(data json.RawMessage) error { return nil }
 
 // setupTestServer creates a test server instance
 func setupTestServer(t *testing.T) (*Server, *mockStorage) {
