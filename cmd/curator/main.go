@@ -730,7 +730,41 @@ func cmdServe(cfg models.Config, store *storage.Storage, buf *logbuffer.Buffer, 
 			ops.RunFeedCheck(ctx, feedCheckCfg, feedCheckDeps)
 		},
 	})
+
+	// suggest_refresh — daily background suggestion cache rebuild.
+	sg := suggester.New(store, suggestProvider, m, metaLookup)
+	suggestRefreshInterval := 24 * time.Hour
+	if v := os.Getenv("CURATOR_AI_SUGGESTER_REFRESH_HOURS"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			suggestRefreshInterval = time.Duration(n) * time.Hour
+		}
+	}
+	sched.Register(&scheduler.Task{
+		Type:     "suggest_refresh",
+		Interval: suggestRefreshInterval,
+		Enabled:  suggestProvider.Available(),
+		Fn: func(ctx context.Context) {
+			jobID, err := store.CreateJob("suggest_refresh")
+			if err != nil {
+				return
+			}
+			if err := sg.RefreshCache(ctx); err != nil {
+				_ = store.FailJob(jobID, err.Error())
+				return
+			}
+			_ = store.CompleteJob(jobID, models.JobSummary{})
+		},
+	})
+
 	sched.Start()
+
+	// Cold-cache fill: if suggestions cache is empty and provider is available,
+	// trigger an immediate background refresh so the UI has results on first open.
+	if suggestProvider.Available() {
+		if raw, _, _ := store.GetCachedSuggestions(); raw == nil {
+			sched.RunNow("suggest_refresh")
+		}
+	}
 
 	// Settings manager — load DB overrides on top of env-var defaults.
 	// Placed after feedCheckInterval so EnvDefaults can capture it.
@@ -760,7 +794,7 @@ func cmdServe(cfg models.Config, store *storage.Storage, buf *logbuffer.Buffer, 
 		WithQueue(q).
 		WithSettings(settingsMgr).
 		WithShowsPath(resolveShowsPath()).
-		WithSuggester(suggester.New(store, suggestProvider, m, metaLookup))
+		WithSuggester(sg)
 	fmt.Printf("[Serve] Starting API server on port %d\n", port)
 	if err := server.Start(); err != nil {
 		fmt.Fprintf(os.Stderr, "Error starting API server: %v\n", err)
