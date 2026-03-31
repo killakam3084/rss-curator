@@ -6,6 +6,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+## [0.34.0] - 2026-03-31
+
+### Added
+- **Background suggestion cache** — suggestions are generated once daily by a new `suggest_refresh` scheduler task and stored in SQLite, replacing the previous blocking on-demand LLM call (~90 s) with an instant cache read.
+  - `CURATOR_AI_SUGGESTER_REFRESH_HOURS` (default `24`) controls refresh cadence.
+  - `CURATOR_AI_SUGGESTER_CACHE_LIMIT` (default `10`) controls how many results are cached (up from the previous on-demand limit of 5).
+  - On startup, if the provider is available and the cache is empty, a refresh is triggered immediately so the UI has results on first open.
+- **`GET /api/suggestions`** — reads from the suggestion cache, applies live watchlist dedup, and returns results with a `generated_at` timestamp. Returns an empty array on cold cache (no blocking).
+- **`POST /api/suggestions/refresh`** — manually triggers a `suggest_refresh` job; returns `202` with a `job_id` for polling, `409` if a refresh is already running, or `503` if the AI provider is unavailable.
+- **`GET /api/suggestions/status`** extended — now includes `cached_count` and `last_refreshed` alongside the existing `available` / `shows_count` fields.
+- **UI refresh button** — the Settings → Shows → AI suggestions panel now loads instantly from cache on tab open; the button is labelled "generate suggestions" on cold cache and "refresh suggestions" once cached; a spinner and job poll (3 s interval) give live feedback while the background LLM call runs.
+- **Generated-at badge** — the suggestions panel header shows the timestamp of the cached results.
+- **Cold-cache placeholder** — when the provider is available but no cache exists yet, the panel shows an explanatory message instead of a blank space.
+
+
 ## [0.33.5] - 2026-03-30
 
 ### Fixed
