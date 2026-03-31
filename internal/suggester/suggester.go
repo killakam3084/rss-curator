@@ -90,6 +90,7 @@ type Suggester struct {
 	matcher    *matcher.Matcher
 	metaLookup *metadata.Lookup
 	timeoutSec int
+	cacheLimit int // how many suggestions to generate in background refresh
 }
 
 // New creates a Suggester. All fields are required; nil values are tolerated
@@ -114,13 +115,40 @@ func New(store storage.Store, provider ai.Provider, m *matcher.Matcher, lu *meta
 		}
 	}
 
+	// cacheLimit: CURATOR_AI_SUGGESTER_CACHE_LIMIT > 10.
+	// Background refreshes generate more results than on-demand since inference
+	// cost is paid asynchronously.
+	cacheLimit := 10
+	if v := os.Getenv("CURATOR_AI_SUGGESTER_CACHE_LIMIT"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			cacheLimit = n
+		}
+	}
+
 	return &Suggester{
 		store:      store,
 		provider:   provider,
 		matcher:    m,
 		metaLookup: lu,
 		timeoutSec: timeout,
+		cacheLimit: cacheLimit,
 	}
+}
+
+// RefreshCache runs Suggest with the configured cache limit, marshals the
+// results, and persists them via store.SetCachedSuggestions. This is called
+// by the background scheduler task and by the manual refresh API endpoint.
+// The context should carry the caller's deadline/cancellation.
+func (sg *Suggester) RefreshCache(ctx context.Context) error {
+	suggestions, err := sg.Suggest(ctx, sg.cacheLimit)
+	if err != nil {
+		return fmt.Errorf("suggester: RefreshCache: %w", err)
+	}
+	data, err := json.Marshal(suggestions)
+	if err != nil {
+		return fmt.Errorf("suggester: RefreshCache marshal: %w", err)
+	}
+	return sg.store.SetCachedSuggestions(data)
 }
 
 // Available reports whether the underlying AI provider is reachable.
