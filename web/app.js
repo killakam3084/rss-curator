@@ -79,6 +79,8 @@ const app = createApp({
         const sortDir   = ref('desc');      // 'asc' | 'desc'
         const pageSize  = ref(25);          // items per page; 0 = all
         const currentPage = ref(1);
+        const searchQuery = ref('');
+        let   searchDebounceTimer = null;
 
         // Sort field display labels
         const sortFields = [
@@ -202,7 +204,8 @@ const app = createApp({
         const fetchTorrents = async (status = 'pending') => {
             loading.value = true;
             try {
-                const response = await fetch(`/api/torrents?status=${status}`);
+                const q = searchQuery.value ? `&q=${encodeURIComponent(searchQuery.value)}` : '';
+                const response = await fetch(`/api/torrents?status=${status}${q}`);
                 const data = await response.json();
                 torrents.value = data.torrents || [];
             } catch (error) {
@@ -215,10 +218,11 @@ const app = createApp({
 
         const fetchAllTorrents = async () => {
             try {
+                const q = searchQuery.value ? `&q=${encodeURIComponent(searchQuery.value)}` : '';
                 const [pending, accepted, rejected] = await Promise.all([
-                    fetch('/api/torrents?status=pending').then(r => r.json()),
-                    fetch('/api/torrents?status=accepted').then(r => r.json()),
-                    fetch('/api/torrents?status=rejected').then(r => r.json())
+                    fetch(`/api/torrents?status=pending${q}`).then(r => r.json()),
+                    fetch(`/api/torrents?status=accepted${q}`).then(r => r.json()),
+                    fetch(`/api/torrents?status=rejected${q}`).then(r => r.json())
                 ]);
                 torrents.value = [
                     ...(pending.torrents || []),
@@ -788,6 +792,13 @@ const app = createApp({
         // Reset to page 1 when sort changes
         watch([sortField, sortDir, pageSize], () => { currentPage.value = 1; });
 
+        // Debounced search: re-fetch all on query change
+        watch(searchQuery, () => {
+            clearTimeout(searchDebounceTimer);
+            currentPage.value = 1;
+            searchDebounceTimer = setTimeout(() => fetchAllTorrents(), 300);
+        });
+
         // Load initial data
         onMounted(() => {
             // Apply dark mode class immediately based on initial value
@@ -1054,6 +1065,7 @@ const app = createApp({
             pageSize,
             pageSizeOptions,
             currentPage,
+            searchQuery,
             fetchTorrents,
             fetchAllTorrents,
             fetchActivities,

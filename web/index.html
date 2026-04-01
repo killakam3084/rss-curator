@@ -381,6 +381,19 @@
 
                     <!-- Torrents Grid -->
                     <div v-else>
+                        <!-- Search bar -->
+                        <div class="flex items-center gap-2 mb-3 px-1">
+                            <svg class="w-3.5 h-3.5 text-gray-500 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                                <circle cx="11" cy="11" r="8"/><path stroke-linecap="round" stroke-linejoin="round" d="m21 21-4.35-4.35"/>
+                            </svg>
+                            <input
+                                v-model="searchQuery"
+                                type="text"
+                                placeholder="search titles…"
+                                class="flex-1 bg-transparent border-b border-gray-700 focus:border-gray-500 text-sm font-mono text-gray-200 placeholder-gray-600 outline-none py-0.5 transition-colors"
+                            />
+                            <button v-if="searchQuery" @click="searchQuery = ''" class="text-gray-600 hover:text-gray-400 font-mono text-xs transition-colors">×</button>
+                        </div>
                         <!-- Sort bar -->
                         <div class="flex flex-wrap items-center gap-2 mb-3 px-1">
                             <span class="text-xs font-mono text-gray-600 uppercase shrink-0">sort</span>

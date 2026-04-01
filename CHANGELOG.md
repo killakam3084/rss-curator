@@ -6,6 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+## [0.35.0] - 2026-04-01
+
+### Added
+- **Torrent title search** — `GET /api/torrents?q=<term>` filters results by title using SQLite `json_extract(feed_item, '$.title') LIKE ?`; match is case-insensitive. A debounced search input (300 ms) above the sort bar filters the active tab in real time; a clear button (×) resets the query instantly. The `?q=` parameter is the foundation for future search expansion (match reason, AI reason, show name).
+
 ## [0.34.1] - 2026-03-31
 
 ### Changed
