@@ -389,7 +389,7 @@ func (s *Server) handleList(w http.ResponseWriter, r *http.Request) {
 		status = "pending"
 	}
 
-	torrents, err := s.store.List(status)
+	torrents, err := s.store.List(status, "")
 	if err != nil {
 		s.logger.Error("failed to list torrents", zap.String("status", status), zap.Error(err))
 		w.Header().Set("Content-Type", "application/json")

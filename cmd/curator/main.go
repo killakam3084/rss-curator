@@ -155,7 +155,7 @@ func cmdList(store *storage.Storage) {
 		status = os.Args[2]
 	}
 
-	torrents, err := store.List(status)
+	torrents, err := store.List(status, "")
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error listing torrents: %v\n", err)
 		os.Exit(1)
@@ -258,7 +258,7 @@ func cmdReject(store *storage.Storage, args []string) {
 }
 
 func cmdReview(cfg models.Config, store *storage.Storage) {
-	torrents, err := store.List("pending")
+	torrents, err := store.List("pending", "")
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error listing torrents: %v\n", err)
 		os.Exit(1)

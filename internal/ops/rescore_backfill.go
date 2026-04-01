@@ -47,7 +47,7 @@ func RunRescoreBackfill(ctx context.Context, deps RescoreBackfillDeps) (models.J
 		})
 	}
 
-	all, err := deps.Store.List("")
+	all, err := deps.Store.List("", "")
 	if err != nil {
 		log.Error("rescore_backfill: could not list torrents", zap.Error(err))
 		if jobErr == nil {

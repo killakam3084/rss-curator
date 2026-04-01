@@ -143,7 +143,7 @@ func TestListTorrents(t *testing.T) {
 	torrent2.Status = "accepted"
 	store.Add(torrent2)
 
-	pending, err := store.List("pending")
+	pending, err := store.List("pending", "")
 	if err != nil {
 		t.Fatalf("failed to list pending: %v", err)
 	}

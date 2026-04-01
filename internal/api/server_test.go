@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -27,12 +28,16 @@ func (m *mockStorage) Get(id int) (*models.StagedTorrent, error) {
 }
 
 // List returns torrents by status
-func (m *mockStorage) List(status string) ([]models.StagedTorrent, error) {
+func (m *mockStorage) List(status, query string) ([]models.StagedTorrent, error) {
 	var result []models.StagedTorrent
 	for _, t := range m.torrents {
-		if status == "" || t.Status == status {
-			result = append(result, *t)
+		if status != "" && t.Status != status {
+			continue
 		}
+		if query != "" && !strings.Contains(strings.ToLower(t.FeedItem.Title), strings.ToLower(query)) {
+			continue
+		}
+		result = append(result, *t)
 	}
 	return result, nil
 }

@@ -24,7 +24,7 @@ type WindowStats struct {
 // Store defines the interface for storage operations
 type Store interface {
 	Get(id int) (*models.StagedTorrent, error)
-	List(status string) ([]models.StagedTorrent, error)
+	List(status, query string) ([]models.StagedTorrent, error)
 	Add(torrent models.StagedTorrent) error
 	UpdateStatus(id int, status string) error
 	LogActivity(torrentID int, title, action, matchReason string) error
@@ -204,24 +204,40 @@ func (s *Storage) Add(torrent models.StagedTorrent) error {
 	return err
 }
 
-// List returns torrents filtered by status
-func (s *Storage) List(status string) ([]models.StagedTorrent, error) {
+// List returns torrents optionally filtered by status and/or a title substring.
+// An empty status matches all statuses; an empty query matches all titles.
+func (s *Storage) List(status, query string) ([]models.StagedTorrent, error) {
 	var rows *sql.Rows
 	var err error
 
-	if status == "" {
+	switch {
+	case status == "" && query == "":
 		rows, err = s.db.Query(`
 			SELECT id, link, feed_item, match_reason, staged_at, status, approved_at, ai_score, ai_reason, ai_scored, match_confidence, match_confidence_reason
 			FROM staged_torrents
 			ORDER BY staged_at DESC
 		`)
-	} else {
+	case status == "" && query != "":
+		rows, err = s.db.Query(`
+			SELECT id, link, feed_item, match_reason, staged_at, status, approved_at, ai_score, ai_reason, ai_scored, match_confidence, match_confidence_reason
+			FROM staged_torrents
+			WHERE json_extract(feed_item, '$.title') LIKE ?
+			ORDER BY staged_at DESC
+		`, "%"+query+"%")
+	case status != "" && query == "":
 		rows, err = s.db.Query(`
 			SELECT id, link, feed_item, match_reason, staged_at, status, approved_at, ai_score, ai_reason, ai_scored, match_confidence, match_confidence_reason
 			FROM staged_torrents
 			WHERE status = ?
 			ORDER BY staged_at DESC
 		`, status)
+	default:
+		rows, err = s.db.Query(`
+			SELECT id, link, feed_item, match_reason, staged_at, status, approved_at, ai_score, ai_reason, ai_scored, match_confidence, match_confidence_reason
+			FROM staged_torrents
+			WHERE status = ? AND json_extract(feed_item, '$.title') LIKE ?
+			ORDER BY staged_at DESC
+		`, status, "%"+query+"%")
 	}
 
 	if err != nil {
