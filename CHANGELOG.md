@@ -6,6 +6,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+## [0.34.1] - 2026-03-31
+
+### Changed
+- **`rescore_backfill` is now a first-class scheduler task** — the backfill logic has been extracted from `RunFeedCheck` into its own `RunRescoreBackfill` op, registered as a proper `rescore_backfill` scheduler task alongside `feed_check` and `suggest_refresh`. This aligns the backfill with the broader async-task architecture and makes the in-app toggle (`Scheduler → Rescore backfill`) actually work.
+- The backfill runs independently on the feed-check cadence by default and is tunable via `CURATOR_AI_BACKFILL_INTERVAL_SECS`. The existing multi-select rescore in the UI remains the on-demand path.
+- The DB-backed enabled state is now applied on startup (provider-gated initially; set to the saved preference after settings load).
+
+### Fixed
+- `SetEnabled("rescore_backfill", ...)` in the settings save handler is now wired to an actual registered task, so toggling the switch in Settings takes effect on the next scheduled tick without restarting.
+
+
 ## [0.34.0] - 2026-03-31
 
 ### Added

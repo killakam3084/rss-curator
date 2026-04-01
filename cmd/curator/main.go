@@ -710,6 +710,14 @@ func cmdServe(cfg models.Config, store *storage.Storage, buf *logbuffer.Buffer, 
 			feedCheckInterval = time.Duration(n) * time.Second
 		}
 	}
+	// rescore_backfill runs on its own cadence; defaults to the feed-check
+	// interval but can be tuned independently.
+	backfillInterval := feedCheckInterval
+	if v := os.Getenv("CURATOR_AI_BACKFILL_INTERVAL_SECS"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			backfillInterval = time.Duration(n) * time.Second
+		}
+	}
 	feedCheckCfg := ops.FeedCheckConfig{
 		FeedURLs: cfg.FeedURLs,
 		Matcher:  m,
@@ -756,6 +764,24 @@ func cmdServe(cfg models.Config, store *storage.Storage, buf *logbuffer.Buffer, 
 		},
 	})
 
+	// rescore_backfill — score items ingested while the AI provider was down.
+	// Initially gated on provider availability; the in-app toggle is applied
+	// after settingsMgr loads (see SetEnabled call below).
+	backfillDeps := ops.RescoreBackfillDeps{
+		Store:      store,
+		Scorer:     scorer,
+		ScorerProv: scorerProvider,
+		LogBuffer:  buf,
+	}
+	sched.Register(&scheduler.Task{
+		Type:     "rescore_backfill",
+		Interval: backfillInterval,
+		Enabled:  scorerProvider.Available(),
+		Fn: func(ctx context.Context) {
+			ops.RunRescoreBackfill(ctx, backfillDeps)
+		},
+	})
+
 	sched.Start()
 
 	// Cold-cache fill: if suggestions cache is empty and provider is available,
@@ -788,11 +814,11 @@ func cmdServe(cfg models.Config, store *storage.Storage, buf *logbuffer.Buffer, 
 	if err := settingsMgr.Load(envDefaults); err != nil {
 		fmt.Fprintf(os.Stderr, "[Serve] Warning: could not load settings from DB: %v\n", err)
 	}
-	// Wire live backfill toggle into the feed-check task; reads the current
-	// setting on every run so UI changes take effect without a restart.
-	feedCheckDeps.BackfillEnabled = func() bool {
-		return settingsMgr.Get().Scheduler.RescoreBackfillEnabled
-	}
+	// Apply the DB-backed enabled state for rescore_backfill now that settings
+	// are loaded. Subsequent changes via the UI call SetEnabled through the
+	// settings save handler in server.go.
+	sched.SetEnabled("rescore_backfill",
+		scorerProvider.Available() && settingsMgr.Get().Scheduler.RescoreBackfillEnabled)
 
 	server := api.NewServer(store, qb, port, buf, scorer, scorerProvider, m, enricher, auth).
 		WithScheduler(sched).

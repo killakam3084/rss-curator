@@ -29,9 +29,6 @@ type FeedCheckDeps struct {
 	ScorerProv ai.Provider       // may be nil
 	LogBuffer  *logbuffer.Buffer // may be nil
 	Logger     *zap.Logger       // may be nil; falls back to nop
-	// BackfillEnabled is called each run to check whether the rescore-backfill
-	// step should execute. When nil, backfill is enabled (preserves old behaviour).
-	BackfillEnabled func() bool
 }
 
 // RunFeedCheck executes a full feed-check cycle: parse all feeds, match items,
@@ -143,40 +140,6 @@ func RunFeedCheck(ctx context.Context, cfg FeedCheckConfig, deps FeedCheckDeps) 
 		}
 		if deps.LogBuffer != nil {
 			deps.LogBuffer.EmitJobEvent(finalJob)
-		}
-	}
-
-	// Backfill AI scores for any torrents staged before the provider was
-	// available (ai_scored=false). Covers all statuses.
-	backfillOn := deps.BackfillEnabled == nil || deps.BackfillEnabled()
-	if backfillOn && deps.ScorerProv != nil && deps.ScorerProv.Available() && deps.Scorer != nil {
-		backfillJobID, backfillJobErr := deps.Store.CreateJob("rescore_backfill")
-		if backfillJobErr != nil {
-			log.Warn("could not create rescore_backfill job", zap.Error(backfillJobErr))
-		}
-
-		all, err := deps.Store.List("")
-		if err == nil {
-			history, _ := deps.Store.GetActivity(50, 0, "")
-			backfilled := 0
-			for _, t := range all {
-				if t.AIScored {
-					continue
-				}
-				scored := deps.Scorer.ScoreAll([]models.StagedTorrent{t}, history)
-				if len(scored) > 0 {
-					if err := deps.Store.UpdateAIScore(t.ID, scored[0].AIScore, scored[0].AIReason, scored[0].MatchConfidence, scored[0].MatchConfidenceReason); err == nil {
-						backfilled++
-					}
-				}
-			}
-			summary.ItemsScored += backfilled
-			log.Info("rescore backfill complete", zap.Int("backfilled", backfilled))
-			if backfillJobErr == nil {
-				_ = deps.Store.CompleteJob(backfillJobID, models.JobSummary{ItemsScored: backfilled})
-			}
-		} else if backfillJobErr == nil {
-			_ = deps.Store.FailJob(backfillJobID, err.Error())
 		}
 	}
 

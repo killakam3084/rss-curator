@@ -1779,6 +1779,7 @@ func (s *Server) applySettings(cfg settings.AppSettings) {
 		s.scheduler.SetInterval("feed_check",
 			time.Duration(cfg.Scheduler.FeedCheckIntervalSecs)*time.Second)
 		s.scheduler.SetEnabled("feed_check", cfg.Scheduler.FeedCheckEnabled)
+		s.scheduler.SetEnabled("rescore_backfill", cfg.Scheduler.RescoreBackfillEnabled)
 	}
 	// Matcher default rules hot-reload
 	if s.matcher != nil {
