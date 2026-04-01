@@ -788,6 +788,11 @@ func cmdServe(cfg models.Config, store *storage.Storage, buf *logbuffer.Buffer, 
 	if err := settingsMgr.Load(envDefaults); err != nil {
 		fmt.Fprintf(os.Stderr, "[Serve] Warning: could not load settings from DB: %v\n", err)
 	}
+	// Wire live backfill toggle into the feed-check task; reads the current
+	// setting on every run so UI changes take effect without a restart.
+	feedCheckDeps.BackfillEnabled = func() bool {
+		return settingsMgr.Get().Scheduler.RescoreBackfillEnabled
+	}
 
 	server := api.NewServer(store, qb, port, buf, scorer, scorerProvider, m, enricher, auth).
 		WithScheduler(sched).

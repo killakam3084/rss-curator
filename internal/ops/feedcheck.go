@@ -29,6 +29,9 @@ type FeedCheckDeps struct {
 	ScorerProv ai.Provider       // may be nil
 	LogBuffer  *logbuffer.Buffer // may be nil
 	Logger     *zap.Logger       // may be nil; falls back to nop
+	// BackfillEnabled is called each run to check whether the rescore-backfill
+	// step should execute. When nil, backfill is enabled (preserves old behaviour).
+	BackfillEnabled func() bool
 }
 
 // RunFeedCheck executes a full feed-check cycle: parse all feeds, match items,
@@ -145,7 +148,8 @@ func RunFeedCheck(ctx context.Context, cfg FeedCheckConfig, deps FeedCheckDeps) 
 
 	// Backfill AI scores for any torrents staged before the provider was
 	// available (ai_scored=false). Covers all statuses.
-	if deps.ScorerProv != nil && deps.ScorerProv.Available() && deps.Scorer != nil {
+	backfillOn := deps.BackfillEnabled == nil || deps.BackfillEnabled()
+	if backfillOn && deps.ScorerProv != nil && deps.ScorerProv.Available() && deps.Scorer != nil {
 		backfillJobID, backfillJobErr := deps.Store.CreateJob("rescore_backfill")
 		if backfillJobErr != nil {
 			log.Warn("could not create rescore_backfill job", zap.Error(backfillJobErr))
