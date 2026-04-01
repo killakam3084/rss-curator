@@ -59,6 +59,8 @@ type Server struct {
 	settingsMgr      *settings.Manager    // may be nil
 	showsPath        string               // path to shows.json on disk; defaults to "shows.json"
 	suggester        *suggester.Suggester // may be nil if AI is disabled
+	feedCheckCfg     ops.FeedCheckConfig
+	feedCheckDeps    ops.FeedCheckDeps
 }
 
 type jobCancelState struct {
@@ -282,6 +284,14 @@ func (s *Server) WithSuggester(sg *suggester.Suggester) *Server {
 	return s
 }
 
+// WithFeedCheck stores the config and deps needed by the on-demand
+// POST /api/feed-check endpoint. Returns the server for call chaining.
+func (s *Server) WithFeedCheck(cfg ops.FeedCheckConfig, deps ops.FeedCheckDeps) *Server {
+	s.feedCheckCfg = cfg
+	s.feedCheckDeps = deps
+	return s
+}
+
 // WithShowsPath sets the filesystem path that GET/PUT /api/shows reads and
 // writes. If not called the server defaults to "shows.json" (current working
 // directory — the same location the binary looks for it at startup).
@@ -318,6 +328,7 @@ func (s *Server) Start() error {
 	mux.HandleFunc("/api/suggestions/status", s.handleSuggestionsStatus)
 	mux.HandleFunc("/api/suggestions/refresh", s.handleSuggestionsRefresh)
 	mux.HandleFunc("/api/suggestions", s.handleSuggestions)
+	mux.HandleFunc("/api/feed-check", s.handleFeedCheck)
 	mux.HandleFunc("/api/jobs/stream", s.handleJobsStream)
 	mux.HandleFunc("/api/jobs/", s.handleJob)
 	mux.HandleFunc("/api/jobs", s.handleJobs)
@@ -1537,6 +1548,57 @@ func (s *Server) handleSuggestionsRefresh(w http.ResponseWriter, r *http.Request
 				StartedAt: now, CompletedAt: &completedAt,
 			})
 		}
+	})
+	if err != nil {
+		// Already queued/running — undo the job record.
+		_ = s.store.FailJob(jobID, err.Error())
+		w.WriteHeader(http.StatusConflict)
+		json.NewEncoder(w).Encode(ErrorResponse{Error: err.Error()})
+		return
+	}
+
+	w.WriteHeader(http.StatusAccepted)
+	json.NewEncoder(w).Encode(JobAcceptedResponse{JobID: jobID, Status: "queued"})
+}
+
+// handleFeedCheck submits an on-demand feed-check job to the queue.
+// POST /api/feed-check. Returns 202 + job_id on success, 409 if a
+// feed_check is already queued/running, 503 if the job queue is unavailable.
+func (s *Server) handleFeedCheck(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+
+	if s.queue == nil {
+		w.WriteHeader(http.StatusServiceUnavailable)
+		json.NewEncoder(w).Encode(ErrorResponse{Error: "job queue unavailable"})
+		return
+	}
+
+	jobID, err := s.store.CreateJob("feed_check")
+	if err != nil {
+		s.logger.Error("handleFeedCheck: CreateJob failed", zap.Error(err))
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(ErrorResponse{Error: err.Error()})
+		return
+	}
+	now := time.Now()
+	if s.logBuffer != nil {
+		s.logBuffer.EmitJobEvent(models.JobRecord{
+			ID: jobID, Type: "feed_check", Status: "running", StartedAt: now,
+		})
+	}
+
+	cfg := s.feedCheckCfg
+	cfg.JobID = jobID
+	// Suppress backfill on on-demand runs — backfill is a scheduled concern.
+	deps := s.feedCheckDeps
+	deps.BackfillEnabled = func() bool { return false }
+
+	err = s.queue.Submit("feed_check", false, func(ctx context.Context) {
+		ops.RunFeedCheck(ctx, cfg, deps)
 	})
 	if err != nil {
 		// Already queued/running — undo the job record.

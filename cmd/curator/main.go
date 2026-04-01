@@ -820,12 +820,17 @@ func cmdServe(cfg models.Config, store *storage.Storage, buf *logbuffer.Buffer, 
 	sched.SetEnabled("rescore_backfill",
 		scorerProvider.Available() && settingsMgr.Get().Scheduler.RescoreBackfillEnabled)
 
+	// On-demand feed-check: backfill suppressed (BackfillEnabled stays nil in the
+	// stored deps — the handler overrides it to false before each submission).
+	onDemandFeedCheckDeps := feedCheckDeps
+
 	server := api.NewServer(store, qb, port, buf, scorer, scorerProvider, m, enricher, auth).
 		WithScheduler(sched).
 		WithQueue(q).
 		WithSettings(settingsMgr).
 		WithShowsPath(resolveShowsPath()).
-		WithSuggester(sg)
+		WithSuggester(sg).
+		WithFeedCheck(feedCheckCfg, onDemandFeedCheckDeps)
 	fmt.Printf("[Serve] Starting API server on port %d\n", port)
 	if err := server.Start(); err != nil {
 		fmt.Fprintf(os.Stderr, "Error starting API server: %v\n", err)

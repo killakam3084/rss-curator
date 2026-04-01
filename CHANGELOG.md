@@ -6,6 +6,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+## [0.36.0] - 2026-04-01
+
+### Added
+- **On-demand feed check** — `POST /api/feed-check` submits an immediate feed-check job to the queue and returns a `{job_id}` for polling, mirroring the `POST /api/suggestions/refresh` ergonomics. Returns `409` if a feed check is already running, `503` if the job queue is unavailable. The scheduled path is completely unchanged; this is an additional trigger, not a replacement.
+- `FeedCheckConfig.JobID` — when non-zero, `RunFeedCheck` skips self-allocating a job record and reuses the caller-provided ID (same pattern as `RunRescore`/`RunRematch`). This enables the handler to pre-create the record and return the ID before the job starts.
+- On-demand runs suppress the rescore-backfill step (`BackfillEnabled` forced to `false`) — backfill remains a scheduled concern only.
+- Settings → Scheduler panel: **"run feed check now"** button with spinner/disabled state that fires `POST /api/feed-check` and polls until the job reaches a terminal state.
+
 ## [0.35.0] - 2026-04-01
 
 ### Added

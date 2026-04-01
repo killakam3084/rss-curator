@@ -179,6 +179,25 @@
                         </div>
                     </div>
 
+                    <!-- On-demand run -->
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <div class="text-xs font-mono text-gray-400 uppercase tracking-widest">on-demand run</div>
+                            <div class="text-xs text-gray-600 font-mono mt-0.5">trigger a feed check immediately</div>
+                        </div>
+                        <button
+                            @click="runFeedCheck"
+                            :disabled="feedCheckRunning"
+                            class="flex items-center gap-2 px-3 py-1.5 rounded border border-gray-600 text-gray-300 hover:text-white hover:border-gray-400 font-mono text-xs transition-colors disabled:opacity-50 disabled:cursor-wait"
+                        >
+                            <svg v-if="feedCheckRunning" class="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
+                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+                                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/>
+                            </svg>
+                            {{ feedCheckRunning ? 'running…' : 'run feed check now' }}
+                        </button>
+                    </div>
+
                     <button @click="save('scheduler')" :disabled="saving" class="px-5 py-2 bg-curator-500 hover:bg-curator-600 text-gray-950 font-mono text-sm font-bold rounded transition-colors duration-150 disabled:opacity-50 disabled:cursor-not-allowed">
                         {{ saving ? 'saving…' : 'save scheduler' }}
                     </button>

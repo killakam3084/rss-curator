@@ -19,6 +19,10 @@ type FeedCheckConfig struct {
 	FeedURLs []string
 	Matcher  *matcher.Matcher
 	RawTTL   time.Duration // TTL for raw feed items; defaults to 24h when zero.
+	// JobID, when non-zero, indicates the caller has already created the job
+	// record and emitted the initial "running" SSE event. RunFeedCheck will
+	// use this ID rather than allocating a new one.
+	JobID int
 }
 
 // FeedCheckDeps holds the shared service dependencies for RunFeedCheck.
@@ -29,6 +33,9 @@ type FeedCheckDeps struct {
 	ScorerProv ai.Provider       // may be nil
 	LogBuffer  *logbuffer.Buffer // may be nil
 	Logger     *zap.Logger       // may be nil; falls back to nop
+	// BackfillEnabled is called each run to check whether the rescore-backfill
+	// step should execute. When nil, backfill is enabled (preserves old behaviour).
+	BackfillEnabled func() bool
 }
 
 // RunFeedCheck executes a full feed-check cycle: parse all feeds, match items,
@@ -44,18 +51,25 @@ func RunFeedCheck(ctx context.Context, cfg FeedCheckConfig, deps FeedCheckDeps) 
 		cfg.RawTTL = 24 * time.Hour
 	}
 
-	jobID, jobErr := deps.Store.CreateJob("feed_check")
+	var jobID int
+	var jobErr error
 	startedAt := time.Now()
-	if jobErr != nil {
-		log.Warn("could not create feed_check job", zap.Error(jobErr))
-	}
-	if deps.LogBuffer != nil && jobErr == nil {
-		deps.LogBuffer.EmitJobEvent(models.JobRecord{
-			ID:        jobID,
-			Type:      "feed_check",
-			Status:    "running",
-			StartedAt: startedAt,
-		})
+	if cfg.JobID > 0 {
+		// Caller pre-allocated the job record and already emitted the initial event.
+		jobID = cfg.JobID
+	} else {
+		jobID, jobErr = deps.Store.CreateJob("feed_check")
+		if jobErr != nil {
+			log.Warn("could not create feed_check job", zap.Error(jobErr))
+		}
+		if deps.LogBuffer != nil && jobErr == nil {
+			deps.LogBuffer.EmitJobEvent(models.JobRecord{
+				ID:        jobID,
+				Type:      "feed_check",
+				Status:    "running",
+				StartedAt: startedAt,
+			})
+		}
 	}
 
 	parser := feed.NewParser()
@@ -140,6 +154,40 @@ func RunFeedCheck(ctx context.Context, cfg FeedCheckConfig, deps FeedCheckDeps) 
 		}
 		if deps.LogBuffer != nil {
 			deps.LogBuffer.EmitJobEvent(finalJob)
+		}
+	}
+
+	// Backfill AI scores for any torrents staged before the provider was
+	// available (ai_scored=false). Covers all statuses.
+	backfillOn := deps.BackfillEnabled == nil || deps.BackfillEnabled()
+	if backfillOn && deps.ScorerProv != nil && deps.ScorerProv.Available() && deps.Scorer != nil {
+		backfillJobID, backfillJobErr := deps.Store.CreateJob("rescore_backfill")
+		if backfillJobErr != nil {
+			log.Warn("could not create rescore_backfill job", zap.Error(backfillJobErr))
+		}
+
+		all, err := deps.Store.List("", "")
+		if err == nil {
+			history, _ := deps.Store.GetActivity(50, 0, "")
+			backfilled := 0
+			for _, t := range all {
+				if t.AIScored {
+					continue
+				}
+				scored := deps.Scorer.ScoreAll([]models.StagedTorrent{t}, history)
+				if len(scored) > 0 {
+					if err := deps.Store.UpdateAIScore(t.ID, scored[0].AIScore, scored[0].AIReason, scored[0].MatchConfidence, scored[0].MatchConfidenceReason); err == nil {
+						backfilled++
+					}
+				}
+			}
+			summary.ItemsScored += backfilled
+			log.Info("rescore backfill complete", zap.Int("backfilled", backfilled))
+			if backfillJobErr == nil {
+				_ = deps.Store.CompleteJob(backfillJobID, models.JobSummary{ItemsScored: backfilled})
+			}
+		} else if backfillJobErr == nil {
+			_ = deps.Store.FailJob(backfillJobID, err.Error())
 		}
 	}
 

@@ -34,6 +34,7 @@ createApp({
         const suggestError       = ref('');
         const suggestGeneratedAt = ref(null);   // ISO string from cache
         const suggestRefreshing  = ref(false);  // true while polling refresh job
+        const feedCheckRunning   = ref(false);  // true while polling on-demand feed-check job
 
         // Flat form state mirroring AppSettings JSON shape
         const form = reactive({
@@ -386,6 +387,47 @@ createApp({
             }
         }
 
+        async function runFeedCheck() {
+            if (feedCheckRunning.value) return;
+            feedCheckRunning.value = true;
+            try {
+                const res = await fetch('/api/feed-check', { method: 'POST' });
+                if (res.status === 409) {
+                    // Already running — nothing to do, will finish on its own.
+                    return;
+                }
+                if (res.status === 503) {
+                    console.warn('runFeedCheck: job queue unavailable');
+                    return;
+                }
+                if (!res.ok) {
+                    const d = await res.json().catch(() => ({}));
+                    console.error('runFeedCheck failed:', d.error || 'HTTP ' + res.status);
+                    return;
+                }
+                const { job_id } = await res.json();
+                // Poll until terminal state.
+                let done = false;
+                while (!done) {
+                    await new Promise(r => setTimeout(r, 2000));
+                    try {
+                        const jr = await fetch(`/api/jobs/${job_id}`);
+                        if (!jr.ok) break;
+                        const job = await jr.json();
+                        if (job.status === 'completed' || job.status === 'failed' || job.status === 'cancelled') {
+                            done = true;
+                        }
+                    } catch (e) {
+                        break;
+                    }
+                }
+            } catch (err) {
+                console.error('runFeedCheck:', err);
+            } finally {
+                feedCheckRunning.value = false;
+            }
+        }
+
         function addSuggestion(suggestion) {
             if (!showsCM) return;
             const raw = showsCM.getValue();
@@ -405,6 +447,7 @@ createApp({
                 return;
             }
             cfg.shows.push(suggestion.suggested_rule);
+            cfg.shows.sort((a, b) => a.name.localeCompare(b.name));
             showsCM.setValue(JSON.stringify(cfg, null, 2));
             showsCM.refresh();
             // Remove from suggestions list so the row disappears after add
@@ -463,6 +506,8 @@ createApp({
             suggestRefreshing,
             loadCachedSuggestions,
             refreshSuggestions,
+            feedCheckRunning,
+            runFeedCheck,
             addSuggestion,
         };
     }
