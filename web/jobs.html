@@ -139,12 +139,7 @@
                             <th class="text-left px-4 py-3">status</th>
                             <th class="text-left px-4 py-3">started</th>
                             <th class="text-left px-4 py-3">duration</th>
-                            <th class="text-left px-4 py-3">progress</th>
-                            <th class="text-left px-4 py-3">found</th>
-                            <th class="text-left px-4 py-3">matched</th>
-                            <th class="text-left px-4 py-3">no longer</th>
-                            <th class="text-left px-4 py-3">scored</th>
-                            <th class="text-left px-4 py-3">queued</th>
+                            <th class="text-left px-4 py-3">output</th>
                             <th class="text-left px-4 py-3">actions</th>
                         </tr>
                     </thead>
@@ -185,14 +180,8 @@
                                 <td class="px-4 py-3 font-mono text-xs text-gray-400">{{ formatRelative(job.started_at) }}</td>
                                 <!-- duration -->
                                 <td class="px-4 py-3 font-mono text-xs text-gray-400">{{ duration(job) }}</td>
-                                <!-- progress -->
+                                <!-- output -->
                                 <td class="px-4 py-3 font-mono text-xs text-gray-400">{{ jobSummaryLine(job) }}</td>
-                                <!-- summary stats -->
-                                <td class="px-4 py-3 font-mono text-xs text-gray-300">{{ job.summary?.items_found ?? '—' }}</td>
-                                <td class="px-4 py-3 font-mono text-xs text-gray-300">{{ job.summary?.items_matched ?? '—' }}</td>
-                                <td class="px-4 py-3 font-mono text-xs text-gray-300">{{ job.type === 'rematch' ? (job.summary?.no_longer_matches ?? '—') : '—' }}</td>
-                                <td class="px-4 py-3 font-mono text-xs text-gray-300">{{ job.summary?.items_scored ?? '—' }}</td>
-                                <td class="px-4 py-3 font-mono text-xs text-gray-300">{{ job.summary?.items_queued ?? '—' }}</td>
                                 <td class="px-4 py-3">
                                     <button
                                         v-if="job.status === 'running'"
@@ -204,7 +193,7 @@
                             </tr>
                             <!-- Expanded row -->
                             <tr v-if="expandedIds.has(job.id)" class="bg-gray-950/50">
-                                <td colspan="12" class="px-8 py-4">
+                                <td colspan="7" class="px-8 py-4">
                                     <div class="font-mono text-xs text-gray-400 space-y-1">
                                         <p><span class="text-gray-600">id:</span> {{ job.id }}</p>
                                         <p><span class="text-gray-600">started_at:</span> {{ job.started_at }}</p>
@@ -323,19 +312,53 @@
                 if (!job) return '—';
                 if (job.status === 'running') return job.progress || 'running…';
                 if (job.status === 'failed') return job.summary?.error_message || 'failed';
+                const s = job.summary || {};
                 if (job.status === 'cancelled') {
                     const parts = [];
-                    if ((job.summary?.items_matched || 0) > 0) parts.push(`${job.summary.items_matched} matched`);
-                    if ((job.summary?.no_longer_matches || 0) > 0) parts.push(`${job.summary.no_longer_matches} no longer`);
-                    if ((job.summary?.items_scored || 0) > 0) parts.push(`${job.summary.items_scored} scored`);
+                    if (job.type === 'feed_check') {
+                        if ((s.items_found || 0) > 0) parts.push(`${s.items_found} found`);
+                        if ((s.items_matched || 0) > 0) parts.push(`${s.items_matched} matched`);
+                    } else if (job.type === 'rematch') {
+                        if ((s.items_matched || 0) > 0) parts.push(`${s.items_matched} kept`);
+                        const dropped = (s.items_found || 0) - (s.items_matched || 0);
+                        if (dropped > 0) parts.push(`${dropped} no longer`);
+                    } else if ((s.items_scored || 0) > 0) {
+                        parts.push(`${s.items_scored} scored`);
+                    }
                     return parts.length ? `cancelled — ${parts.join(' · ')}` : 'cancelled';
                 }
+                // completed
+                if (job.type === 'feed_check') {
+                    const parts = [];
+                    if ((s.items_found || 0) > 0) parts.push(`${s.items_found} found`);
+                    if ((s.items_matched || 0) > 0) parts.push(`${s.items_matched} matched`);
+                    if ((s.items_scored || 0) > 0) parts.push(`${s.items_scored} scored`);
+                    return parts.length ? parts.join(' · ') : 'no new items';
+                }
+                if (job.type === 'rescore') {
+                    return (s.items_scored || 0) > 0 ? `${s.items_scored} scored` : 'nothing to score';
+                }
+                if (job.type === 'rescore_backfill') {
+                    return (s.items_scored || 0) > 0 ? `${s.items_scored} scored` : 'up to date';
+                }
+                if (job.type === 'suggest_refresh') {
+                    return 'cache refreshed';
+                }
+                if (job.type === 'rematch') {
+                    const parts = [];
+                    const kept = s.items_matched || 0;
+                    const dropped = (s.items_found || 0) - kept;
+                    if (kept > 0) parts.push(`${kept} kept`);
+                    if (dropped > 0) parts.push(`${dropped} no longer`);
+                    if ((s.items_scored || 0) > 0) parts.push(`${s.items_scored} scored`);
+                    return parts.length ? parts.join(' · ') : 'completed';
+                }
+                // fallback
                 const parts = [];
-                if ((job.summary?.items_found || 0) > 0) parts.push(`${job.summary.items_found} found`);
-                if ((job.summary?.items_matched || 0) > 0) parts.push(`${job.summary.items_matched} matched`);
-                if ((job.summary?.no_longer_matches || 0) > 0) parts.push(`${job.summary.no_longer_matches} no longer`);
-                if ((job.summary?.items_scored || 0) > 0) parts.push(`${job.summary.items_scored} scored`);
-                if ((job.summary?.items_queued || 0) > 0) parts.push(`${job.summary.items_queued} queued`);
+                if ((s.items_found || 0) > 0) parts.push(`${s.items_found} found`);
+                if ((s.items_matched || 0) > 0) parts.push(`${s.items_matched} matched`);
+                if ((s.items_scored || 0) > 0) parts.push(`${s.items_scored} scored`);
+                if ((s.items_queued || 0) > 0) parts.push(`${s.items_queued} queued`);
                 return parts.length ? parts.join(' · ') : 'completed';
             };
 

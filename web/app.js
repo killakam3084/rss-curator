@@ -915,17 +915,53 @@ const app = createApp({
             if (!job) return '—';
             if (job.status === 'running') return job.progress || 'running…';
             if (job.status === 'failed') return job.summary?.error_message || 'failed';
+            const s = job.summary || {};
             if (job.status === 'cancelled') {
                 const parts = [];
-                if ((job.summary?.items_matched || 0) > 0) parts.push(`${job.summary.items_matched} matched`);
-                if ((job.summary?.items_scored || 0) > 0) parts.push(`${job.summary.items_scored} scored`);
+                if (job.type === 'feed_check') {
+                    if ((s.items_found || 0) > 0) parts.push(`${s.items_found} found`);
+                    if ((s.items_matched || 0) > 0) parts.push(`${s.items_matched} matched`);
+                } else if (job.type === 'rematch') {
+                    if ((s.items_matched || 0) > 0) parts.push(`${s.items_matched} kept`);
+                    const dropped = (s.items_found || 0) - (s.items_matched || 0);
+                    if (dropped > 0) parts.push(`${dropped} no longer`);
+                } else if ((s.items_scored || 0) > 0) {
+                    parts.push(`${s.items_scored} scored`);
+                }
                 return parts.length ? `cancelled — ${parts.join(' · ')}` : 'cancelled';
             }
+            // completed
+            if (job.type === 'feed_check') {
+                const parts = [];
+                if ((s.items_found || 0) > 0) parts.push(`${s.items_found} found`);
+                if ((s.items_matched || 0) > 0) parts.push(`${s.items_matched} matched`);
+                if ((s.items_scored || 0) > 0) parts.push(`${s.items_scored} scored`);
+                return parts.length ? parts.join(' · ') : 'no new items';
+            }
+            if (job.type === 'rescore') {
+                return (s.items_scored || 0) > 0 ? `${s.items_scored} scored` : 'nothing to score';
+            }
+            if (job.type === 'rescore_backfill') {
+                return (s.items_scored || 0) > 0 ? `${s.items_scored} scored` : 'up to date';
+            }
+            if (job.type === 'suggest_refresh') {
+                return 'cache refreshed';
+            }
+            if (job.type === 'rematch') {
+                const parts = [];
+                const kept = s.items_matched || 0;
+                const dropped = (s.items_found || 0) - kept;
+                if (kept > 0) parts.push(`${kept} kept`);
+                if (dropped > 0) parts.push(`${dropped} no longer`);
+                if ((s.items_scored || 0) > 0) parts.push(`${s.items_scored} scored`);
+                return parts.length ? parts.join(' · ') : 'completed';
+            }
+            // fallback
             const parts = [];
-            if ((job.summary?.items_found || 0) > 0) parts.push(`${job.summary.items_found} found`);
-            if ((job.summary?.items_matched || 0) > 0) parts.push(`${job.summary.items_matched} matched`);
-            if ((job.summary?.items_scored || 0) > 0) parts.push(`${job.summary.items_scored} scored`);
-            if ((job.summary?.items_queued || 0) > 0) parts.push(`${job.summary.items_queued} queued`);
+            if ((s.items_found || 0) > 0) parts.push(`${s.items_found} found`);
+            if ((s.items_matched || 0) > 0) parts.push(`${s.items_matched} matched`);
+            if ((s.items_scored || 0) > 0) parts.push(`${s.items_scored} scored`);
+            if ((s.items_queued || 0) > 0) parts.push(`${s.items_queued} queued`);
             return parts.length ? parts.join(' · ') : 'completed';
         };
 
