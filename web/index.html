@@ -115,11 +115,14 @@
                     >
                         <div class="flex items-center justify-between px-4 py-3 border-b border-gray-800">
                             <span class="text-xs font-mono font-bold text-curator-500 uppercase">recent jobs</span>
-                            <a href="/jobs" class="text-xs font-mono text-gray-400 hover:text-curator-500 transition-colors">Go to Jobs →</a>
+                            <div class="flex items-center gap-3">
+                                <button v-if="failedJobs.length > 0" @click="clearFailedJobs" class="text-xs font-mono text-red-500 hover:text-red-300 transition-colors">clear failed</button>
+                                <a href="/jobs" class="text-xs font-mono text-gray-400 hover:text-curator-500 transition-colors">Go to Jobs →</a>
+                            </div>
                         </div>
                         <div v-if="recentJobs.length === 0" class="px-4 py-6 text-center text-xs font-mono text-gray-600">no jobs recorded</div>
                         <ul v-else class="divide-y divide-gray-800 max-h-72 overflow-y-auto">
-                            <li v-for="job in recentJobs" :key="job.id" class="flex items-start gap-3 px-4 py-3">
+                            <li v-for="job in recentJobs" :key="job.id" class="group flex items-start gap-3 px-4 py-3">
                                 <!-- status dot -->
                                 <span :class="[
                                     'mt-0.5 w-2.5 h-2.5 rounded-full shrink-0',
@@ -137,6 +140,16 @@
                                     <p v-else-if="job.status === 'cancelled'" class="text-xs text-amber-400">cancelled</p>
                                     <p v-else-if="job.status === 'completed'" class="text-xs text-gray-500">{{ jobSummaryLine(job) }}</p>
                                 </div>
+                                <!-- dismiss button (always visible for failed, hover for others) -->
+                                <button
+                                    v-if="job.status !== 'running'"
+                                    @click.stop="dismissJob(job.id)"
+                                    :class="[
+                                        'transition-opacity shrink-0 mt-0.5 text-gray-600 hover:text-red-400 text-sm leading-none',
+                                        job.status === 'failed' ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
+                                    ]"
+                                    title="Dismiss"
+                                >✕</button>
                             </li>
                         </ul>
                     </div>

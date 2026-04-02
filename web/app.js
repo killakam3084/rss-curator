@@ -872,6 +872,11 @@ const app = createApp({
             const next = new Map(activeJobIds.value);
             next.delete(id);
             activeJobIds.value = next;
+            jobs.value = jobs.value.filter(j => j.id !== id);
+        };
+
+        const clearFailedJobs = () => {
+            jobs.value = jobs.value.filter(j => j.status !== 'failed');
         };
 
         const openJobsStream = () => {
@@ -1155,6 +1160,7 @@ const app = createApp({
             activeJobList,
             actionsDropdownOpen,
             dismissJob,
+            clearFailedJobs,
             runningJobs,
             failedJobs,
             cancelledJobs,
