@@ -703,7 +703,7 @@ func cmdServe(cfg models.Config, store *storage.Storage, buf *logbuffer.Buffer, 
 
 	// Recover from any previous unclean shutdown: mark orphaned 'running' jobs
 	// as failed so the UI does not show ghost jobs indefinitely.
-	if n, err := store.MarkStaleJobsFailed("process restarted"); err != nil {
+	if n, err := store.MarkStaleJobsFailed("Interrupted: server was restarted"); err != nil {
 		fmt.Fprintf(os.Stderr, "[Serve] Warning: stale job recovery failed: %v\n", err)
 	} else if n > 0 {
 		fmt.Printf("[Serve] Recovered %d stale job(s) from previous crash\n", n)

@@ -87,9 +87,17 @@ button:focus-visible {
     outline-offset: 2px;
 }
 
-input:focus-visible {
+input:not(.outline-none):focus-visible {
     outline: 2px solid rgb(102, 126, 234);
     outline-offset: 2px;
+}
+
+/* Inputs that opt out via Tailwind's outline-none get no focus ring at all;
+   they supply their own indicator (e.g. border-bottom transition). */
+input.outline-none:focus,
+input.outline-none:focus-visible {
+    outline: none;
+    box-shadow: none;
 }
 
 /* Light mode polish: remap dark utility classes to light surfaces */
