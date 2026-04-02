@@ -27,6 +27,7 @@ const app = createApp({
         const jobs = ref([]);
         const jobsPopoverOpen = ref(false);
         const activeJobIds = ref(new Map()); // job_id → { type, label } for in-flight jobs started from this session
+        const dismissedJobIds = new Set(JSON.parse(localStorage.getItem('rss-curator-dismissed-jobs') || '[]'));
         let jobsEventSource = null;
 
         // Bulk-actions dropdown state (Phase B)
@@ -834,12 +835,16 @@ const app = createApp({
         });
 
         // Jobs helpers
+        const saveDismissedJobs = () => {
+            localStorage.setItem('rss-curator-dismissed-jobs', JSON.stringify([...dismissedJobIds]));
+        };
+
         const fetchJobs = async () => {
             try {
                 const res = await fetch('/api/jobs?limit=20');
                 if (!res.ok) return;
                 const data = await res.json();
-                jobs.value = data || [];
+                jobs.value = (data || []).filter(j => !dismissedJobIds.has(j.id));
             } catch (e) {
                 // silently ignore — jobs UI is non-critical
             }
@@ -872,10 +877,14 @@ const app = createApp({
             const next = new Map(activeJobIds.value);
             next.delete(id);
             activeJobIds.value = next;
+            dismissedJobIds.add(id);
+            saveDismissedJobs();
             jobs.value = jobs.value.filter(j => j.id !== id);
         };
 
         const clearFailedJobs = () => {
+            jobs.value.filter(j => j.status === 'failed').forEach(j => dismissedJobIds.add(j.id));
+            saveDismissedJobs();
             jobs.value = jobs.value.filter(j => j.status !== 'failed');
         };
 
@@ -885,6 +894,7 @@ const app = createApp({
             jobsEventSource.onmessage = (e) => {
                 try {
                     const job = JSON.parse(e.data);
+                    if (dismissedJobIds.has(job.id)) return;
                     const idx = jobs.value.findIndex(j => j.id === job.id);
                     if (idx >= 0) {
                         jobs.value.splice(idx, 1, job);
