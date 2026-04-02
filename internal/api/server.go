@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"os"
@@ -61,6 +62,7 @@ type Server struct {
 	suggester        *suggester.Suggester // may be nil if AI is disabled
 	feedCheckCfg     ops.FeedCheckConfig
 	feedCheckDeps    ops.FeedCheckDeps
+	httpSrv          *http.Server
 }
 
 type jobCancelState struct {
@@ -373,8 +375,26 @@ func (s *Server) Start() error {
 	}
 
 	s.logger.Info("API server starting", zap.String("address", addr))
+	s.httpSrv = &http.Server{
+		Addr:    addr,
+		Handler: handler,
+	}
 	go s.startAlertPoller()
-	return http.ListenAndServe(addr, handler)
+	go func() {
+		if err := s.httpSrv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			s.logger.Error("HTTP server error", zap.Error(err))
+		}
+	}()
+	return nil
+}
+
+// Shutdown gracefully drains in-flight HTTP requests. Safe to call if Start
+// has not been called (httpSrv will be nil).
+func (s *Server) Shutdown(ctx context.Context) error {
+	if s.httpSrv == nil {
+		return nil
+	}
+	return s.httpSrv.Shutdown(ctx)
 }
 
 // handleRoot serves the dashboard or API info

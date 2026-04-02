@@ -144,7 +144,12 @@ func RunFeedCheck(ctx context.Context, cfg FeedCheckConfig, deps FeedCheckDeps) 
 			CompletedAt: &completedAt,
 			Summary:     summary,
 		}
-		if feedFailed {
+		if ctx.Err() != nil {
+			// Context was cancelled — job interrupted; record partial work as cancelled.
+			finalJob.Status = "cancelled"
+			finalJob.Summary.ErrorMessage = "context cancelled"
+			_ = deps.Store.CancelJob(jobID, summary)
+		} else if feedFailed {
 			finalJob.Status = "failed"
 			finalJob.Summary.ErrorMessage = "one or more feeds failed to parse"
 			_ = deps.Store.FailJob(jobID, "one or more feeds failed to parse")

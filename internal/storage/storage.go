@@ -47,6 +47,9 @@ type Store interface {
 	CancelJob(id int, summary models.JobSummary) error
 	ListJobs(limit int, statusFilter string) ([]models.JobRecord, error)
 	GetJob(id int) (*models.JobRecord, error)
+	// MarkStaleJobsFailed marks any job still in "running" status as "failed".
+	// Call at startup to recover from an unclean shutdown.
+	MarkStaleJobsFailed(reason string) (int64, error)
 	// Settings
 	GetSetting(key string) (string, error)
 	SetSetting(key, value string) error
@@ -580,6 +583,26 @@ func (s *Storage) FailJob(id int, errMsg string) error {
 		UPDATE jobs SET status = 'failed', completed_at = ?, summary_json = ? WHERE id = ?
 	`, time.Now(), string(summaryJSON), id)
 	return err
+}
+
+// MarkStaleJobsFailed marks any job still in "running" status as "failed".
+// Call at startup before starting the scheduler and queue to recover from
+// an unclean shutdown. Returns the number of jobs updated.
+func (s *Storage) MarkStaleJobsFailed(reason string) (int64, error) {
+	summary := models.JobSummary{ErrorMessage: reason}
+	summaryJSON, err := json.Marshal(summary)
+	if err != nil {
+		return 0, err
+	}
+	res, err := s.db.Exec(`
+		UPDATE jobs
+		SET status = 'failed', completed_at = datetime('now'), summary_json = ?
+		WHERE status = 'running'
+	`, string(summaryJSON))
+	if err != nil {
+		return 0, err
+	}
+	return res.RowsAffected()
 }
 
 // CancelJob marks a job as cancelled with partial summary statistics.

@@ -181,9 +181,10 @@ func (m *mockStorage) CancelJob(id int, summary models.JobSummary) error {
 func (m *mockStorage) ListJobs(limit int, statusFilter string) ([]models.JobRecord, error) {
 	return []models.JobRecord{}, nil
 }
-func (m *mockStorage) GetJob(id int) (*models.JobRecord, error) { return m.jobs[id], nil }
-func (m *mockStorage) GetSetting(key string) (string, error)    { return "", nil }
-func (m *mockStorage) SetSetting(key, value string) error       { return nil }
+func (m *mockStorage) GetJob(id int) (*models.JobRecord, error)         { return m.jobs[id], nil }
+func (m *mockStorage) MarkStaleJobsFailed(reason string) (int64, error) { return 0, nil }
+func (m *mockStorage) GetSetting(key string) (string, error)            { return "", nil }
+func (m *mockStorage) SetSetting(key, value string) error               { return nil }
 func (m *mockStorage) GetAllSettings() (map[string]string, error) {
 	return map[string]string{}, nil
 }

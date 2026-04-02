@@ -73,10 +73,20 @@ func (s *Scheduler) Start() {
 	}
 }
 
-// Stop signals all task goroutines to exit and waits for them to finish.
+// Stop signals all task goroutines to exit and waits up to 30 seconds for
+// them to finish. Tasks that have not returned after the deadline are not
+// force-killed but the function returns so shutdown can proceed.
 func (s *Scheduler) Stop() {
 	s.cancel()
-	s.wg.Wait()
+	done := make(chan struct{})
+	go func() {
+		s.wg.Wait()
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(30 * time.Second):
+	}
 }
 
 // RunNow dispatches the named task immediately. Returns false if not found,

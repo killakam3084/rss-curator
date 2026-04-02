@@ -6,9 +6,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"strconv"
 	"strings"
+	"syscall"
 	"text/tabwriter"
 	"time"
 
@@ -699,6 +701,14 @@ func cmdServe(cfg models.Config, store *storage.Storage, buf *logbuffer.Buffer, 
 
 	// Create and start API server (even if qBittorrent is unavailable)
 
+	// Recover from any previous unclean shutdown: mark orphaned 'running' jobs
+	// as failed so the UI does not show ghost jobs indefinitely.
+	if n, err := store.MarkStaleJobsFailed("process restarted"); err != nil {
+		fmt.Fprintf(os.Stderr, "[Serve] Warning: stale job recovery failed: %v\n", err)
+	} else if n > 0 {
+		fmt.Printf("[Serve] Recovered %d stale job(s) from previous crash\n", n)
+	}
+
 	// Job queue — single worker, used for on-demand async operations.
 	q := jobs.New(nil)
 	q.Start()
@@ -836,6 +846,34 @@ func cmdServe(cfg models.Config, store *storage.Storage, buf *logbuffer.Buffer, 
 		fmt.Fprintf(os.Stderr, "Error starting API server: %v\n", err)
 		os.Exit(1)
 	}
+
+	// Block until SIGTERM or SIGINT, then drain components in order.
+	sigCtx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
+	defer stop()
+	<-sigCtx.Done()
+	fmt.Println("[Serve] Shutdown signal received, draining…")
+
+	const drainTimeout = 30 * time.Second
+
+	// 1. Drain in-flight HTTP requests.
+	shutCtx, shutCancel := context.WithTimeout(context.Background(), drainTimeout)
+	defer shutCancel()
+	if err := server.Shutdown(shutCtx); err != nil {
+		fmt.Fprintf(os.Stderr, "[Serve] HTTP shutdown error: %v\n", err)
+	}
+
+	// 2. Stop the scheduler (has its own internal 30s task-drain timeout).
+	sched.Stop()
+
+	// 3. Stop the job queue — waits for any in-flight job; discards queued items.
+	q.Stop()
+
+	// 4. Close the database.
+	if err := store.Close(); err != nil {
+		fmt.Fprintf(os.Stderr, "[Serve] DB close error: %v\n", err)
+	}
+
+	fmt.Println("[Serve] Shutdown complete.")
 }
 
 func cmdCleanup(store *storage.Storage, args []string) {

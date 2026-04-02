@@ -404,3 +404,43 @@ func TestGetJob_NotFound(t *testing.T) {
 		t.Error("expected nil for missing job, got non-nil")
 	}
 }
+
+func TestMarkStaleJobsFailed(t *testing.T) {
+	store, tmpDir := setupTestDB(t)
+	defer cleanupTestDB(store, tmpDir)
+
+	// Create two jobs that look like they were running when the process died.
+	id1, _ := store.CreateJob("feed_check")
+	id2, _ := store.CreateJob("rescore")
+
+	// Mark them as stale.
+	n, err := store.MarkStaleJobsFailed("process restarted")
+	if err != nil {
+		t.Fatalf("MarkStaleJobsFailed: %v", err)
+	}
+	if n != 2 {
+		t.Errorf("expected 2 jobs updated, got %d", n)
+	}
+
+	// Both should now be failed.
+	j1, _ := store.GetJob(id1)
+	j2, _ := store.GetJob(id2)
+	if j1.Status != "failed" {
+		t.Errorf("job %d: expected status 'failed', got %q", id1, j1.Status)
+	}
+	if j2.Status != "failed" {
+		t.Errorf("job %d: expected status 'failed', got %q", id2, j2.Status)
+	}
+	if j1.CompletedAt == nil {
+		t.Errorf("job %d: expected CompletedAt to be set", id1)
+	}
+
+	// A second call with no running jobs should return 0.
+	n2, err := store.MarkStaleJobsFailed("process restarted")
+	if err != nil {
+		t.Fatalf("second MarkStaleJobsFailed: %v", err)
+	}
+	if n2 != 0 {
+		t.Errorf("expected 0 on second call, got %d", n2)
+	}
+}
