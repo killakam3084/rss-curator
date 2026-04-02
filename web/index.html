@@ -363,6 +363,20 @@
                         </div>
                     </div>
 
+                    <!-- Search bar — always visible, outside the loading/empty/grid conditional -->
+                    <div v-if="!loading" class="flex items-center gap-2 mb-3 px-1">
+                        <svg class="w-3.5 h-3.5 text-gray-500 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                            <circle cx="11" cy="11" r="8"/><path stroke-linecap="round" stroke-linejoin="round" d="m21 21-4.35-4.35"/>
+                        </svg>
+                        <input
+                            v-model="searchQuery"
+                            type="text"
+                            placeholder="search titles…"
+                            class="flex-1 bg-transparent border-b border-gray-700 focus:border-gray-500 text-sm font-mono text-gray-200 placeholder-gray-600 outline-none py-0.5 transition-colors"
+                        />
+                        <button v-if="searchQuery" @click="searchQuery = ''" class="text-gray-600 hover:text-gray-400 font-mono text-xs transition-colors">×</button>
+                    </div>
+
                     <!-- Loading State -->
                     <div v-if="loading" class="flex justify-center items-center py-20">
                         <div class="text-center">
@@ -373,25 +387,18 @@
 
                     <!-- Empty State -->
                     <div v-else-if="displayedTorrents.length === 0" class="bg-gradient-to-br from-slate-50 via-white to-emerald-50/40 dark:from-slate-900 dark:via-slate-900 dark:to-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-lg p-16 text-center">
-                        <p class="text-slate-700 dark:text-slate-400 text-lg font-medium">No {{ activeTab }} torrents</p>
-                        <p class="mt-2 text-sm text-slate-500 dark:text-slate-500">Queue is clear for now — new matches will show up here.</p>
+                        <template v-if="searchQuery">
+                            <p class="text-slate-700 dark:text-slate-400 text-lg font-medium">No results for "{{ searchQuery }}"</p>
+                            <p class="mt-2 text-sm text-slate-500 dark:text-slate-500">Try a different search term or <button @click="searchQuery = ''" class="underline hover:text-curator-500 transition-colors">clear the search</button>.</p>
+                        </template>
+                        <template v-else>
+                            <p class="text-slate-700 dark:text-slate-400 text-lg font-medium">No {{ activeTab }} torrents</p>
+                            <p class="mt-2 text-sm text-slate-500 dark:text-slate-500">Queue is clear for now — new matches will show up here.</p>
+                        </template>
                     </div>
 
                     <!-- Torrents Grid -->
                     <div v-else>
-                        <!-- Search bar -->
-                        <div class="flex items-center gap-2 mb-3 px-1">
-                            <svg class="w-3.5 h-3.5 text-gray-500 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-                                <circle cx="11" cy="11" r="8"/><path stroke-linecap="round" stroke-linejoin="round" d="m21 21-4.35-4.35"/>
-                            </svg>
-                            <input
-                                v-model="searchQuery"
-                                type="text"
-                                placeholder="search titles…"
-                                class="flex-1 bg-transparent border-b border-gray-700 focus:border-gray-500 text-sm font-mono text-gray-200 placeholder-gray-600 outline-none py-0.5 transition-colors"
-                            />
-                            <button v-if="searchQuery" @click="searchQuery = ''" class="text-gray-600 hover:text-gray-400 font-mono text-xs transition-colors">×</button>
-                        </div>
                         <!-- Sort bar -->
                         <div class="flex flex-wrap items-center gap-2 mb-3 px-1">
                             <span class="text-xs font-mono text-gray-600 uppercase shrink-0">sort</span>
