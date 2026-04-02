@@ -153,6 +153,85 @@ func TestListTorrents(t *testing.T) {
 	}
 }
 
+func TestListByQuery(t *testing.T) {
+	store, tmpDir := setupTestDB(t)
+	defer cleanupTestDB(store, tmpDir)
+
+	t1 := createTestTorrent()
+	t1.FeedItem.Title = "Breaking Bad S01E01"
+	t1.FeedItem.GUID = "guid-bb-1"
+	t1.FeedItem.Link = "http://example.com/bb.torrent"
+	store.Add(t1)
+
+	t2 := createTestTorrent()
+	t2.FeedItem.Title = "Better Call Saul S01E01"
+	t2.FeedItem.GUID = "guid-bcs-1"
+	t2.FeedItem.Link = "http://example.com/bcs.torrent"
+	store.Add(t2)
+
+	results, err := store.List("", "Breaking Bad")
+	if err != nil {
+		t.Fatalf("List: %v", err)
+	}
+	if len(results) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(results))
+	}
+	if results[0].FeedItem.Title != "Breaking Bad S01E01" {
+		t.Errorf("unexpected title: %q", results[0].FeedItem.Title)
+	}
+}
+
+func TestListByQueryNoMatch(t *testing.T) {
+	store, tmpDir := setupTestDB(t)
+	defer cleanupTestDB(store, tmpDir)
+
+	t1 := createTestTorrent()
+	t1.FeedItem.GUID = "guid-nm-1"
+	t1.FeedItem.Link = "http://example.com/nm.torrent"
+	store.Add(t1)
+
+	results, err := store.List("", "zzz-no-match")
+	if err != nil {
+		t.Fatalf("List: %v", err)
+	}
+	if len(results) != 0 {
+		t.Errorf("expected 0 results, got %d", len(results))
+	}
+}
+
+func TestListByStatusAndQuery(t *testing.T) {
+	store, tmpDir := setupTestDB(t)
+	defer cleanupTestDB(store, tmpDir)
+
+	t1 := createTestTorrent()
+	t1.FeedItem.Title = "Sopranos S01E01"
+	t1.FeedItem.GUID = "guid-sop-1"
+	t1.FeedItem.Link = "http://example.com/sop1.torrent"
+	// status = "pending" (default)
+	store.Add(t1)
+
+	t2 := createTestTorrent()
+	t2.FeedItem.Title = "Sopranos S01E02"
+	t2.FeedItem.GUID = "guid-sop-2"
+	t2.FeedItem.Link = "http://example.com/sop2.torrent"
+	t2.Status = "rejected"
+	store.Add(t2)
+
+	results, err := store.List("rejected", "Sopranos")
+	if err != nil {
+		t.Fatalf("List: %v", err)
+	}
+	if len(results) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(results))
+	}
+	if results[0].FeedItem.Title != "Sopranos S01E02" {
+		t.Errorf("unexpected title: %q", results[0].FeedItem.Title)
+	}
+	if results[0].Status != "rejected" {
+		t.Errorf("expected status 'rejected', got %q", results[0].Status)
+	}
+}
+
 // ── Job CRUD tests ────────────────────────────────────────────────────────────
 
 func TestCreateJob(t *testing.T) {

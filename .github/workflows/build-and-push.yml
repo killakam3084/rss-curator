@@ -19,22 +19,50 @@ env:
 jobs:
   test:
     runs-on: ubuntu-latest
-    
+    permissions:
+      # Required by dorny/test-reporter to post check annotations
+      checks: write
+      contents: read
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-      
+
       - name: Set up Go
         uses: actions/setup-go@v4
         with:
           go-version: '1.22'
-      
+
+      - name: Install gotestsum
+        run: go install gotest.tools/gotestsum@latest
+
       - name: Run tests
-        run: go test ./... -v
-      
-      - name: Run tests with coverage
-        run: go test ./... -v -coverprofile=coverage.out -covermode=atomic
-      
+        run: |
+          gotestsum --junitfile test-results.xml -- \
+            ./... -coverprofile=coverage.out -covermode=atomic
+
+      - name: Publish test results
+        uses: dorny/test-reporter@v1
+        if: always()
+        with:
+          name: Go Unit Tests
+          path: test-results.xml
+          reporter: java-junit
+          # Job failure comes from gotestsum above; reporter is for UI only.
+          fail-on-error: false
+
+      - name: Enforce coverage threshold
+        run: |
+          # Raise MIN_COVERAGE as test coverage improves over time.
+          MIN_COVERAGE=15
+          COVERAGE=$(go tool cover -func=coverage.out \
+            | grep '^total:' | awk '{print $3}' | tr -d '%')
+          echo "Total coverage: ${COVERAGE}%  (minimum: ${MIN_COVERAGE}%)"
+          if awk "BEGIN { exit !($COVERAGE + 0 < $MIN_COVERAGE) }"; then
+            echo "::error::Coverage ${COVERAGE}% is below the ${MIN_COVERAGE}% minimum threshold."
+            exit 1
+          fi
+
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v3
         with:

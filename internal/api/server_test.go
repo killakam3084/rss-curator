@@ -509,3 +509,155 @@ func TestHandleJobCancelNotRunning(t *testing.T) {
 		t.Fatalf("expected status 409, got %d", w.Code)
 	}
 }
+
+// TestHandleListDefaultsPending verifies that omitting ?status= defaults to "pending".
+func TestHandleListDefaultsPending(t *testing.T) {
+	server, mockStore := setupTestServer(t)
+
+	pending := createTestTorrent(1, "pending")
+	rejected := createTestTorrent(2, "rejected")
+	mockStore.torrents[1] = pending
+	mockStore.torrents[2] = rejected
+
+	req := httptest.NewRequest("GET", "/api/torrents", nil)
+	w := httptest.NewRecorder()
+	server.handleList(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", w.Code)
+	}
+	var resp ListResponse
+	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if resp.Count != 1 {
+		t.Errorf("expected 1 pending torrent, got %d", resp.Count)
+	}
+	if resp.Torrents[0].Status != "pending" {
+		t.Errorf("expected pending, got %q", resp.Torrents[0].Status)
+	}
+}
+
+// TestHandleListByStatus verifies ?status= filtering.
+func TestHandleListByStatus(t *testing.T) {
+	server, mockStore := setupTestServer(t)
+
+	mockStore.torrents[1] = createTestTorrent(1, "pending")
+	mockStore.torrents[2] = createTestTorrent(2, "rejected")
+	mockStore.torrents[3] = createTestTorrent(3, "rejected")
+
+	req := httptest.NewRequest("GET", "/api/torrents?status=rejected", nil)
+	w := httptest.NewRecorder()
+	server.handleList(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", w.Code)
+	}
+	var resp ListResponse
+	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if resp.Count != 2 {
+		t.Errorf("expected 2 rejected torrents, got %d", resp.Count)
+	}
+}
+
+// TestHandleListByQuery verifies ?q= title search.
+func TestHandleListByQuery(t *testing.T) {
+	server, mockStore := setupTestServer(t)
+
+	t1 := createTestTorrent(1, "pending")
+	t1.FeedItem.Title = "Breaking Bad S01E01"
+	mockStore.torrents[1] = t1
+
+	t2 := createTestTorrent(2, "pending")
+	t2.FeedItem.Title = "Better Call Saul S01E01"
+	mockStore.torrents[2] = t2
+
+	req := httptest.NewRequest("GET", "/api/torrents?status=pending&q=Breaking+Bad", nil)
+	w := httptest.NewRecorder()
+	server.handleList(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", w.Code)
+	}
+	var resp ListResponse
+	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if resp.Count != 1 {
+		t.Fatalf("expected 1 result, got %d", resp.Count)
+	}
+	if resp.Torrents[0].Title != "Breaking Bad S01E01" {
+		t.Errorf("unexpected title: %q", resp.Torrents[0].Title)
+	}
+}
+
+// TestHandleListByStatusAndQuery verifies both ?status= and ?q= applied together.
+func TestHandleListByStatusAndQuery(t *testing.T) {
+	server, mockStore := setupTestServer(t)
+
+	t1 := createTestTorrent(1, "pending")
+	t1.FeedItem.Title = "Sopranos S01E01"
+	mockStore.torrents[1] = t1
+
+	t2 := createTestTorrent(2, "rejected")
+	t2.FeedItem.Title = "Sopranos S01E02"
+	mockStore.torrents[2] = t2
+
+	req := httptest.NewRequest("GET", "/api/torrents?status=rejected&q=Sopranos", nil)
+	w := httptest.NewRecorder()
+	server.handleList(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", w.Code)
+	}
+	var resp ListResponse
+	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if resp.Count != 1 {
+		t.Fatalf("expected 1 result, got %d", resp.Count)
+	}
+	if resp.Torrents[0].Title != "Sopranos S01E02" {
+		t.Errorf("unexpected title: %q", resp.Torrents[0].Title)
+	}
+}
+
+// TestHandleListQueryNoMatch verifies an empty list is returned when nothing matches.
+func TestHandleListQueryNoMatch(t *testing.T) {
+	server, mockStore := setupTestServer(t)
+
+	mockStore.torrents[1] = createTestTorrent(1, "pending")
+
+	req := httptest.NewRequest("GET", "/api/torrents?status=pending&q=zzz-no-match", nil)
+	w := httptest.NewRecorder()
+	server.handleList(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", w.Code)
+	}
+	var resp ListResponse
+	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if resp.Count != 0 {
+		t.Errorf("expected 0 results, got %d", resp.Count)
+	}
+	if len(resp.Torrents) != 0 {
+		t.Errorf("expected empty Torrents slice, got %d items", len(resp.Torrents))
+	}
+}
+
+// TestHandleListMethodNotAllowed verifies non-GET requests are rejected.
+func TestHandleListMethodNotAllowed(t *testing.T) {
+	server, _ := setupTestServer(t)
+
+	req := httptest.NewRequest("POST", "/api/torrents", nil)
+	w := httptest.NewRecorder()
+	server.handleList(w, req)
+
+	if w.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("expected 405, got %d", w.Code)
+	}
+}
