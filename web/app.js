@@ -991,10 +991,13 @@ const app = createApp({
                         alerts.value.splice(idx, 1, alert);
                     } else {
                         alerts.value.push(alert);
-                        // Auto-clear transient (success/neutral) alerts after 3s.
+                        // Auto-clear transient alerts after a short delay.
+                        // job_failed gets a longer window so the user can read it.
                         const autoClearActions = ['approve', 'reject', 'queue', 'staged', 'job_completed', 'job_cancelled'];
                         if (autoClearActions.includes(alert.action)) {
                             setTimeout(() => dismissAlert(alert.id), 3000);
+                        } else if (alert.action === 'job_failed') {
+                            setTimeout(() => dismissAlert(alert.id), 8000);
                         }
                     }
                     if (alerts.value.length > 50) alerts.value.shift();

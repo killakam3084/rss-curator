@@ -3,6 +3,9 @@
 A semi-automated torrent curator for private tracker RSS feeds with human-in-the-loop approval.
 
 [![Build and Push to GHCR](https://github.com/killakam3084/rss-curator/actions/workflows/build-and-push.yml/badge.svg)](https://github.com/killakam3084/rss-curator/actions/workflows/build-and-push.yml)
+[![codecov](https://codecov.io/gh/killakam3084/rss-curator/branch/main/graph/badge.svg)](https://codecov.io/gh/killakam3084/rss-curator)
+[![Go Report Card](https://goreportcard.com/badge/github.com/killakam3084/rss-curator)](https://goreportcard.com/report/github.com/killakam3084/rss-curator)
+[![GitHub Release](https://img.shields.io/github/v/release/killakam3084/rss-curator)](https://github.com/killakam3084/rss-curator/releases)
 [![Container Image](https://img.shields.io/badge/container-ghcr.io-blue)](https://github.com/killakam3084/rss-curator/pkgs/container/rss-curator)
 [![Go](https://img.shields.io/badge/Go-1.22-blue)](https://golang.org)
 

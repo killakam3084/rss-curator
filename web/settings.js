@@ -282,7 +282,13 @@ createApp({
             showsError.value = '';
             const raw = showsCM ? showsCM.getValue() : '';
             try {
-                const pretty = JSON.stringify(JSON.parse(raw), null, 2);
+                const parsed = JSON.parse(raw);
+                if (Array.isArray(parsed.shows)) {
+                    parsed.shows.sort((a, b) =>
+                        (a.name || '').localeCompare(b.name || '', undefined, { sensitivity: 'base' })
+                    );
+                }
+                const pretty = JSON.stringify(parsed, null, 2);
                 if (showsCM) showsCM.setValue(pretty);
             } catch (err) {
                 showsError.value = `invalid JSON — ${err.message}`;
