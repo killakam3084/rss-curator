@@ -1995,6 +1995,7 @@ func (s *Server) handleSchedulerRun(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusAccepted)
 	json.NewEncoder(w).Encode(SchedulerRunResponse{Status: "accepted", Type: taskType})
 }
+
 type ShowsResponse struct {
 	models.ShowsConfig
 	ShowsCount int `json:"shows_count"`
