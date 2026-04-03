@@ -60,12 +60,12 @@
 }
 
 .overflow-y-auto::-webkit-scrollbar-thumb {
-    background: rgb(203, 213, 225);
+    background: rgb(var(--c-border-base, 207 202 192));
     border-radius: 3px;
 }
 
 .overflow-y-auto::-webkit-scrollbar-thumb:hover {
-    background: rgb(148, 163, 184);
+    background: rgb(var(--c-fg-muted, 168 162 158));
 }
 
 .dark .overflow-y-auto::-webkit-scrollbar-thumb {
@@ -100,6 +100,148 @@ input.outline-none:focus-visible {
     box-shadow: none;
 }
 
+/* ── Design tokens ───────────────────────────────────────────────────────── */
+/* :root (light) = warm ivory palette                                         */
+/* .dark (dark)  = existing terminal/hacker palette                           */
+/* Values are bare RGB triplets enabling opacity modifiers:                   */
+/*   background-color: rgb(var(--c-surface) / 0.6);                           */
+
+:root {
+    /* ── Surfaces ───────────────────────────────────────────────────────── */
+    --c-surface:          253 249 243;   /* warm ivory page bg               */
+    --c-card:             255 253 247;   /* cream section/panel bg           */
+    --c-raised:           255 255 255;   /* white inner tiles, dropdowns     */
+    --c-deep:             244 240 235;   /* ecru sunken/input bg             */
+
+    /* ── Borders ────────────────────────────────────────────────────────── */
+    --c-border-soft:      229 224 215;   /* subtle warm divider              */
+    --c-border-base:      207 202 192;   /* standard warm border             */
+
+    /* ── Text ───────────────────────────────────────────────────────────── */
+    --c-fg:               28 25 23;      /* warm near-black (stone-950)      */
+    --c-fg-soft:          87 83 78;      /* warm dark gray  (stone-600)      */
+    --c-fg-dim:           120 113 108;   /* warm medium     (stone-500)      */
+    --c-fg-muted:         168 162 158;   /* warm light gray (stone-400)      */
+    --c-fg-faint:         214 211 208;   /* very subtle     (stone-300)      */
+
+    /* ── Curator accent ─────────────────────────────────────────────────── */
+    --c-accent:           22 163 74;     /* muted green — text/icon          */
+    --c-accent-bg:        34 197 94;     /* button / active bg               */
+    --c-accent-bg-hover:  22 163 74;     /* button hover                     */
+    --c-accent-surface:   240 253 244;   /* pale green tint panel            */
+    --c-accent-border:    34 197 94;
+}
+
+.dark {
+    /* ── Surfaces ───────────────────────────────────────────────────────── */
+    --c-surface:          3 7 18;        /* gray-950                         */
+    --c-card:             17 24 39;      /* gray-900                         */
+    --c-raised:           31 41 55;      /* gray-800                         */
+    --c-deep:             3 7 18;        /* gray-950 (same as surface)       */
+
+    /* ── Borders ────────────────────────────────────────────────────────── */
+    --c-border-soft:      31 41 55;      /* gray-800                         */
+    --c-border-base:      55 65 81;      /* gray-700                         */
+
+    /* ── Text ───────────────────────────────────────────────────────────── */
+    --c-fg:               243 244 246;   /* gray-100                         */
+    --c-fg-soft:          156 163 175;   /* gray-400                         */
+    --c-fg-dim:           107 114 128;   /* gray-500                         */
+    --c-fg-muted:         75 85 99;      /* gray-600                         */
+    --c-fg-faint:         55 65 81;      /* gray-700                         */
+
+    /* ── Curator accent ─────────────────────────────────────────────────── */
+    --c-accent:           0 255 65;      /* curator-500 #00ff41              */
+    --c-accent-bg:        0 255 65;
+    --c-accent-bg-hover:  0 221 56;      /* curator-600 #00dd38              */
+    --c-accent-surface:   0 61 16;       /* curator-900 #003d10              */
+    --c-accent-border:    0 255 65;
+}
+
+/* ── Semantic surface utilities ──────────────────────────────────────────── */
+.bg-surface { background-color: rgb(var(--c-surface)); }
+.bg-card    { background-color: rgb(var(--c-card)); }
+.bg-raised  { background-color: rgb(var(--c-raised)); }
+.bg-deep    { background-color: rgb(var(--c-deep)); }
+
+/* Opacity variants — mirrors bg-gray-800/N usage in dark-first components   */
+.bg-raised\/30 { background-color: rgb(var(--c-raised) / 0.3); }
+.bg-raised\/40 { background-color: rgb(var(--c-raised) / 0.4); }
+.bg-raised\/50 { background-color: rgb(var(--c-raised) / 0.5); }
+.bg-raised\/60 { background-color: rgb(var(--c-raised) / 0.65); }
+.bg-raised\/80 { background-color: rgb(var(--c-raised) / 0.8); }
+
+/* bg-card and bg-deep opacity variants                                       */
+.bg-card\/60  { background-color: rgb(var(--c-card) / 0.6); }
+.bg-deep\/60  { background-color: rgb(var(--c-deep) / 0.6); }
+
+/* Accent surface tint                                                        */
+.bg-accent-surface { background-color: rgb(var(--c-accent-surface)); }
+
+/* ── Semantic border utilities ───────────────────────────────────────────── */
+.border-subtle   { border-color: rgb(var(--c-border-soft)); }
+.border-base     { border-color: rgb(var(--c-border-base)); }
+.border-accent   { border-color: rgb(var(--c-accent-border)); }
+.border-l-accent { border-left-color: rgb(var(--c-accent-border)); }
+.border-t-accent { border-top-color: rgb(var(--c-accent-border)); }
+
+/* ── Semantic text utilities ─────────────────────────────────────────────── */
+.fg-base   { color: rgb(var(--c-fg)); }
+.fg-soft   { color: rgb(var(--c-fg-soft)); }
+.fg-dim    { color: rgb(var(--c-fg-dim)); }
+.fg-muted  { color: rgb(var(--c-fg-muted)); }
+.fg-faint  { color: rgb(var(--c-fg-faint)); }
+.fg-accent { color: rgb(var(--c-accent)); }
+
+/* Primary action utilities                                                   */
+.bg-accent              { background-color: rgb(var(--c-accent-bg)); }
+.hover\:bg-accent:hover { background-color: rgb(var(--c-accent-bg-hover)); }
+.text-accent            { color: rgb(var(--c-accent)); }
+
+/* Hover variants for semi-transparent surfaces                               */
+.hover\:bg-raised\/40:hover { background-color: rgb(var(--c-raised) / 0.4); }
+.hover\:bg-raised\/50:hover { background-color: rgb(var(--c-raised) / 0.5); }
+.hover\:border-accent:hover { border-color: rgb(var(--c-accent-border)); }
+
+/* ── Badge compound utilities ────────────────────────────────────────────── */
+/* Sets background, text colour, and border-color.                            */
+/* Apply Tailwind `border` class separately (sets border-width).              */
+/* Light: warm pastels on cream.  Dark: deep saturated tones.                 */
+
+/* Blue — pending torrent, feed-check job type                               */
+.badge-blue         { background-color: rgb(239 246 255); color: rgb(37 99 235);   border-color: rgb(147 197 253); }
+.dark .badge-blue   { background-color: rgb(30 58 138 / 0.35); color: rgb(96 165 250);  border-color: rgb(29 78 216); }
+
+/* Curator green — accepted torrent, running badge                           */
+.badge-accent       { background-color: rgb(var(--c-accent-surface)); color: rgb(var(--c-accent)); border-color: rgb(var(--c-accent-border)); }
+
+/* Red — rejected torrent, failed job, error states                          */
+.badge-red          { background-color: rgb(255 242 242); color: rgb(185 28 28);   border-color: rgb(252 165 165); }
+.dark .badge-red    { background-color: rgb(127 29 29 / 0.35); color: rgb(248 113 113); border-color: rgb(185 28 28); }
+
+/* Amber — low-confidence, cancelled job, warn states                        */
+.badge-amber        { background-color: rgb(255 251 235); color: rgb(146 64 14);   border-color: rgb(253 230 138); }
+.dark .badge-amber  { background-color: rgb(120 53 15 / 0.35); color: rgb(251 191 36);  border-color: rgb(180 83 9); }
+
+/* Emerald — AI score badge, completed job badge                             */
+.badge-emerald      { background-color: rgb(236 253 245); color: rgb(4 120 87);    border-color: rgb(167 243 208); }
+.dark .badge-emerald { background-color: rgb(6 78 59 / 0.4); color: rgb(52 211 153); border-color: rgb(4 120 87 / 0.5); }
+
+/* Purple — rescore job type                                                  */
+.badge-purple       { background-color: rgb(253 245 255); color: rgb(109 40 217);  border-color: rgb(196 181 253); }
+.dark .badge-purple { background-color: rgb(76 29 149 / 0.35); color: rgb(196 181 253); border-color: rgb(109 40 217); }
+
+/* Indigo — suggestion genre tags, rematch job type                          */
+.badge-indigo       { background-color: rgb(238 242 255); color: rgb(67 56 202);   border-color: rgb(199 210 254); }
+.dark .badge-indigo { background-color: rgb(49 46 129 / 0.35); color: rgb(165 180 252); border-color: rgb(67 56 202); }
+
+/* Green — suggestion available/success states in settings                   */
+.badge-green        { background-color: rgb(240 253 244); color: rgb(21 128 61);   border-color: rgb(187 247 208); }
+.dark .badge-green  { background-color: rgb(20 83 45 / 0.4); color: rgb(74 222 128); border-color: rgb(21 128 61); }
+
+/* ── Deprecated overrides (active during migration) ─────────────────────── */
+/* Covers unmigrated elements until all pages/components use token classes.   */
+/* Remove in final cleanup phase once migration is complete.                  */
 /* Light mode polish: remap dark utility classes to light surfaces */
 html:not(.dark) .bg-gray-900 {
     background-color: rgb(247 250 252) !important; /* Soft blue-gray instead of pure white */
@@ -232,3 +374,34 @@ html:not(.dark) svg polygon[stroke="#00ff41"] {
 #shows-editor .CodeMirror-scroll {
     max-height: 440px;
 }
+
+/* ── CodeMirror light mode overrides ─────────────────────────────────────── */
+html:not(.dark) #shows-editor .CodeMirror.cm-s-material-darker {
+    background: rgb(var(--c-card));
+    color: rgb(var(--c-fg));
+    border-color: rgb(var(--c-border-base));
+}
+html:not(.dark) #shows-editor .CodeMirror-gutters {
+    background: rgb(var(--c-deep));
+    border-right-color: rgb(var(--c-border-base));
+}
+html:not(.dark) #shows-editor .CodeMirror-cursor {
+    border-left-color: rgb(var(--c-fg));
+}
+html:not(.dark) #shows-editor .CodeMirror-selected,
+html:not(.dark) #shows-editor .CodeMirror-line::selection,
+html:not(.dark) #shows-editor .CodeMirror-line > span::selection {
+    background: rgb(220 250 235) !important; /* light green selection */
+}
+html:not(.dark) #shows-editor .CodeMirror-linenumber {
+    color: rgb(var(--c-fg-dim));
+}
+/* Syntax tokens */
+html:not(.dark) #shows-editor .cm-s-material-darker .cm-string     { color: rgb(22 163 74); }
+html:not(.dark) #shows-editor .cm-s-material-darker .cm-number     { color: rgb(146 64 14); }
+html:not(.dark) #shows-editor .cm-s-material-darker .cm-atom       { color: rgb(37 99 235); }
+html:not(.dark) #shows-editor .cm-s-material-darker .cm-keyword    { color: rgb(109 40 217); }
+html:not(.dark) #shows-editor .cm-s-material-darker .cm-property   { color: rgb(67 56 202); }
+html:not(.dark) #shows-editor .cm-s-material-darker .cm-punctuation,
+html:not(.dark) #shows-editor .cm-s-material-darker .cm-bracket    { color: rgb(var(--c-fg-dim)); }
+html:not(.dark) #shows-editor .cm-s-material-darker .cm-def        { color: rgb(22 163 74); }
