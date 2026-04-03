@@ -135,16 +135,36 @@
                     <thead>
                         <tr class="border-b border-gray-800 text-xs font-mono text-gray-500 uppercase">
                             <th class="text-left px-4 py-3 w-4"></th>
-                            <th class="text-left px-4 py-3">type</th>
-                            <th class="text-left px-4 py-3">status</th>
-                            <th class="text-left px-4 py-3">started</th>
-                            <th class="text-left px-4 py-3">duration</th>
+                            <th class="text-left px-4 py-3">
+                                <button @click="toggleSort('type')" class="flex items-center gap-1 hover:text-curator-500 transition-colors uppercase tracking-widest">
+                                    type
+                                    <span class="text-gray-600">{{ sortField === 'type' ? (sortDir === 'asc' ? '↑' : '↓') : '↕' }}</span>
+                                </button>
+                            </th>
+                            <th class="text-left px-4 py-3">
+                                <button @click="toggleSort('status')" class="flex items-center gap-1 hover:text-curator-500 transition-colors uppercase tracking-widest">
+                                    status
+                                    <span class="text-gray-600">{{ sortField === 'status' ? (sortDir === 'asc' ? '↑' : '↓') : '↕' }}</span>
+                                </button>
+                            </th>
+                            <th class="text-left px-4 py-3">
+                                <button @click="toggleSort('started')" class="flex items-center gap-1 hover:text-curator-500 transition-colors uppercase tracking-widest">
+                                    started
+                                    <span class="text-gray-600">{{ sortField === 'started' ? (sortDir === 'asc' ? '↑' : '↓') : '↕' }}</span>
+                                </button>
+                            </th>
+                            <th class="text-left px-4 py-3">
+                                <button @click="toggleSort('duration')" class="flex items-center gap-1 hover:text-curator-500 transition-colors uppercase tracking-widest">
+                                    duration
+                                    <span class="text-gray-600">{{ sortField === 'duration' ? (sortDir === 'asc' ? '↑' : '↓') : '↕' }}</span>
+                                </button>
+                            </th>
                             <th class="text-left px-4 py-3">output</th>
                             <th class="text-left px-4 py-3">actions</th>
                         </tr>
                     </thead>
                     <tbody class="divide-y divide-gray-800">
-                        <template v-for="job in filteredJobs" :key="job.id">
+                        <template v-for="job in sortedFilteredJobs" :key="job.id">
                             <tr
                                 @click="toggleExpand(job.id)"
                                 class="hover:bg-gray-800/40 cursor-pointer transition-colors duration-100"
@@ -189,6 +209,7 @@
                                         :disabled="cancelingIds.has(job.id)"
                                         class="px-2 py-1 rounded border border-red-700 text-red-300 hover:bg-red-900/40 disabled:opacity-50 disabled:cursor-not-allowed font-mono text-xs transition-colors"
                                     >{{ cancelingIds.has(job.id) ? 'cancelling…' : 'cancel' }}</button>
+                                    <span v-else class="font-mono text-xs text-gray-700">—</span>
                                 </td>
                             </tr>
                             <!-- Expanded row -->
@@ -308,6 +329,40 @@
                 return jobs.value;
             });
 
+            const sortField = ref('started');
+            const sortDir   = ref('desc');
+
+            const toggleSort = (field) => {
+                if (sortField.value === field) {
+                    sortDir.value = sortDir.value === 'asc' ? 'desc' : 'asc';
+                } else {
+                    sortField.value = field;
+                    sortDir.value = (field === 'started' || field === 'duration') ? 'desc' : 'asc';
+                }
+            };
+
+            const sortedFilteredJobs = computed(() => {
+                const list = [...filteredJobs.value];
+                const dir = sortDir.value === 'asc' ? 1 : -1;
+                list.sort((a, b) => {
+                    let av, bv;
+                    const durMs = j => j.completed_at
+                        ? new Date(j.completed_at).getTime() - new Date(j.started_at).getTime()
+                        : (j.status === 'running' ? Infinity : 0);
+                    switch (sortField.value) {
+                        case 'type':     av = a.type;     bv = b.type;     break;
+                        case 'status':   av = a.status;   bv = b.status;   break;
+                        case 'started':  av = new Date(a.started_at).getTime(); bv = new Date(b.started_at).getTime(); break;
+                        case 'duration': av = durMs(a);   bv = durMs(b);   break;
+                        default: return 0;
+                    }
+                    if (av < bv) return -dir;
+                    if (av > bv) return  dir;
+                    return 0;
+                });
+                return list;
+            });
+
             const jobSummaryLine = (job) => {
                 if (!job) return '—';
                 if (job.status === 'running') return job.progress || 'running…';
@@ -407,7 +462,8 @@
 
             return {
                 jobs, activeTab, expandedIds, sseConnected,
-                filteredJobs, tabCount, toggleExpand,
+                filteredJobs, sortedFilteredJobs, sortField, sortDir, toggleSort,
+                tabCount, toggleExpand,
                 formatRelative, duration, cancelJob, cancelingIds,
                 runningJobs, failedJobs, cancelledJobs, latestTerminalJob,
                 railRunningJobs, jobsRailVisible, batchStats, jobSummaryLine
