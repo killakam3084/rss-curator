@@ -110,37 +110,12 @@
 
                         <!-- Card Actions: visible when card is selected -->
                         <div v-if="activeTab === 'pending'" v-show="selected && !multiSelectActive" class="flex gap-3">
-                            <button
-                                @click.stop="$emit('approve')"
-                                :disabled="operating"
-                                class="flex-1 px-4 py-2 bg-raised hover:bg-deep border border-base fg-accent disabled:opacity-50 disabled:cursor-not-allowed rounded font-mono font-bold text-sm transition-colors duration-200 flex items-center justify-center gap-2 uppercase"
-                            >
-                                <span v-if="operating" class="inline-block w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin"></span>
-                                <span v-else>&#10003;</span>
-                                {{ operating ? '' : 'accept' }}
-                            </button>
-                            <button
-                                @click.stop="$emit('reject')"
-                                :disabled="operating"
-                                class="flex-1 px-4 py-2 bg-raised hover:bg-deep border border-base text-red-600 dark:text-red-400 disabled:opacity-50 disabled:cursor-not-allowed rounded font-mono font-bold text-sm transition-colors duration-200 flex items-center justify-center gap-2 uppercase"
-                            >
-                                <span v-if="operating" class="inline-block w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin"></span>
-                                <span v-else>&#10005;</span>
-                                {{ operating ? '' : 'reject' }}
-                            </button>
+                            <curator-btn :full="true" @click.stop="$emit('approve')" :disabled="operating" :loading="operating">&#10003; accept</curator-btn>
+                            <curator-btn :full="true" variant="danger" @click.stop="$emit('reject')" :disabled="operating" :loading="operating">&#10005; reject</curator-btn>
                         </div>
 
                         <div v-if="activeTab === 'accepted'" v-show="selected && !multiSelectActive">
-                            <button
-                                @click.stop="$emit('queue')"
-                                :disabled="operating"
-                                class="w-full px-4 py-2 bg-raised hover:bg-deep border border-base fg-accent disabled:opacity-50 disabled:cursor-not-allowed rounded font-mono font-bold text-sm transition-colors duration-200 flex items-center justify-center gap-2 uppercase"
-                                title="Queue this torrent for download"
-                            >
-                                <span v-if="operating" class="inline-block w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin"></span>
-                                <span v-else>&#8595;</span>
-                                {{ operating ? 'queuing...' : 'queue for dl' }}
-                            </button>
+                            <curator-btn :full="true" @click.stop="$emit('queue')" :disabled="operating" :loading="operating" loading-text="queuing...">&#8595; queue for dl</curator-btn>
                         </div>
                     </div>
                 </div>

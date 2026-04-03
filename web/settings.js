@@ -512,6 +512,9 @@ const settingsApp = createApp({
     }
 });
 
+if (window.registerCuratorBtnComponent) {
+    window.registerCuratorBtnComponent(settingsApp);
+}
 if (window.registerSiteNavComponent) {
     window.registerSiteNavComponent(settingsApp);
 }

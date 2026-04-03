@@ -1065,6 +1065,9 @@ const app = createApp({
     }
 });
 
+if (window.registerCuratorBtnComponent) {
+    window.registerCuratorBtnComponent(app);
+}
 if (window.registerSiteNavComponent) {
     window.registerSiteNavComponent(app);
 }

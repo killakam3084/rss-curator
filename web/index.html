@@ -286,42 +286,13 @@
                             <span class="text-sm font-mono font-bold fg-accent">// {{ selectedCount }} selected</span>
                             <div class="flex gap-2 ml-auto flex-wrap">
                                 <template v-if="activeTab === 'pending'">
-                                <button 
-                                    @click="bulkApprove" 
-                                    :disabled="bulkLoading"
-                                    class="px-4 py-2 bg-raised hover:bg-deep border border-base fg-accent disabled:opacity-50 disabled:cursor-not-allowed rounded font-mono font-bold text-sm transition-colors duration-200 flex items-center gap-2 uppercase"
-                                >
-                                    <span v-if="bulkLoading" class="inline-block w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin"></span>
-                                    {{ bulkLoading ? 'accepting...' : 'accept' }}
-                                </button>
-                                <button 
-                                    @click="bulkReject" 
-                                    :disabled="bulkLoading"
-                                    class="px-4 py-2 bg-raised hover:bg-deep border border-base text-red-600 dark:text-red-400 disabled:opacity-50 disabled:cursor-not-allowed rounded font-mono font-bold text-sm transition-colors duration-200 flex items-center gap-2 uppercase"
-                                >
-                                    <span v-if="bulkLoading" class="inline-block w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin"></span>
-                                    {{ bulkLoading ? 'rejecting...' : 'reject' }}
-                                </button>
+                                <curator-btn @click="bulkApprove" :disabled="bulkLoading" :loading="bulkLoading" loading-text="accepting...">&#10003; accept</curator-btn>
+                                <curator-btn variant="danger" @click="bulkReject" :disabled="bulkLoading" :loading="bulkLoading" loading-text="rejecting...">&#10005; reject</curator-btn>
                                 </template>
-                                <button
-                                    v-if="activeTab === 'accepted'"
-                                    @click="bulkQueue"
-                                    :disabled="bulkLoading"
-                                    class="px-4 py-2 bg-raised hover:bg-deep border border-base fg-accent disabled:opacity-50 disabled:cursor-not-allowed rounded font-mono font-bold text-sm transition-colors duration-200 flex items-center gap-2 uppercase"
-                                >
-                                    <span v-if="bulkLoading" class="inline-block w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin"></span>
-                                    {{ bulkLoading ? 'queuing...' : '&#8595; queue selected' }}
-                                </button>
+                                <curator-btn v-if="activeTab === 'accepted'" @click="bulkQueue" :disabled="bulkLoading" :loading="bulkLoading" loading-text="queuing...">&#8595; queue selected</curator-btn>
                                 <!-- Actions dropdown: Re-match + Re-score -->
                                 <div class="relative" @click.stop>
-                                    <button
-                                        @click="actionsDropdownOpen = !actionsDropdownOpen"
-                                        :disabled="rematchLoading || rescoreLoading"
-                                        class="px-4 py-2 bg-raised hover:bg-deep border border-base text-indigo-700 dark:text-indigo-400 disabled:opacity-50 disabled:cursor-not-allowed rounded font-mono font-bold text-sm transition-colors duration-200 flex items-center gap-2 uppercase"
-                                    >
-                                        <span v-if="rematchLoading || rescoreLoading" class="inline-block w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin"></span>
-                                        {{ rematchLoading ? 'matching…' : rescoreLoading ? 'scoring…' : 'Actions ▾' }}
-                                    </button>
+                                    <curator-btn variant="indigo" @click="actionsDropdownOpen = !actionsDropdownOpen" :disabled="rematchLoading || rescoreLoading" :loading="rematchLoading || rescoreLoading" :loading-text="rematchLoading ? 'matching…' : 'scoring…'">Actions ▾</curator-btn>
                                     <div v-if="actionsDropdownOpen" class="absolute right-0 mt-1 w-44 bg-raised border border-base rounded shadow-xl z-20">
                                         <button
                                             @click="actionsDropdownOpen = false; rematchSelected()"
@@ -500,29 +471,9 @@
                     </div>
 
                     <div class="flex gap-3">
-                        <button 
-                            type="submit"
-                            :disabled="operatingIds.has(reviewingTorrent?.id)"
-                            class="flex-1 px-4 py-2 bg-accent hover:bg-accent disabled:opacity-50 disabled:cursor-not-allowed text-white rounded font-mono font-bold text-sm transition-colors duration-200 flex items-center justify-center gap-2 uppercase"
-                        >
-                            <span v-if="operatingIds.has(reviewingTorrent?.id)" class="inline-block w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
-                            <span v-else>⬇</span>
-                            {{ operatingIds.has(reviewingTorrent?.id) ? 'queuing...' : 'queue' }}
-                        </button>
-                        <button 
-                            type="button"
-                            @click="deferReview"
-                            class="flex-1 px-4 py-2 bg-raised hover:bg-deep border border-base fg-base rounded font-mono font-bold text-sm transition-colors duration-200 uppercase"
-                        >
-                            defer
-                        </button>
-                        <button 
-                            type="button"
-                            @click="closeReviewModal"
-                            class="px-4 py-2 bg-raised hover:bg-deep border border-base fg-base rounded font-mono font-bold text-sm transition-colors duration-200 uppercase"
-                        >
-                            close
-                        </button>
+                        <curator-btn type="submit" :full="true" :disabled="operatingIds.has(reviewingTorrent?.id)" :loading="operatingIds.has(reviewingTorrent?.id)" loading-text="queuing...">⬇ queue</curator-btn>
+                        <curator-btn type="button" :full="true" variant="muted" @click="deferReview">defer</curator-btn>
+                        <curator-btn type="button" variant="muted" @click="closeReviewModal">close</curator-btn>
                     </div>
                 </form>
             </div>
@@ -562,22 +513,8 @@
                     </label>
 
                     <div class="flex gap-3">
-                        <button
-                            type="submit"
-                            :disabled="rematchLoading"
-                            class="flex-1 px-4 py-2 bg-accent hover:bg-accent disabled:opacity-50 disabled:cursor-not-allowed text-white rounded font-mono font-bold text-sm transition-colors duration-200 flex items-center justify-center gap-2 uppercase"
-                        >
-                            <span v-if="rematchLoading" class="inline-block w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
-                            <span v-else>&#10227;</span>
-                            {{ rematchLoading ? 'matching...' : 'run rematch' }}
-                        </button>
-                        <button
-                            type="button"
-                            @click="closeRematchModal"
-                            class="px-4 py-2 bg-raised hover:bg-deep border border-base fg-base rounded font-mono font-bold text-sm transition-colors duration-200 uppercase"
-                        >
-                            close
-                        </button>
+                        <curator-btn type="submit" :full="true" :disabled="rematchLoading" :loading="rematchLoading" loading-text="matching...">&#10227; run rematch</curator-btn>
+                        <curator-btn type="button" variant="muted" @click="closeRematchModal">close</curator-btn>
                     </div>
                 </form>
             </div>
@@ -609,6 +546,7 @@
         </div>
     </div>
 
+    <script src="components/curator-btn.js"></script>
     <script src="components/site-nav.js"></script>
     <script src="components/app-sidebar.js"></script>
     <script src="components/torrent-card.js"></script>

@@ -183,12 +183,7 @@
                                 <!-- output -->
                                 <td class="px-4 py-3 font-mono text-xs fg-soft">{{ jobSummaryLine(job) }}</td>
                                 <td class="px-4 py-3">
-                                    <button
-                                        v-if="job.status === 'running'"
-                                        @click.stop="cancelJob(job.id)"
-                                        :disabled="cancelingIds.has(job.id)"
-                                        class="px-2 py-1 rounded border border-base text-red-600 dark:text-red-400 hover:bg-deep disabled:opacity-50 disabled:cursor-not-allowed font-mono text-xs transition-colors"
-                                    >{{ cancelingIds.has(job.id) ? 'cancelling…' : 'cancel' }}</button>
+                                    <curator-btn v-if="job.status === 'running'" size="sm" variant="danger" @click.stop="cancelJob(job.id)" :disabled="cancelingIds.has(job.id)" :loading="cancelingIds.has(job.id)" loading-text="cancelling…">cancel</curator-btn>
                                     <span v-else class="font-mono text-xs fg-faint">—</span>
                                 </td>
                             </tr>
@@ -219,6 +214,7 @@
         </main>
     </div>
 
+    <script src="components/curator-btn.js"></script>
     <script src="components/site-nav.js"></script>
     <script src="components/auth-guard.js"></script>
     <script src="components/log-viewer.js"></script>
@@ -454,6 +450,9 @@
         }
     });
 
+    if (window.registerCuratorBtnComponent) {
+        window.registerCuratorBtnComponent(jobsApp);
+    }
     if (window.registerSiteNavComponent) {
         window.registerSiteNavComponent(jobsApp);
     }
