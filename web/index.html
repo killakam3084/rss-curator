@@ -41,7 +41,7 @@
     <link rel="stylesheet" href="style.css">
     <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
 </head>
-<body class="bg-white dark:bg-gray-950 text-gray-900 dark:text-gray-100 min-h-screen relative overflow-x-hidden">
+<body class="bg-surface fg-base min-h-screen relative overflow-x-hidden">
     <!-- Angular geometric background pattern -->
     <div class="fixed inset-0 -z-10 overflow-hidden pointer-events-none">
         <svg class="w-full h-full" preserveAspectRatio="none" viewBox="0 0 1000 1000" xmlns="http://www.w3.org/2000/svg">
@@ -60,10 +60,10 @@
         <!-- ── Top Navigation Bar ── -->
         <nav
             :style="{right: sidebarCollapsed ? '64px' : '320px'}"
-            class="fixed top-0 left-0 z-40 h-14 bg-gray-950 border-b border-gray-800 flex items-center justify-between px-6 transition-all duration-300"
+            class="fixed top-0 left-0 z-40 h-14 bg-card border-b border-subtle flex items-center justify-between px-6 transition-all duration-300"
         >
             <!-- Left: wordmark -->
-            <span class="text-xl font-bold font-mono text-curator-500">&gt; rss-curator</span>
+            <span class="text-xl font-bold font-mono fg-accent">&gt; rss-curator</span>
 
             <!-- Right: jobs icon, alerts placeholder, logout -->
             <div class="flex items-center gap-3 relative">
@@ -73,12 +73,12 @@
                         @click="jobsPopoverOpen = !jobsPopoverOpen; alertsPopoverOpen = false"
                         class="relative p-2 rounded border transition-colors duration-150"
                         :class="jobsPopoverOpen
-                            ? 'bg-gray-800 border-gray-600 text-white'
-                            : 'border-transparent hover:bg-gray-800 hover:border-gray-700'"
+                            ? 'bg-raised border-base fg-base'
+                            : 'border-transparent hover:bg-raised hover:border-base'"
                         title="Jobs"
                     >
                         <!-- briefcase icon -->
-                        <svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24">
+                        <svg class="w-5 h-5 fg-soft" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24">
                             <rect x="2" y="7" width="20" height="14" rx="2" ry="2"/>
                             <path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/>
                             <line x1="12" y1="12" x2="12" y2="12"/>
@@ -86,7 +86,7 @@
                         <!-- running badge -->
                         <span
                             v-if="runningJobs.length > 0"
-                            class="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-curator-500 text-gray-950 text-xs font-bold flex items-center justify-center animate-pulse"
+                            class="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-accent text-white text-xs font-bold flex items-center justify-center animate-pulse"
                         >{{ runningJobs.length }}</span>
                         <!-- failed badge (overrides running) -->
                         <span
@@ -110,42 +110,42 @@
                     >
                     <div
                         v-if="jobsPopoverOpen"
-                        class="absolute top-10 right-0 w-80 bg-gray-900 border border-gray-700 rounded-lg shadow-2xl z-50"
+                        class="absolute top-10 right-0 w-80 bg-card border border-base rounded-lg shadow-2xl z-50"
                         @click.stop
                     >
-                        <div class="flex items-center justify-between px-4 py-3 border-b border-gray-800">
-                            <span class="text-xs font-mono font-bold text-curator-500 uppercase">recent jobs</span>
+                        <div class="flex items-center justify-between px-4 py-3 border-b border-subtle">
+                            <span class="text-xs font-mono font-bold fg-accent uppercase">recent jobs</span>
                             <div class="flex items-center gap-3">
                                 <button v-if="failedJobs.length > 0" @click="clearFailedJobs" class="text-xs font-mono text-red-500 hover:text-red-300 transition-colors">clear failed</button>
-                                <a href="/jobs" class="text-xs font-mono text-gray-400 hover:text-curator-500 transition-colors">Go to Jobs →</a>
+                                <a href="/jobs" class="text-xs font-mono fg-soft hover:fg-accent transition-colors">Go to Jobs →</a>
                             </div>
                         </div>
-                        <div v-if="recentJobs.length === 0" class="px-4 py-6 text-center text-xs font-mono text-gray-600">no jobs recorded</div>
+                        <div v-if="recentJobs.length === 0" class="px-4 py-6 text-center text-xs font-mono fg-muted">no jobs recorded</div>
                         <ul v-else class="divide-y divide-gray-800 max-h-72 overflow-y-auto">
                             <li v-for="job in recentJobs" :key="job.id" class="group flex items-start gap-3 px-4 py-3">
                                 <!-- status dot -->
                                 <span :class="[
                                     'mt-0.5 w-2.5 h-2.5 rounded-full shrink-0',
-                                    job.status === 'running'   ? 'bg-curator-500 animate-pulse' :
+                                    job.status === 'running'   ? 'bg-accent animate-pulse' :
                                     job.status === 'completed' ? 'bg-emerald-500' :
                                     job.status === 'cancelled' ? 'bg-amber-500' : 'bg-red-500'
                                 ]"></span>
                                 <div class="min-w-0 flex-1">
                                     <div class="flex items-center justify-between gap-2">
-                                        <span class="text-xs font-mono text-gray-300">{{ job.type }}</span>
-                                        <span class="text-xs font-mono text-gray-600 shrink-0">{{ formatRelative(job.started_at) }}</span>
+                                        <span class="text-xs font-mono fg-soft">{{ job.type }}</span>
+                                        <span class="text-xs font-mono fg-muted shrink-0">{{ formatRelative(job.started_at) }}</span>
                                     </div>
                                     <p v-if="job.summary && job.summary.error_message" class="text-xs text-red-400 truncate">{{ job.summary.error_message }}</p>
-                                    <p v-else-if="job.status === 'running' && job.progress" class="text-xs text-curator-500/70">{{ job.progress }}</p>
+                                    <p v-else-if="job.status === 'running' && job.progress" class="text-xs fg-accent">{{ job.progress }}</p>
                                     <p v-else-if="job.status === 'cancelled'" class="text-xs text-amber-400">cancelled</p>
-                                    <p v-else-if="job.status === 'completed'" class="text-xs text-gray-500">{{ jobSummaryLine(job) }}</p>
+                                    <p v-else-if="job.status === 'completed'" class="text-xs fg-dim">{{ jobSummaryLine(job) }}</p>
                                 </div>
                                 <!-- dismiss button (always visible for failed, hover for others) -->
                                 <button
                                     v-if="job.status !== 'running'"
                                     @click.stop="dismissJob(job.id)"
                                     :class="[
-                                        'transition-opacity shrink-0 mt-0.5 text-gray-600 hover:text-red-400 text-sm leading-none',
+                                        'transition-opacity shrink-0 mt-0.5 fg-muted hover:text-red-400 text-sm leading-none',
                                         job.status === 'failed' ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
                                     ]"
                                     title="Dismiss"
@@ -162,12 +162,12 @@
                         @click="alertsPopoverOpen = !alertsPopoverOpen; jobsPopoverOpen = false; if (alertsPopoverOpen) markAlertsRead()"
                         class="relative p-2 rounded border transition-colors duration-150"
                         :class="alertsPopoverOpen
-                            ? 'bg-gray-800 border-gray-600 text-white'
-                            : 'border-transparent hover:bg-gray-800 hover:border-gray-700'"
+                            ? 'bg-raised border-base fg-base'
+                            : 'border-transparent hover:bg-raised hover:border-base'"
                         title="Alerts"
                     >
                         <!-- bell icon -->
-                        <svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24">
+                        <svg class="w-5 h-5 fg-soft" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24">
                             <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
                             <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
                         </svg>
@@ -189,38 +189,38 @@
                     >
                     <div
                         v-if="alertsPopoverOpen"
-                        class="absolute top-10 right-0 w-80 bg-gray-900 border border-gray-700 rounded-lg shadow-2xl z-50"
+                        class="absolute top-10 right-0 w-80 bg-card border border-base rounded-lg shadow-2xl z-50"
                         @click.stop
                     >
-                        <div class="flex items-center justify-between px-4 py-3 border-b border-gray-800">
+                        <div class="flex items-center justify-between px-4 py-3 border-b border-subtle">
                             <span class="text-xs font-mono font-bold text-amber-400 uppercase">alerts</span>
-                            <button @click="clearAlerts" class="text-xs font-mono text-gray-500 hover:text-gray-300 transition-colors">clear</button>
+                            <button @click="clearAlerts" class="text-xs font-mono fg-dim hover:fg-soft transition-colors">clear</button>
                         </div>
-                        <div v-if="recentAlerts.length === 0" class="px-4 py-6 text-center text-xs font-mono text-gray-600">no alerts</div>
+                        <div v-if="recentAlerts.length === 0" class="px-4 py-6 text-center text-xs font-mono fg-muted">no alerts</div>
                         <ul v-else class="divide-y divide-gray-800 max-h-72 overflow-y-auto">
-                            <li v-for="alert in recentAlerts" :key="alert.id" class="group flex items-start gap-3 px-4 py-3 hover:bg-gray-800/50 transition-colors">
+                            <li v-for="alert in recentAlerts" :key="alert.id" class="group flex items-start gap-3 px-4 py-3 hover:bg-raised/50 transition-colors">
                                 <!-- action dot -->
                                 <span :class="[
                                     'mt-0.5 w-2.5 h-2.5 rounded-full shrink-0',
                                     alert.action === 'approve'       ? 'bg-emerald-500' :
                                     alert.action === 'reject'        ? 'bg-red-500' :
                                     alert.action === 'queue'         ? 'bg-blue-400' :
-                                    alert.action === 'staged'        ? 'bg-curator-500' :
+                                    alert.action === 'staged'        ? 'bg-accent' :
                                     alert.action === 'job_completed' ? 'bg-emerald-400' :
                                     alert.action === 'job_cancelled' ? 'bg-amber-400' : 'bg-red-500'
                                 ]"></span>
                                 <div class="min-w-0 flex-1">
                                     <div class="flex items-center justify-between gap-2">
-                                        <span class="text-xs font-mono text-gray-300 truncate">{{ alert.message }}</span>
-                                        <span class="text-xs font-mono text-gray-600 shrink-0">{{ formatRelative(alert.triggered_at) }}</span>
+                                        <span class="text-xs font-mono fg-soft truncate">{{ alert.message }}</span>
+                                        <span class="text-xs font-mono fg-muted shrink-0">{{ formatRelative(alert.triggered_at) }}</span>
                                     </div>
-                                    <p v-if="alert.torrent_title && alert.action !== 'staged' && alert.action !== 'job_failed'" class="text-xs text-gray-600 truncate mt-0.5">{{ alert.match_reason }}</p>
+                                    <p v-if="alert.torrent_title && alert.action !== 'staged' && alert.action !== 'job_failed'" class="text-xs fg-muted truncate mt-0.5">{{ alert.match_reason }}</p>
                                 </div>
                                 <!-- per-alert dismiss button -->
                                 <button
                                     @click.stop="dismissAlert(alert.id)"
                                     :class="[
-                                        'transition-opacity shrink-0 mt-0.5 text-gray-600 hover:text-red-400 text-sm leading-none',
+                                        'transition-opacity shrink-0 mt-0.5 fg-muted hover:text-red-400 text-sm leading-none',
                                         alert.action === 'job_failed' ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
                                     ]"
                                     title="Dismiss"
@@ -232,7 +232,7 @@
                 </div>
 
                 <!-- Settings link -->
-                <a href="/settings" title="Settings" class="p-2 rounded border border-transparent hover:bg-gray-800 hover:border-gray-700 text-gray-400 hover:text-curator-500 transition-colors duration-150">
+                <a href="/settings" title="Settings" class="p-2 rounded border border-transparent hover:bg-raised hover:border-base fg-soft hover:fg-accent transition-colors duration-150">
                     <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24">
                         <circle cx="12" cy="12" r="3"/>
                         <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
@@ -241,7 +241,7 @@
 
                 <!-- Logout -->
                 <form method="POST" action="/logout">
-                    <button type="submit" class="px-3 py-1.5 rounded font-mono text-xs text-gray-500 hover:text-red-400 hover:bg-gray-800 border border-transparent hover:border-gray-700 transition-colors duration-150 uppercase tracking-widest">logout</button>
+                    <button type="submit" class="px-3 py-1.5 rounded font-mono text-xs fg-dim hover:text-red-400 hover:bg-raised border border-transparent hover:border-base transition-colors duration-150 uppercase tracking-widest">logout</button>
                 </form>
             </div>
         </nav>
@@ -255,19 +255,19 @@
                 v-for="toast in toasts"
                 :key="toast.id"
                 :class="[
-                    'flex items-start gap-3 px-4 py-3 rounded-lg border border-gray-700 bg-gray-900 shadow-lg shadow-black/50 toast-in pointer-events-auto',
-                    toast.type === 'success' ? 'border-l-4 border-l-curator-500' :
+                    'flex items-start gap-3 px-4 py-3 rounded-lg border border-base bg-card shadow-lg shadow-black/50 toast-in pointer-events-auto',
+                    toast.type === 'success' ? 'border-l-4 border-l-accent' :
                     toast.type === 'error'   ? 'border-l-4 border-l-red-500' :
                                               'border-l-4 border-l-gray-600'
                 ]"
             >
                 <span :class="[
                     'text-sm shrink-0 mt-0.5',
-                    toast.type === 'success' ? 'text-curator-500' :
+                    toast.type === 'success' ? 'fg-accent' :
                     toast.type === 'error'   ? 'text-red-400' :
-                                              'text-gray-500'
+                                              'fg-dim'
                 ]">{{ toast.type === 'success' ? '✓' : toast.type === 'error' ? '✗' : 'ℹ' }}</span>
-                <span class="text-sm font-mono text-gray-200 leading-snug">{{ toast.message }}</span>
+                <span class="text-sm font-mono fg-soft leading-snug">{{ toast.message }}</span>
             </div>
         </div>
 
@@ -298,7 +298,7 @@
                     ></jobs-rail>
 
                     <!-- Controls -->
-                    <div class="bg-gray-900 border border-gray-800 rounded-lg shadow-lg p-6">
+                    <div class="bg-card border border-subtle rounded-lg shadow-lg p-6">
                         <!-- Filter Tabs -->
                         <div class="flex gap-2 mb-6 flex-wrap">
                             <button 
@@ -308,8 +308,8 @@
                                 :class="[
                                     'px-4 py-2 rounded font-mono text-sm font-bold uppercase transition-all duration-200 border',
                                     activeTab === tab 
-                                        ? 'bg-curator-500 text-gray-900 border-curator-500 shadow-lg shadow-curator-500/50' 
-                                        : 'bg-gray-800 text-gray-400 border-gray-700 hover:border-curator-500 hover:text-curator-500'
+                                        ? 'bg-accent text-white border-accent shadow-lg' 
+                                        : 'bg-raised fg-soft border-base hover:border-accent hover:fg-accent'
                                 ]"
                             >
                                 > {{ tab }}
@@ -317,16 +317,16 @@
                         </div>
 
                         <!-- Bulk Actions -->
-                        <div v-if="selectedCount > 0" class="flex items-center gap-4 p-4 bg-gray-800 border border-gray-700 rounded-lg mb-6">
-                            <span class="text-sm font-mono font-bold text-curator-500">// {{ selectedCount }} selected</span>
+                        <div v-if="selectedCount > 0" class="flex items-center gap-4 p-4 bg-raised border border-subtle rounded-lg mb-6">
+                            <span class="text-sm font-mono font-bold fg-accent">// {{ selectedCount }} selected</span>
                             <div class="flex gap-2 ml-auto flex-wrap">
                                 <template v-if="activeTab === 'pending'">
                                 <button 
                                     @click="bulkApprove" 
                                     :disabled="bulkLoading"
-                                    class="px-4 py-2 bg-curator-500 hover:bg-curator-600 disabled:opacity-50 disabled:cursor-not-allowed text-gray-900 rounded font-mono font-bold text-sm transition-colors duration-200 flex items-center gap-2 uppercase"
+                                    class="px-4 py-2 bg-accent hover:bg-accent disabled:opacity-50 disabled:cursor-not-allowed text-white rounded font-mono font-bold text-sm transition-colors duration-200 flex items-center gap-2 uppercase"
                                 >
-                                    <span v-if="bulkLoading" class="inline-block w-4 h-4 border-2 border-gray-900 border-t-transparent rounded-full animate-spin"></span>
+                                    <span v-if="bulkLoading" class="inline-block w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
                                     {{ bulkLoading ? 'accepting...' : 'accept' }}
                                 </button>
                                 <button 
@@ -342,9 +342,9 @@
                                     v-if="activeTab === 'accepted'"
                                     @click="bulkQueue"
                                     :disabled="bulkLoading"
-                                    class="px-4 py-2 bg-curator-500 hover:bg-curator-600 disabled:opacity-50 disabled:cursor-not-allowed text-gray-900 rounded font-mono font-bold text-sm transition-colors duration-200 flex items-center gap-2 uppercase"
+                                    class="px-4 py-2 bg-accent hover:bg-accent disabled:opacity-50 disabled:cursor-not-allowed text-white rounded font-mono font-bold text-sm transition-colors duration-200 flex items-center gap-2 uppercase"
                                 >
-                                    <span v-if="bulkLoading" class="inline-block w-4 h-4 border-2 border-gray-900 border-t-transparent rounded-full animate-spin"></span>
+                                    <span v-if="bulkLoading" class="inline-block w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
                                     {{ bulkLoading ? 'queuing...' : '&#8595; queue selected' }}
                                 </button>
                                 <!-- Actions dropdown: Re-match + Re-score -->
@@ -357,22 +357,22 @@
                                         <span v-if="rematchLoading || rescoreLoading" class="inline-block w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
                                         {{ rematchLoading ? 'matching…' : rescoreLoading ? 'scoring…' : 'Actions ▾' }}
                                     </button>
-                                    <div v-if="actionsDropdownOpen" class="absolute right-0 mt-1 w-44 bg-gray-800 border border-gray-700 rounded shadow-xl z-20">
+                                    <div v-if="actionsDropdownOpen" class="absolute right-0 mt-1 w-44 bg-raised border border-base rounded shadow-xl z-20">
                                         <button
                                             @click="actionsDropdownOpen = false; rematchSelected()"
-                                            class="w-full px-4 py-2 text-left text-sm font-mono text-gray-200 hover:bg-gray-700 flex items-center gap-2"
+                                            class="w-full px-4 py-2 text-left text-sm font-mono fg-soft hover:bg-deep flex items-center gap-2"
                                             title="Re-run parser and matcher on selected torrents"
                                         >&#10227; Re-match</button>
                                         <button
                                             @click="actionsDropdownOpen = false; rescoreSelected()"
-                                            class="w-full px-4 py-2 text-left text-sm font-mono text-gray-200 hover:bg-gray-700 flex items-center gap-2"
+                                            class="w-full px-4 py-2 text-left text-sm font-mono fg-soft hover:bg-deep flex items-center gap-2"
                                             title="Re-run AI scoring on selected torrents"
                                         >&#9889; Re-score</button>
                                     </div>
                                 </div>
                                 <button
                                     @click="selectedIds.clear()"
-                                    class="px-3 py-2 bg-gray-700 hover:bg-gray-600 text-gray-400 hover:text-gray-200 rounded font-mono font-bold text-sm transition-colors duration-200 uppercase"
+                                    class="px-3 py-2 bg-raised hover:bg-deep fg-dim hover:fg-base rounded font-mono font-bold text-sm transition-colors duration-200 uppercase"
                                     title="Clear selection"
                                 >&#10005;</button>
                             </div>
@@ -381,16 +381,16 @@
 
                     <!-- Search bar — always visible, outside the loading/empty/grid conditional -->
                     <div v-if="!loading" class="flex items-center gap-2 mb-3 px-1">
-                        <svg class="w-3.5 h-3.5 text-gray-500 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                        <svg class="w-3.5 h-3.5 fg-dim shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
                             <circle cx="11" cy="11" r="8"/><path stroke-linecap="round" stroke-linejoin="round" d="m21 21-4.35-4.35"/>
                         </svg>
                         <input
                             v-model="searchQuery"
                             type="text"
                             placeholder="search titles…"
-                            class="flex-1 bg-transparent border-b border-gray-700 focus:border-gray-500 text-sm font-mono text-gray-200 placeholder-gray-600 outline-none py-0.5 transition-colors"
+                            class="flex-1 bg-transparent border-b border-base focus:border-accent text-sm font-mono fg-soft placeholder-gray-500 outline-none py-0.5 transition-colors"
                         />
-                        <button v-if="searchQuery" @click="searchQuery = ''" class="text-gray-600 hover:text-gray-400 font-mono text-xs transition-colors">×</button>
+                        <button v-if="searchQuery" @click="searchQuery = ''" class="fg-muted hover:fg-soft font-mono text-xs transition-colors">×</button>
                     </div>
 
                     <!-- Loading State -->
@@ -417,7 +417,7 @@
                     <div v-else>
                         <!-- Sort bar -->
                         <div class="flex flex-wrap items-center gap-2 mb-3 px-1">
-                            <span class="text-xs font-mono text-gray-600 uppercase shrink-0">sort</span>
+                            <span class="text-xs font-mono fg-muted uppercase shrink-0">sort</span>
                             <button
                                 v-for="f in sortFields"
                                 :key="f.key"
@@ -425,15 +425,15 @@
                                 :class="[
                                     'px-2 py-1 rounded text-xs font-mono transition-colors flex items-center gap-1',
                                     sortField === f.key
-                                        ? 'bg-curator-500/20 text-curator-400 border border-curator-500/40'
-                                        : 'text-gray-600 hover:text-gray-400'
+                                        ? 'bg-accent/20 fg-accent border border-accent/40'
+                                        : 'fg-muted hover:fg-soft'
                                 ]"
                             >
                                 {{ f.label }}
                                 <span v-if="sortField === f.key">{{ sortDir === 'asc' ? '↑' : '↓' }}</span>
                             </button>
                             <div class="ml-auto flex items-center gap-1">
-                                <span class="text-xs font-mono text-gray-600">show</span>
+                                <span class="text-xs font-mono fg-muted">show</span>
                                 <button
                                     v-for="n in pageSizeOptions"
                                     :key="n"
@@ -441,8 +441,8 @@
                                     :class="[
                                         'px-2 py-1 rounded text-xs font-mono transition-colors',
                                         pageSize === n
-                                            ? 'bg-curator-500/20 text-curator-400 border border-curator-500/40'
-                                            : 'text-gray-600 hover:text-gray-400'
+                                            ? 'bg-accent/20 fg-accent border border-accent/40'
+                                            : 'fg-muted hover:fg-soft'
                                     ]"
                                 >{{ n === 0 ? 'all' : n }}</button>
                             </div>
@@ -453,12 +453,12 @@
                             <button
                                 v-if="pagedTorrents.length > 0 && pagedTorrents.every(t => !selectedIds.has(t.id))"
                                 @click="selectAll()"
-                                class="text-xs font-mono text-gray-500 hover:text-curator-400 transition-colors"
+                                class="text-xs font-mono fg-dim hover:fg-accent transition-colors"
                             >select all {{ pagedTorrents.length }} on page</button>
                             <button
                                 v-else-if="pagedTorrents.length > 0"
                                 @click="pagedTorrents.forEach(t => selectedIds.delete(t.id))"
-                                class="text-xs font-mono text-gray-500 hover:text-red-400 transition-colors"
+                                class="text-xs font-mono fg-dim hover:text-red-400 transition-colors"
                             >deselect page</button>
                         </div>
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -481,20 +481,20 @@
 
                         <!-- Pagination controls -->
                         <div v-if="totalPages > 1 || pageSize > 0" class="flex items-center justify-between mt-4 px-1">
-                            <span class="text-xs font-mono text-gray-600">
+                            <span class="text-xs font-mono fg-muted">
                                 {{ (currentPage - 1) * pageSize + 1 }}–{{ Math.min(currentPage * pageSize || displayedTorrents.length, displayedTorrents.length) }} of {{ displayedTorrents.length }}
                             </span>
                             <div v-if="totalPages > 1" class="flex items-center gap-2">
                                 <button
                                     @click="currentPage--"
                                     :disabled="currentPage <= 1"
-                                    class="px-3 py-1 rounded text-xs font-mono bg-gray-800 border border-gray-700 text-gray-400 hover:text-curator-400 hover:border-curator-500/40 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                                    class="px-3 py-1 rounded text-xs font-mono bg-raised border border-base fg-soft hover:fg-accent hover:border-accent/40 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
                                 >← prev</button>
-                                <span class="text-xs font-mono text-gray-500">{{ currentPage }} / {{ totalPages }}</span>
+                                <span class="text-xs font-mono fg-dim">{{ currentPage }} / {{ totalPages }}</span>
                                 <button
                                     @click="currentPage++"
                                     :disabled="currentPage >= totalPages"
-                                    class="px-3 py-1 rounded text-xs font-mono bg-gray-800 border border-gray-700 text-gray-400 hover:text-curator-400 hover:border-curator-500/40 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                                    class="px-3 py-1 rounded text-xs font-mono bg-raised border border-base fg-soft hover:fg-accent hover:border-accent/40 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
                                 >next →</button>
                             </div>
                         </div>
@@ -505,32 +505,32 @@
 
         <!-- Review Modal -->
         <div v-if="reviewModalOpen" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-            <div class="bg-gray-900 border border-gray-800 rounded-lg shadow-2xl max-w-md w-full mx-4 p-6">
-                <h2 class="text-xl font-bold text-curator-500 font-mono mb-4">Queue for Download</h2>
+            <div class="bg-card border border-subtle rounded-lg shadow-2xl max-w-md w-full mx-4 p-6">
+                <h2 class="text-xl font-bold fg-accent font-mono mb-4">Queue for Download</h2>
                 
-                <div v-if="reviewingTorrent" class="mb-6 pb-4 border-b border-gray-800">
-                    <p class="text-sm text-gray-400 mb-2">Torrent:</p>
-                    <p class="text-gray-100 font-mono text-sm break-words line-clamp-3">{{ reviewingTorrent.title }}</p>
+                <div v-if="reviewingTorrent" class="mb-6 pb-4 border-b border-subtle">
+                    <p class="text-sm fg-soft mb-2">Torrent:</p>
+                    <p class="fg-base font-mono text-sm break-words line-clamp-3">{{ reviewingTorrent.title }}</p>
                 </div>
 
                 <form @submit.prevent="submitReview" class="space-y-4 mb-6">
                     <div>
-                        <label class="block text-sm font-mono font-bold text-curator-500 mb-2">Tags</label>
+                        <label class="block text-sm font-mono font-bold fg-accent mb-2">Tags</label>
                         <input 
                             v-model="reviewForm.tags"
                             type="text" 
                             placeholder="tag1, tag2"
-                            class="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded text-gray-100 placeholder-gray-600 focus:border-curator-500 focus:outline-none text-sm font-mono"
+                            class="w-full px-3 py-2 bg-raised border border-base rounded fg-base placeholder-gray-500 focus:border-accent focus:outline-none text-sm font-mono"
                         >
                     </div>
 
                     <div>
-                        <label class="block text-sm font-mono font-bold text-curator-500 mb-2">Category</label>
+                        <label class="block text-sm font-mono font-bold fg-accent mb-2">Category</label>
                         <input 
                             v-model="reviewForm.category"
                             type="text" 
                             placeholder="category"
-                            class="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded text-gray-100 placeholder-gray-600 focus:border-curator-500 focus:outline-none text-sm font-mono"
+                            class="w-full px-3 py-2 bg-raised border border-base rounded fg-base placeholder-gray-500 focus:border-accent focus:outline-none text-sm font-mono"
                         >
                     </div>
 
@@ -538,23 +538,23 @@
                         <button 
                             type="submit"
                             :disabled="operatingIds.has(reviewingTorrent?.id)"
-                            class="flex-1 px-4 py-2 bg-curator-500 hover:bg-curator-600 disabled:opacity-50 disabled:cursor-not-allowed text-gray-900 rounded font-mono font-bold text-sm transition-colors duration-200 flex items-center justify-center gap-2 uppercase"
+                            class="flex-1 px-4 py-2 bg-accent hover:bg-accent disabled:opacity-50 disabled:cursor-not-allowed text-white rounded font-mono font-bold text-sm transition-colors duration-200 flex items-center justify-center gap-2 uppercase"
                         >
-                            <span v-if="operatingIds.has(reviewingTorrent?.id)" class="inline-block w-4 h-4 border-2 border-gray-900 border-t-transparent rounded-full animate-spin"></span>
+                            <span v-if="operatingIds.has(reviewingTorrent?.id)" class="inline-block w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
                             <span v-else>⬇</span>
                             {{ operatingIds.has(reviewingTorrent?.id) ? 'queuing...' : 'queue' }}
                         </button>
                         <button 
                             type="button"
                             @click="deferReview"
-                            class="flex-1 px-4 py-2 bg-gray-800 hover:bg-gray-700 border border-gray-700 text-gray-100 rounded font-mono font-bold text-sm transition-colors duration-200 uppercase"
+                            class="flex-1 px-4 py-2 bg-raised hover:bg-deep border border-base fg-base rounded font-mono font-bold text-sm transition-colors duration-200 uppercase"
                         >
                             defer
                         </button>
                         <button 
                             type="button"
                             @click="closeReviewModal"
-                            class="px-4 py-2 bg-gray-800 hover:bg-gray-700 border border-gray-700 text-gray-100 rounded font-mono font-bold text-sm transition-colors duration-200 uppercase"
+                            class="px-4 py-2 bg-raised hover:bg-deep border border-base fg-base rounded font-mono font-bold text-sm transition-colors duration-200 uppercase"
                         >
                             close
                         </button>
@@ -565,34 +565,34 @@
 
         <!-- Rematch Modal -->
         <div v-if="rematchModalOpen" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-            <div class="bg-gray-900 border border-gray-800 rounded-lg shadow-2xl max-w-md w-full mx-4 p-6">
-                <h2 class="text-xl font-bold text-curator-500 font-mono mb-4">Re-match Torrents</h2>
+            <div class="bg-card border border-subtle rounded-lg shadow-2xl max-w-md w-full mx-4 p-6">
+                <h2 class="text-xl font-bold fg-accent font-mono mb-4">Re-match Torrents</h2>
 
-                <div class="mb-6 pb-4 border-b border-gray-800">
-                    <p class="text-sm text-gray-400 mb-2">Selection:</p>
-                    <p class="text-gray-100 font-mono text-sm">{{ rematchIds.length }} torrent<span v-if="rematchIds.length !== 1">s</span></p>
-                    <p class="text-xs text-gray-500 mt-3">Re-match re-runs parser + matcher using current rules. Items that no longer match are moved to <span class="text-red-400 font-semibold">rejected</span>.</p>
+                <div class="mb-6 pb-4 border-b border-subtle">
+                    <p class="text-sm fg-soft mb-2">Selection:</p>
+                    <p class="fg-base font-mono text-sm">{{ rematchIds.length }} torrent<span v-if="rematchIds.length !== 1">s</span></p>
+                    <p class="text-xs fg-dim mt-3">Re-match re-runs parser + matcher using current rules. Items that no longer match are moved to <span class="text-red-400 font-semibold">rejected</span>.</p>
                 </div>
 
                 <form @submit.prevent="submitRematch" class="space-y-4 mb-2">
-                    <label class="flex items-center gap-3 p-3 bg-gray-800 border border-gray-700 rounded cursor-pointer">
+                    <label class="flex items-center gap-3 p-3 bg-raised border border-base rounded cursor-pointer">
                         <input
                             v-model="rematchAutoRescore"
                             type="checkbox"
-                            class="w-4 h-4 rounded border-gray-600 bg-gray-900 text-curator-500 focus:ring-curator-500"
+                            class="w-4 h-4 rounded border-base bg-raised fg-accent focus:ring-accent"
                         >
-                        <span class="text-sm font-mono text-gray-200">Auto re-score matched items</span>
+                        <span class="text-sm font-mono fg-soft">Auto re-score matched items</span>
                     </label>
 
-                    <label class="flex items-center gap-3 p-3 bg-gray-800 border border-gray-700 rounded cursor-pointer">
+                    <label class="flex items-center gap-3 p-3 bg-raised border border-base rounded cursor-pointer">
                         <input
                             v-model="rematchForceAIEnrich"
                             type="checkbox"
-                            class="w-4 h-4 rounded border-gray-600 bg-gray-900 text-curator-500 focus:ring-curator-500"
+                            class="w-4 h-4 rounded border-base bg-raised fg-accent focus:ring-accent"
                         >
                         <div>
-                            <span class="block text-sm font-mono text-gray-200">Force AI enrich before matching</span>
-                            <span class="block text-xs text-gray-500 mt-1">Allows AI to override parsed title fields before rematch. Useful for ambiguous titles and validation runs.</span>
+                            <span class="block text-sm font-mono fg-soft">Force AI enrich before matching</span>
+                            <span class="block text-xs fg-dim mt-1">Allows AI to override parsed title fields before rematch. Useful for ambiguous titles and validation runs.</span>
                         </div>
                     </label>
 
@@ -600,16 +600,16 @@
                         <button
                             type="submit"
                             :disabled="rematchLoading"
-                            class="flex-1 px-4 py-2 bg-curator-500 hover:bg-curator-600 disabled:opacity-50 disabled:cursor-not-allowed text-gray-900 rounded font-mono font-bold text-sm transition-colors duration-200 flex items-center justify-center gap-2 uppercase"
+                            class="flex-1 px-4 py-2 bg-accent hover:bg-accent disabled:opacity-50 disabled:cursor-not-allowed text-white rounded font-mono font-bold text-sm transition-colors duration-200 flex items-center justify-center gap-2 uppercase"
                         >
-                            <span v-if="rematchLoading" class="inline-block w-4 h-4 border-2 border-gray-900 border-t-transparent rounded-full animate-spin"></span>
+                            <span v-if="rematchLoading" class="inline-block w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
                             <span v-else>&#10227;</span>
                             {{ rematchLoading ? 'matching...' : 'run rematch' }}
                         </button>
                         <button
                             type="button"
                             @click="closeRematchModal"
-                            class="px-4 py-2 bg-gray-800 hover:bg-gray-700 border border-gray-700 text-gray-100 rounded font-mono font-bold text-sm transition-colors duration-200 uppercase"
+                            class="px-4 py-2 bg-raised hover:bg-deep border border-base fg-base rounded font-mono font-bold text-sm transition-colors duration-200 uppercase"
                         >
                             close
                         </button>
