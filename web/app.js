@@ -55,9 +55,8 @@ const app = createApp({
         if (savedDarkMode !== null) {
             darkMode.value = JSON.parse(savedDarkMode);
         }
-        // Tab structure: pending → accepted → rejected
-        // (torrents can be queued for download from accepted tab)
-        const tabs = ['pending', 'accepted', 'rejected'];
+        // Tab structure: pending → accepted → queued → rejected
+        const tabs = ['pending', 'accepted', 'queued', 'rejected'];
         const reviewModalOpen = ref(false);
         const reviewingTorrent = ref(null);
         const reviewForm = ref({
@@ -100,6 +99,9 @@ const app = createApp({
         );
         const acceptedCount = computed(() =>
             torrents.value.filter(t => t.status === 'accepted').length
+        );
+        const queuedCount = computed(() =>
+            torrents.value.filter(t => t.status === 'queued').length
         );
         const rejectedCount = computed(() =>
             torrents.value.filter(t => t.status === 'rejected').length
@@ -220,14 +222,16 @@ const app = createApp({
         const fetchAllTorrents = async () => {
             try {
                 const q = searchQuery.value ? `&q=${encodeURIComponent(searchQuery.value)}` : '';
-                const [pending, accepted, rejected] = await Promise.all([
+                const [pending, accepted, queued, rejected] = await Promise.all([
                     fetch(`/api/torrents?status=pending${q}`).then(r => r.json()),
                     fetch(`/api/torrents?status=accepted${q}`).then(r => r.json()),
+                    fetch(`/api/torrents?status=queued${q}`).then(r => r.json()),
                     fetch(`/api/torrents?status=rejected${q}`).then(r => r.json())
                 ]);
                 torrents.value = [
                     ...(pending.torrents || []),
                     ...(accepted.torrents || []),
+                    ...(queued.torrents || []),
                     ...(rejected.torrents || [])
                 ];
             } catch (error) {
@@ -1107,6 +1111,7 @@ const app = createApp({
             feedStreamTorrents,
             pendingCount,
             acceptedCount,
+            queuedCount,
             rejectedCount,
             selectedCount,
             multiSelectActive,

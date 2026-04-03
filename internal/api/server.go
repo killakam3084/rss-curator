@@ -632,9 +632,12 @@ func (s *Server) handleQueue(w http.ResponseWriter, r *http.Request, id int) {
 		return
 	}
 
-	// Update status to show it's been queued
-	// Note: In production, you might track actual download state from qBittorrent
-	// For now, we'll keep it as "approved" since the source of truth is qBittorrent
+	// Mark torrent as queued so it's distinguishable from accepted-but-not-yet-sent.
+	if err := s.store.UpdateStatus(id, "queued"); err != nil {
+		s.logger.Error("failed to update torrent status to queued", zap.Int("id", id), zap.Error(err))
+		// Non-fatal: torrent is already in qBittorrent regardless.
+	}
+
 	if err := s.store.LogActivity(id, torrent.FeedItem.Title, "queue", torrent.MatchReason); err != nil {
 		s.logger.Error("failed to log activity", zap.Int("id", id), zap.Error(err))
 		// Don't fail the request
