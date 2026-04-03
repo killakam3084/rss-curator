@@ -33,6 +33,15 @@
     </script>
     <link rel="stylesheet" href="style.css">
     <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <!-- Apply theme class before Vue mounts to prevent flash -->
+    <script>
+        (function() {
+            const dm = localStorage.getItem('rss-curator-dark-mode');
+            if (dm === 'true' || (dm === null && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+                document.documentElement.classList.add('dark');
+            }
+        })();
+    </script>
     <style>
         @keyframes pulse-dot { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
         .animate-pulse-dot { animation: pulse-dot 1.5s ease-in-out infinite; }
@@ -40,37 +49,8 @@
 </head>
 <body class="bg-surface fg-base min-h-screen">
     <div id="jobs-app">
-        <!-- Top Nav (full width — no sidebar on this page) -->
-        <nav class="fixed top-0 left-0 right-0 z-40 h-14 bg-card border-b border-subtle flex items-center justify-between px-6">
-            <!-- Left: back link + wordmark -->
-            <div class="flex items-center gap-4">
-                <a href="/" class="flex items-center gap-2 fg-soft hover:fg-accent transition-colors text-sm font-mono">
-                    <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7"/>
-                    </svg>
-                    curator
-                </a>
-                <span class="fg-muted">|</span>
-                <span class="text-lg font-bold font-mono fg-accent">jobs</span>
-            </div>
-            <!-- Right: live indicator + logout -->
-            <div class="flex items-center gap-4">
-                <span class="flex items-center gap-2 text-xs font-mono fg-dim">
-                    <span :class="['w-2 h-2 rounded-full', sseConnected ? 'bg-accent animate-pulse-dot' : 'bg-gray-600']"></span>
-                    {{ sseConnected ? 'live' : 'connecting…' }}
-                </span>
-                <!-- Settings link -->
-                <a href="/settings" title="Settings" class="p-2 rounded border border-transparent hover:bg-raised hover:border-base fg-soft hover:fg-accent transition-colors duration-150">
-                    <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24">
-                        <circle cx="12" cy="12" r="3"/>
-                        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
-                    </svg>
-                </a>
-                <form method="POST" action="/logout">
-                    <button type="submit" class="px-3 py-1.5 rounded font-mono text-xs fg-dim hover:text-red-400 hover:bg-raised border border-transparent hover:border-base transition-colors duration-150 uppercase tracking-widest">logout</button>
-                </form>
-            </div>
-        </nav>
+        <!-- ── Primary Navigation ── -->
+        <site-nav page="jobs" :sse-connected="sseConnected"></site-nav>
 
         <!-- Ops In-Progress Banner -->
         <ops-banner :running-jobs="runningJobs" :cancel-job-fn="cancelJob"></ops-banner>
@@ -239,6 +219,7 @@
         </main>
     </div>
 
+    <script src="components/site-nav.js"></script>
     <script src="components/auth-guard.js"></script>
     <script src="components/log-viewer.js"></script>
     <script src="components/ops-banner.js"></script>
@@ -283,11 +264,7 @@
                 return { total: batchJobs.length, running, completed };
             });
 
-            // Dark mode: always dark on this page (follow system)
-            const applyDark = () => {
-                document.documentElement.classList.add('dark');
-            };
-            applyDark();
+            // Dark mode is handled by the site-nav component
 
             const upsertJob = (job) => {
                 const idx = jobs.value.findIndex(j => j.id === job.id);
@@ -477,6 +454,9 @@
         }
     });
 
+    if (window.registerSiteNavComponent) {
+        window.registerSiteNavComponent(jobsApp);
+    }
     if (window.registerLogViewerComponent) {
         window.registerLogViewerComponent(jobsApp);
     }

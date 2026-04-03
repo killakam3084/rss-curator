@@ -3,7 +3,6 @@
         app.component('app-sidebar', {
             props: {
                 collapsed:    { type: Boolean,  required: true },
-                darkMode:     { type: Boolean,  required: true },
                 stats:        { type: Object,   required: true },
                 logsOpen:     { type: Boolean,  required: true },
                 tab:          { type: String,   default: 'activity' },
@@ -12,7 +11,7 @@
                 formatSizeFn: { type: Function, required: true },
             },
 
-            emits: ['toggle-collapse', 'toggle-dark-mode', 'update:tab', 'toggle-logs'],
+            emits: ['toggle-collapse', 'update:tab', 'toggle-logs'],
 
             template: `
                 <aside :style="{width: collapsed ? '64px' : '320px'}" class="fixed top-14 right-0 h-[calc(100vh-3.5rem)] bg-card border-l border-subtle shadow-2xl transition-all duration-300 z-40">
@@ -27,18 +26,6 @@
                             :title="collapsed ? 'Expand console' : 'Collapse console'"
                         >
                             <span class="fg-accent font-bold text-lg">{{ collapsed ? '☰' : '✕' }}</span>
-                        </button>
-                    </div>
-
-                    <!-- Dark Mode Toggle (Always Visible) -->
-                    <div class="p-4 border-b border-subtle">
-                        <button
-                            @click="$emit('toggle-dark-mode')"
-                            :class="['w-full flex items-center gap-3 p-2 rounded border border-base bg-raised hover:border-curator-500 transition-colors duration-200', collapsed ? 'justify-center' : '']"
-                            :title="darkMode ? 'Switch to light mode' : 'Switch to dark mode'"
-                        >
-                            <span class="text-xl">{{ darkMode ? '☀️' : '🌙' }}</span>
-                            <span v-if="!collapsed" class="text-xs font-mono fg-soft uppercase">{{ darkMode ? 'light' : 'dark' }}</span>
                         </button>
                     </div>
 

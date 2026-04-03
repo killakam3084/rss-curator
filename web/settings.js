@@ -2,12 +2,6 @@ const { createApp, ref, reactive, computed, watch, onMounted } = Vue;
 
 const settingsApp = createApp({
     setup() {
-        // ── Dark mode ────────────────────────────────────────────────
-        const darkMode = ref(
-            localStorage.getItem('rss-curator-dark-mode') === 'true' ||
-            (localStorage.getItem('rss-curator-dark-mode') === null &&
-                window.matchMedia('(prefers-color-scheme: dark)').matches)
-        );
 
         // ── State ────────────────────────────────────────────────────
         const sections = [
@@ -463,7 +457,6 @@ const settingsApp = createApp({
 
         // ── Lifecycle ────────────────────────────────────────────────
         onMounted(() => {
-            document.documentElement.classList.toggle('dark', darkMode.value);
             loadSettings();
             loadShows();
         });
@@ -519,6 +512,9 @@ const settingsApp = createApp({
     }
 });
 
+if (window.registerSiteNavComponent) {
+    window.registerSiteNavComponent(settingsApp);
+}
 if (window.registerLogViewerComponent) {
     window.registerLogViewerComponent(settingsApp);
 }

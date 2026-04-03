@@ -13,8 +13,6 @@ const app = createApp({
         const selectedIds = ref(new Set());
         const operatingIds = ref(new Set());
         const toasts = ref([]);
-        // Initialize dark mode from system preference immediately
-        const darkMode = ref(window.matchMedia('(prefers-color-scheme: dark)').matches);
         // Initialize sidebar collapse state from localStorage
         const sidebarCollapsed = ref(JSON.parse(localStorage.getItem('rss-curator-sidebar-collapsed') || 'false'));
         const sidebarTab = ref('activity'); // 'activity' or 'feed'
@@ -42,11 +40,6 @@ const app = createApp({
         const logsDrawerOpen = ref(false);
         const logsDrawerHeight = ref('60vh');
         
-        // Load dark mode preference from localStorage if available, otherwise use system preference
-        const savedDarkMode = localStorage.getItem('rss-curator-dark-mode');
-        if (savedDarkMode !== null) {
-            darkMode.value = JSON.parse(savedDarkMode);
-        }
         // Tab structure: pending → accepted → queued → rejected
         const tabs = ['pending', 'accepted', 'queued', 'rejected'];
         const reviewModalOpen = ref(false);
@@ -710,12 +703,10 @@ const app = createApp({
         // Load initial data
         onMounted(() => {
             // Apply dark mode class immediately based on initial value
-            applyDarkMode();
             
             // Listen for system preference changes
             window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', (e) => {
-                darkMode.value = e.matches;
-                applyDarkMode();
+                // System preference is handled by site-nav component
             });
 
             document.addEventListener('click', () => {
@@ -963,21 +954,6 @@ const app = createApp({
             }
         };
 
-        const toggleDarkMode = () => {
-            darkMode.value = !darkMode.value;
-            applyDarkMode();
-            localStorage.setItem('rss-curator-dark-mode', JSON.stringify(darkMode.value));
-        };
-
-        const applyDarkMode = () => {
-            const html = document.documentElement;
-            if (darkMode.value) {
-                html.classList.add('dark');
-            } else {
-                html.classList.remove('dark');
-            }
-        };
-
         const toggleSidebarCollapse = () => {
             sidebarCollapsed.value = !sidebarCollapsed.value;
             localStorage.setItem('rss-curator-sidebar-collapsed', JSON.stringify(sidebarCollapsed.value));
@@ -999,7 +975,6 @@ const app = createApp({
             operatingIds,
             toasts,
             tabs,
-            darkMode,
             sidebarCollapsed,
             sidebarTab,
             feedStreamTorrents,
@@ -1058,7 +1033,6 @@ const app = createApp({
             rescoreOne,
             formatSize,
             showToast,
-            toggleDarkMode,
             toggleSidebarCollapse,
             jobs,
             jobsPopoverOpen,
@@ -1091,6 +1065,9 @@ const app = createApp({
     }
 });
 
+if (window.registerSiteNavComponent) {
+    window.registerSiteNavComponent(app);
+}
 if (window.registerLogViewerComponent) {
     window.registerLogViewerComponent(app);
 }
