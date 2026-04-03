@@ -6,6 +6,24 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+## [0.38.0] - 2026-04-02
+
+### Changed
+- **`app-sidebar` component** (`web/components/app-sidebar.js`) — the right console `<aside>` panel extracted into a fully prop-driven Vue 3 component. Props: `collapsed`, `darkMode`, `stats`, `logsOpen`, `tab`, `activities`, `feedStream`, `formatSizeFn`. Emits: `toggle-collapse`, `toggle-dark-mode`, `update:tab` (v-model compatible), `toggle-logs`.
+- **`torrent-card` component** (`web/components/torrent-card.js`) — each torrent card extracted into its own component using `setup()`. Kebab menu state is now local (`menuOpen` ref + document click listener per card instance), removing the shared `openMenuId` ref from app state. Props: `torrent`, `selected`, `multiSelectActive`, `activeTab`, `operating`. Emits: `toggle-select`, `approve`, `reject`, `queue`, `rematch`, `rescore`.
+- `web/app.js` — removed `openMenuId` reactive state and all its usages (declaration, 4 function-body clears, 1 document-listener clear, return binding); added `registerAppSidebarComponent` and `registerTorrentCardComponent` registration calls.
+- `web/index.html` — replaced `<aside>` block (~168 lines) with `<app-sidebar>` tag; replaced inline torrent card `<div v-for>` block (~110 lines) with `<torrent-card>` tags; added two new component `<script>` tags.
+
+## [0.37.0] - 2026-04-02
+
+### Added
+- **`auth-guard` component** (`web/components/auth-guard.js`) — patches `window.fetch` to intercept `401` responses and redirect to `/login?next=<path>`, and exposes `window.__authProbe()` for SSE `onerror` handlers. Wired to all SSE event streams across index, jobs, and settings pages so expired sessions redirect cleanly instead of silently failing.
+- **Go 1.23 upgrade** — `go.mod` bumped to `go 1.23`, `golang.org/x/net` updated to `v0.38.0`, `go.uber.org/zap` promoted to direct dependency; `Dockerfile` base image updated to `golang:1.23-alpine`; CI `build-and-push.yml` updated to match.
+
+### Security
+- **CWE-601 open redirect fixed** — `handleLogin` in `internal/api/server.go` now validates the `next` query parameter via `isSafeRedirect()` (uses `url.Parse`: normalises backslashes, rejects any non-empty `Scheme` or `Host`, rejects paths not starting with `/`) before using it in `http.Redirect`.
+- **GHA permissions hardening** — all GitHub Actions workflows now carry a workflow-level `permissions: {}` deny-all default with explicit per-job grants (`contents: read`, `packages: write`, `checks: write` as needed).
+
 ## [0.36.0] - 2026-04-01
 
 ### Added

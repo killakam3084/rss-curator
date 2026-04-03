@@ -12,7 +12,6 @@ const app = createApp({
         const activeTab = ref('pending');
         const selectedIds = ref(new Set());
         const operatingIds = ref(new Set());
-        const openMenuId = ref(null); // ID of card with open kebab menu; null = all closed
         const toasts = ref([]);
         // Initialize dark mode from system preference immediately
         const darkMode = ref(window.matchMedia('(prefers-color-scheme: dark)').matches);
@@ -525,9 +524,8 @@ const app = createApp({
             }
         };
 
-        // toggleCard: unified card-click handler — toggles selection and closes any open menu
+        // toggleCard: unified card-click handler — toggles selection
         const toggleCard = (id) => {
-            openMenuId.value = null;
             if (selectedIds.value.has(id)) {
                 selectedIds.value.delete(id);
             } else {
@@ -555,7 +553,6 @@ const app = createApp({
         };
 
         const rematchOne = (id) => {
-            openMenuId.value = null;
             openRematchModal([id]);
         };
 
@@ -616,7 +613,6 @@ const app = createApp({
 
         // rescoreOne: single-card re-score from the kebab menu
         const rescoreOne = async (id) => {
-            openMenuId.value = null;
             operatingIds.value.add(id);
             try {
                 const response = await fetch('/api/torrents/rescore', {
@@ -695,10 +691,9 @@ const app = createApp({
             return `${size.toFixed(2)} ${units[unitIndex]}`;
         };
 
-        // Clear selection and open menu when navigating between tabs
+        // Clear selection when navigating between tabs
         watch(activeTab, () => {
             selectedIds.value = new Set();
-            openMenuId.value = null;
             currentPage.value = 1;
         });
 
@@ -723,9 +718,7 @@ const app = createApp({
                 applyDarkMode();
             });
 
-            // Close any open kebab menu when clicking outside a card
             document.addEventListener('click', () => {
-                openMenuId.value = null;
                 actionsDropdownOpen.value = false;
             });
             
@@ -1004,7 +997,6 @@ const app = createApp({
             activeTab,
             selectedIds,
             operatingIds,
-            openMenuId,
             toasts,
             tabs,
             darkMode,
@@ -1107,6 +1099,12 @@ if (window.registerJobsRailComponent) {
 }
 if (window.registerOpsBannerComponent) {
     window.registerOpsBannerComponent(app);
+}
+if (window.registerAppSidebarComponent) {
+    window.registerAppSidebarComponent(app);
+}
+if (window.registerTorrentCardComponent) {
+    window.registerTorrentCardComponent(app);
 }
 
 app.mount('#app');
