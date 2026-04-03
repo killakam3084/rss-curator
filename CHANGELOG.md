@@ -6,6 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+## [Unreleased]
+
+### Added
+- **`docs/FRONTEND.md`** — comprehensive frontend reference covering: stack overview, file layout, component registration pattern (IIFE + `window.registerXxxComponent`), full component inventory with props/emits tables for all 7 components, design token reference (all `--c-*` custom properties with light and dark values), semantic utility class reference (surfaces, text, borders, badges, action buttons), theme system end-to-end (dark mode ownership, FOUC prevention, `localStorage` key), page-to-component wiring table, and a step-by-step guide for adding a new component.
+
 ## [0.40.0] - 2026-04-03
 
 ### Added
