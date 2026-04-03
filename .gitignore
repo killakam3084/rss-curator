@@ -1,3 +1,7 @@
+# coverage reports
+coverage/
+coverage.out
+
 # Compiled binary (root-level only)
 /curator
 

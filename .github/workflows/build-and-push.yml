@@ -31,7 +31,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v4
         with:
-          go-version: '1.22'
+          go-version: '1.23'
 
       - name: Install gotestsum
         run: go install gotest.tools/gotestsum@latest
@@ -81,7 +81,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v4
         with:
-          go-version: '1.22'
+          go-version: '1.23'
       
       - name: Run go fmt
         run: gofmt -d . | head -20 && test -z "$(gofmt -l .)" || (echo "Go code is not formatted"; exit 1)
