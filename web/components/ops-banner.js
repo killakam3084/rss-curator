@@ -42,33 +42,33 @@
                     leave-from-class="opacity-100 translate-y-0"
                     leave-to-class="opacity-0 -translate-y-full"
                 >
-                <div v-if="visible" class="w-full bg-gray-950 border-b border-curator-500/20 z-40">
+                <div v-if="visible" class="w-full bg-surface border-b border-curator-500/20 z-40">
                     <!-- single-job compact row -->
                     <div v-if="runningJobs.length === 1 && primaryJob" class="flex items-center gap-3 px-4 py-2">
                         <!-- pulsing indicator -->
                         <span class="relative flex h-2 w-2 shrink-0">
-                            <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-curator-500 opacity-60"></span>
-                            <span class="relative inline-flex rounded-full h-2 w-2 bg-curator-500"></span>
+                            <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-accent opacity-60"></span>
+                            <span class="relative inline-flex rounded-full h-2 w-2 bg-accent"></span>
                         </span>
                         <!-- type label -->
-                        <span class="text-xs font-mono text-curator-400 uppercase tracking-wider shrink-0">{{ primaryJob.type }}</span>
+                        <span class="text-xs font-mono fg-accent uppercase tracking-wider shrink-0">{{ primaryJob.type }}</span>
                         <!-- progress bar + counter -->
                         <div v-if="progressParts" class="flex items-center gap-2 flex-1 min-w-0">
-                            <div class="flex-1 bg-gray-800 rounded-full h-1 min-w-[60px] max-w-xs overflow-hidden">
+                            <div class="flex-1 bg-raised rounded-full h-1 min-w-[60px] max-w-xs overflow-hidden">
                                 <div
-                                    class="h-1 rounded-full bg-curator-500 transition-all duration-300"
+                                    class="h-1 rounded-full bg-accent transition-all duration-300"
                                     :style="{ width: progressParts.pct + '%' }"
                                 ></div>
                             </div>
-                            <span class="text-xs font-mono text-gray-400 shrink-0 tabular-nums">{{ progressParts.current }}&thinsp;/&thinsp;{{ progressParts.total }}</span>
+                            <span class="text-xs font-mono fg-soft shrink-0 tabular-nums">{{ progressParts.current }}&thinsp;/&thinsp;{{ progressParts.total }}</span>
                         </div>
-                        <span v-else class="text-xs font-mono text-gray-500 flex-1">in progress…</span>
+                        <span v-else class="text-xs font-mono fg-dim flex-1">in progress…</span>
                         <!-- cancel button -->
                         <button
                             v-if="cancelJobFn"
                             @click="cancel(primaryJob.id)"
                             :disabled="dismissing === primaryJob.id"
-                            class="shrink-0 text-xs font-mono text-gray-600 hover:text-red-400 disabled:opacity-40 transition-colors uppercase tracking-wider"
+                            class="shrink-0 text-xs font-mono fg-muted hover:text-red-400 disabled:opacity-40 transition-colors uppercase tracking-wider"
                         >{{ dismissing === primaryJob.id ? 'cancelling…' : 'cancel' }}</button>
                     </div>
 
@@ -76,26 +76,26 @@
                     <div v-else>
                         <div class="flex items-center gap-3 px-4 py-2 cursor-pointer" @click="expanded = !expanded">
                             <span class="relative flex h-2 w-2 shrink-0">
-                                <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-curator-500 opacity-60"></span>
-                                <span class="relative inline-flex rounded-full h-2 w-2 bg-curator-500"></span>
+                                <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-accent opacity-60"></span>
+                                <span class="relative inline-flex rounded-full h-2 w-2 bg-accent"></span>
                             </span>
-                            <span class="text-xs font-mono text-curator-400 flex-1">{{ runningJobs.length }} operations running</span>
-                            <span class="text-xs font-mono text-gray-600">{{ expanded ? '▴' : '▾' }}</span>
+                            <span class="text-xs font-mono fg-accent flex-1">{{ runningJobs.length }} operations running</span>
+                            <span class="text-xs font-mono fg-muted">{{ expanded ? '▴' : '▾' }}</span>
                         </div>
                         <!-- expanded per-job list -->
-                        <div v-if="expanded" class="border-t border-gray-800 divide-y divide-gray-800/60">
+                        <div v-if="expanded" class="border-t border-subtle divide-y divide-gray-800/60">
                             <div
                                 v-for="job in runningJobs"
                                 :key="job.id"
                                 class="flex items-center gap-3 px-6 py-1.5"
                             >
-                                <span class="text-xs font-mono text-curator-400 uppercase w-24 shrink-0">{{ job.type }}</span>
-                                <span class="text-xs font-mono text-gray-500 flex-1">{{ job.progress || 'running…' }}</span>
+                                <span class="text-xs font-mono fg-accent uppercase w-24 shrink-0">{{ job.type }}</span>
+                                <span class="text-xs font-mono fg-dim flex-1">{{ job.progress || 'running…' }}</span>
                                 <button
                                     v-if="cancelJobFn"
                                     @click="cancel(job.id)"
                                     :disabled="dismissing === job.id"
-                                    class="shrink-0 text-xs font-mono text-gray-600 hover:text-red-400 disabled:opacity-40 transition-colors uppercase"
+                                    class="shrink-0 text-xs font-mono fg-muted hover:text-red-400 disabled:opacity-40 transition-colors uppercase"
                                 >{{ dismissing === job.id ? '…' : 'cancel' }}</button>
                             </div>
                         </div>

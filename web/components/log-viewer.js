@@ -171,16 +171,16 @@
                             right:      drawerRight,
                             transition: resizing ? 'none' : 'height 0.25s cubic-bezier(0.4,0,0.2,1)'
                         }"
-                        class="fixed bottom-0 left-0 z-50 overflow-hidden bg-gray-950 border-t-2 border-curator-500/40 shadow-2xl flex flex-col"
+                        class="fixed bottom-0 left-0 z-50 overflow-hidden bg-surface border-t-2 border-curator-500/40 shadow-2xl flex flex-col"
                     >
-                        <div class="flex items-center gap-2 px-4 py-2 border-b border-gray-800 bg-gray-900 shrink-0 flex-wrap">
+                        <div class="flex items-center gap-2 px-4 py-2 border-b border-subtle bg-card shrink-0 flex-wrap">
                             <div
                                 class="w-8 h-1 rounded-full bg-gray-700 mr-1 cursor-ns-resize select-none"
                                 @mousedown="startResize"
                             ></div>
-                            <span class="text-xs font-mono text-curator-500 font-bold whitespace-nowrap">{{ title }}</span>
+                            <span class="text-xs font-mono fg-accent font-bold whitespace-nowrap">{{ title }}</span>
                             <span
-                                :class="['w-2 h-2 rounded-full shrink-0', open ? 'bg-curator-500 animate-pulse' : 'bg-gray-600']"
+                                :class="['w-2 h-2 rounded-full shrink-0', open ? 'bg-accent animate-pulse' : 'bg-gray-600']"
                                 title="SSE stream"
                             ></span>
                             <div class="flex-1"></div>
@@ -191,54 +191,54 @@
                                 :class="[
                                     'px-2 py-0.5 rounded text-xs font-mono font-bold uppercase transition-colors',
                                     logLevelFilter.includes(level)
-                                        ? level === 'WARN'  ? 'bg-yellow-900/60 text-yellow-400 border border-yellow-700/50'
-                                        : level === 'ERROR' ? 'bg-red-900/60 text-red-400 border border-red-700/50'
-                                        : 'bg-gray-700 text-gray-300 border border-gray-600'
-                                        : 'bg-gray-900 text-gray-600 border border-gray-800'
+                                        ? level === 'WARN'  ? 'badge-amber border'
+                                        : level === 'ERROR' ? 'badge-red border'
+                                        : 'bg-raised border-base fg-soft'
+                                        : 'bg-card fg-muted border-subtle'
                                 ]"
                             >{{ level }}</button>
                             <input
                                 v-model="logFilter"
                                 type="text"
                                 placeholder="filter..."
-                                class="px-2 py-0.5 bg-gray-800 border border-gray-700 rounded text-xs font-mono text-gray-300 placeholder-gray-600 focus:border-curator-500 focus:outline-none w-28"
+                                class="px-2 py-0.5 bg-raised border border-base rounded text-xs font-mono fg-soft placeholder-gray-500 focus:border-accent focus:outline-none w-28"
                             >
                             <button
                                 @click="logAutoScroll = !logAutoScroll"
-                                :class="['px-2 py-0.5 rounded text-xs font-mono uppercase border transition-colors', logAutoScroll ? 'bg-curator-500/20 text-curator-500 border-curator-500/50' : 'bg-gray-800 text-gray-500 border-gray-700']"
+                                :class="['px-2 py-0.5 rounded text-xs font-mono uppercase border transition-colors', logAutoScroll ? 'badge-accent border' : 'bg-raised fg-dim border-base']"
                                 title="Toggle auto-scroll"
                             >&#8595;</button>
                             <button
                                 @click="logSortDesc = !logSortDesc"
                                 :title="logSortDesc ? 'Newest first — click for oldest first' : 'Oldest first — click for newest first'"
-                                class="px-2 py-0.5 rounded text-xs font-mono uppercase bg-gray-800 text-gray-500 border border-gray-700 hover:border-curator-500 hover:text-curator-500 transition-colors"
+                                class="px-2 py-0.5 rounded text-xs font-mono uppercase bg-raised fg-dim border border-base hover:border-accent transition-colors"
                             >{{ logSortDesc ? '↓ new' : '↑ old' }}</button>
                             <button
                                 @click="clearLogs"
-                                class="px-2 py-0.5 rounded text-xs font-mono uppercase bg-gray-800 text-gray-500 border border-gray-700 hover:border-red-700 hover:text-red-400 transition-colors"
+                                class="px-2 py-0.5 rounded text-xs font-mono uppercase bg-raised fg-dim border border-base hover:border-red-700 hover:text-red-400 transition-colors"
                             >clear</button>
                             <button
                                 @click="$emit('close')"
-                                class="px-2 py-0.5 rounded text-xs font-mono uppercase bg-gray-800 text-gray-500 border border-gray-700 hover:border-curator-500 hover:text-curator-500 transition-colors"
+                                class="px-2 py-0.5 rounded text-xs font-mono uppercase bg-raised fg-dim border border-base hover:border-accent transition-colors"
                             >&#10005;</button>
                         </div>
-                        <div id="lv-log-body" class="flex-1 overflow-y-auto font-mono text-xs p-2 bg-gray-950">
-                            <div v-if="filteredLogs.length === 0" class="text-gray-600 p-4 text-center">no log entries</div>
+                        <div id="lv-log-body" class="flex-1 overflow-y-auto font-mono text-xs p-2 bg-surface">
+                            <div v-if="filteredLogs.length === 0" class="fg-muted p-4 text-center">no log entries</div>
                             <div
                                 v-for="entry in filteredLogs"
                                 :key="entry.id"
-                                class="flex items-baseline gap-2 px-2 py-0.5 rounded hover:bg-gray-900/60"
+                                class="flex items-baseline gap-2 px-2 py-0.5 rounded hover:bg-raised/40"
                             >
                                 <span :class="[
                                     'shrink-0 px-1 rounded text-xs font-bold uppercase w-12 text-center',
-                                    entry.level === 'ERROR' || entry.level === 'FATAL' ? 'bg-red-900/50 text-red-400' :
-                                    entry.level === 'WARN'  ? 'bg-yellow-900/50 text-yellow-400' :
-                                    entry.level === 'DEBUG' ? 'bg-blue-900/50 text-blue-400' :
-                                    'bg-gray-800 text-gray-500'
+                                    entry.level === 'ERROR' || entry.level === 'FATAL' ? 'badge-red' :
+                                    entry.level === 'WARN'  ? 'badge-amber' :
+                                    entry.level === 'DEBUG' ? 'badge-blue' :
+                                    'bg-raised fg-dim'
                                 ]">{{ entry.level }}</span>
-                                <span class="shrink-0 text-gray-600">{{ new Date(entry.time).toLocaleTimeString() }}</span>
-                                <span class="text-gray-300 break-all">{{ entry.message }}</span>
-                                <span v-if="entry.fields && Object.keys(entry.fields).length" class="text-gray-600 break-all">
+                                <span class="shrink-0 fg-muted">{{ new Date(entry.time).toLocaleTimeString() }}</span>
+                                <span class="fg-soft break-all">{{ entry.message }}</span>
+                                <span v-if="entry.fields && Object.keys(entry.fields).length" class="fg-muted break-all">
                                     {{ Object.entries(entry.fields).map(([k,v]) => k + '=' + v).join(' ') }}
                                 </span>
                             </div>
@@ -250,31 +250,31 @@
                      PANEL variant (inline collapsible section)
                      ═══════════════════════════════════════════════════ -->
                 <template v-else>
-                    <section class="bg-gray-900 border border-gray-800 rounded-lg overflow-hidden">
+                    <section class="bg-card border border-subtle rounded-lg overflow-hidden">
                         <!-- Header / toggle bar -->
                         <button
                             @click="panelOpen = !panelOpen"
-                            class="w-full flex items-center gap-3 px-4 py-3 hover:bg-gray-800/50 transition-colors duration-150 group"
+                            class="w-full flex items-center gap-3 px-4 py-3 hover:bg-raised/50 transition-colors duration-150 group"
                         >
                             <svg
-                                :class="['w-3 h-3 text-gray-500 transition-transform duration-200 shrink-0', panelOpen ? 'rotate-90' : '']"
+                                :class="['w-3 h-3 fg-dim transition-transform duration-200 shrink-0', panelOpen ? 'rotate-90' : '']"
                                 fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"
                             ><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg>
-                            <span class="text-xs font-mono font-bold text-curator-500">{{ title }}</span>
+                            <span class="text-xs font-mono font-bold fg-accent">{{ title }}</span>
                             <span
                                 v-if="panelOpen"
-                                class="w-2 h-2 rounded-full bg-curator-500 animate-pulse shrink-0"
+                                class="w-2 h-2 rounded-full bg-accent animate-pulse shrink-0"
                                 title="SSE stream active"
                             ></span>
-                            <span class="ml-auto text-xs font-mono text-gray-600 group-hover:text-gray-400 transition-colors">
+                            <span class="ml-auto text-xs font-mono fg-muted group-hover:fg-soft transition-colors">
                                 {{ panelOpen ? 'collapse' : 'expand' }}
                             </span>
                         </button>
 
                         <!-- Collapsible body -->
-                        <div v-if="panelOpen" class="border-t border-gray-800">
+                        <div v-if="panelOpen" class="border-t border-subtle">
                             <!-- Toolbar -->
-                            <div class="flex items-center gap-2 px-4 py-2 bg-gray-900 flex-wrap">
+                            <div class="flex items-center gap-2 px-4 py-2 bg-card flex-wrap">
                                 <button
                                     v-for="level in ['INFO', 'WARN', 'ERROR']"
                                     :key="level"
@@ -282,52 +282,52 @@
                                     :class="[
                                         'px-2 py-0.5 rounded text-xs font-mono font-bold uppercase transition-colors',
                                         logLevelFilter.includes(level)
-                                            ? level === 'WARN'  ? 'bg-yellow-900/60 text-yellow-400 border border-yellow-700/50'
-                                            : level === 'ERROR' ? 'bg-red-900/60 text-red-400 border border-red-700/50'
-                                            : 'bg-gray-700 text-gray-300 border border-gray-600'
-                                            : 'bg-gray-900 text-gray-600 border border-gray-800'
+                                            ? level === 'WARN'  ? 'badge-amber border'
+                                            : level === 'ERROR' ? 'badge-red border'
+                                            : 'bg-raised border-base fg-soft'
+                                            : 'bg-card fg-muted border-subtle'
                                     ]"
                                 >{{ level }}</button>
                                 <input
                                     v-model="logFilter"
                                     type="text"
                                     placeholder="filter..."
-                                    class="px-2 py-0.5 bg-gray-800 border border-gray-700 rounded text-xs font-mono text-gray-300 placeholder-gray-600 focus:border-curator-500 focus:outline-none w-28"
+                                    class="px-2 py-0.5 bg-raised border border-base rounded text-xs font-mono fg-soft placeholder-gray-500 focus:border-accent focus:outline-none w-28"
                                 >
                                 <div class="flex-1"></div>
                                 <button
                                     @click="logAutoScroll = !logAutoScroll"
-                                    :class="['px-2 py-0.5 rounded text-xs font-mono uppercase border transition-colors', logAutoScroll ? 'bg-curator-500/20 text-curator-500 border-curator-500/50' : 'bg-gray-800 text-gray-500 border-gray-700']"
+                                    :class="['px-2 py-0.5 rounded text-xs font-mono uppercase border transition-colors', logAutoScroll ? 'badge-accent border' : 'bg-raised fg-dim border-base']"
                                     title="Toggle auto-scroll"
                                 >&#8595;</button>
                                 <button
                                     @click="logSortDesc = !logSortDesc"
                                     :title="logSortDesc ? 'Newest first — click for oldest first' : 'Oldest first — click for newest first'"
-                                    class="px-2 py-0.5 rounded text-xs font-mono uppercase bg-gray-800 text-gray-500 border border-gray-700 hover:border-curator-500 hover:text-curator-500 transition-colors"
+                                    class="px-2 py-0.5 rounded text-xs font-mono uppercase bg-raised fg-dim border border-base hover:border-accent transition-colors"
                                 >{{ logSortDesc ? '↓ new' : '↑ old' }}</button>
                                 <button
                                     @click="clearLogs"
-                                    class="px-2 py-0.5 rounded text-xs font-mono uppercase bg-gray-800 text-gray-500 border border-gray-700 hover:border-red-700 hover:text-red-400 transition-colors"
+                                    class="px-2 py-0.5 rounded text-xs font-mono uppercase bg-raised fg-dim border border-base hover:border-red-700 hover:text-red-400 transition-colors"
                                 >clear</button>
                             </div>
                             <!-- Log body -->
-                            <div id="lv-log-body" class="h-64 overflow-y-auto font-mono text-xs p-2 bg-gray-950">
-                                <div v-if="filteredLogs.length === 0" class="text-gray-600 p-4 text-center">no log entries</div>
+                            <div id="lv-log-body" class="h-64 overflow-y-auto font-mono text-xs p-2 bg-surface">
+                                <div v-if="filteredLogs.length === 0" class="fg-muted p-4 text-center">no log entries</div>
                                 <div
                                     v-for="entry in filteredLogs"
                                     :key="entry.id"
-                                    class="flex items-baseline gap-2 px-2 py-0.5 rounded hover:bg-gray-900/60"
+                                    class="flex items-baseline gap-2 px-2 py-0.5 rounded hover:bg-raised/40"
                                 >
                                     <span :class="[
                                         'shrink-0 px-1 rounded text-xs font-bold uppercase w-12 text-center',
-                                        entry.level === 'ERROR' || entry.level === 'FATAL' ? 'bg-red-900/50 text-red-400' :
-                                        entry.level === 'WARN'  ? 'bg-yellow-900/50 text-yellow-400' :
-                                        entry.level === 'DEBUG' ? 'bg-blue-900/50 text-blue-400' :
-                                        'bg-gray-800 text-gray-500'
+                                        entry.level === 'ERROR' || entry.level === 'FATAL' ? 'badge-red' :
+                                        entry.level === 'WARN'  ? 'badge-amber' :
+                                        entry.level === 'DEBUG' ? 'badge-blue' :
+                                        'bg-raised fg-dim'
                                     ]">{{ entry.level }}</span>
-                                    <span class="shrink-0 text-gray-600">{{ new Date(entry.time).toLocaleTimeString() }}</span>
-                                    <span class="text-gray-300 break-all">{{ entry.message }}</span>
-                                    <span v-if="entry.fields && Object.keys(entry.fields).length" class="text-gray-600 break-all">
+                                    <span class="shrink-0 fg-muted">{{ new Date(entry.time).toLocaleTimeString() }}</span>
+                                    <span class="fg-soft break-all">{{ entry.message }}</span>
+                                    <span v-if="entry.fields && Object.keys(entry.fields).length" class="fg-muted break-all">
                                         {{ Object.entries(entry.fields).map(([k,v]) => k + '=' + v).join(' ') }}
                                     </span>
                                 </div>
