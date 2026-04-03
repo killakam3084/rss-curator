@@ -6,6 +6,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+## [0.40.0] - 2026-04-03
+
+### Added
+- **`site-nav` component** (`web/components/site-nav.js`) — unified primary navigation registered on all pages. Renders: wordmark linking to `/`; page links (`jobs`, `settings`) with active-state highlighting; theme toggle (☀️/🌙); logout. Accepts a default slot for page-specific actions (used by index.html to host the jobs/alerts icon buttons). `:right-offset` prop lets index.html synchronize the nav's right edge with the collapsible sidebar. Optional `:sse-connected` prop shows a live/connecting indicator (used by jobs page).
+- Theme toggle now accessible from every page (index, jobs, settings) — previously only reachable from the aside console panel on the main page.
+- FOUC-prevention inline scripts added to `jobs.html` and `settings.html` heads — dark-mode class is applied synchronously before Vue mounts.
+
+### Changed
+- **`app-sidebar.js`** — removed `darkMode` prop, `toggle-dark-mode` emit, and the dark mode toggle button section. Dark mode state is now owned by `site-nav`.
+- **`app.js`** — removed `darkMode` ref, `applyDarkMode`, `toggleDarkMode`, and the `localStorage`/system-preference initialization that duplicated what `site-nav` now handles.
+- **`settings.js`** — removed standalone `darkMode` ref and its `onMounted` class-toggle; `site-nav` handles this uniformly.
+- **`jobs.html`** — removed hard-forced `document.documentElement.classList.add('dark')` call; now follows user preference like all other pages.
+
 ## [0.39.0] - 2026-04-03
 
 ### Added
