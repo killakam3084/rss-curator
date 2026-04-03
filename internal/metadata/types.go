@@ -13,5 +13,7 @@ type ShowMetadata struct {
 	Status       string    `json:"status,omitempty"`
 	PremiereYear int       `json:"premiere_year,omitempty"`
 	Overview     string    `json:"overview,omitempty"`
+	Cast         []string  `json:"cast,omitempty"`     // top-billed actor names (up to 5)
+	Creators     []string  `json:"creators,omitempty"` // show creator names (up to 2)
 	FetchedAt    time.Time `json:"fetched_at"`
 }

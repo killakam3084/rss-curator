@@ -40,11 +40,12 @@ var suggestOutputSchema = json.RawMessage(`{
 
 const systemPrompt = `You are a TV/movie watchlist assistant recommending new shows to add.
 
-Given: the user's watchlist (with genre/network metadata), recent approvals (taste signals), and quality preferences.
+Given: the user's watchlist (with genre/network/cast/creator metadata), recent approvals (taste signals), and quality preferences.
 
 Rules:
 - Never suggest a show already in the watchlist.
 - Match genre patterns from the watchlist.
+- Pay attention to creators and lead actors — suggest shows made by the same creators or featuring the same stars where available.
 - Use the provided quality and codec on every suggestion.
 - Respond with raw JSON only — no explanation, no markdown.`
 
@@ -57,6 +58,8 @@ type SuggestionMeta struct {
 	Status       string   `json:"status,omitempty"`
 	PremiereYear int      `json:"premiere_year,omitempty"`
 	Overview     string   `json:"overview,omitempty"`
+	Cast         []string `json:"cast,omitempty"`     // top-billed actor names (up to 5)
+	Creators     []string `json:"creators,omitempty"` // show creator names (up to 2)
 }
 
 // Suggestion is a single LLM-proposed show that the user might want to add.
@@ -261,6 +264,8 @@ func (sg *Suggester) Suggest(ctx context.Context, limit int) ([]Suggestion, erro
 					Status:       meta.Status,
 					PremiereYear: meta.PremiereYear,
 					Overview:     meta.Overview,
+					Cast:         meta.Cast,
+					Creators:     meta.Creators,
 				}
 				validated = append(validated, suggestions[i])
 			}
@@ -291,6 +296,12 @@ func (sg *Suggester) buildWatchlistBlock(ctx context.Context, shows []models.Sho
 				}
 				if meta.Status != "" {
 					parts = append(parts, meta.Status)
+				}
+				if len(meta.Creators) > 0 {
+					parts = append(parts, "by "+strings.Join(meta.Creators, " & "))
+				}
+				if len(meta.Cast) > 0 {
+					parts = append(parts, "starring "+strings.Join(meta.Cast, ", "))
 				}
 				if len(parts) > 0 {
 					sb.WriteString(" [" + strings.Join(parts, ", ") + "]")

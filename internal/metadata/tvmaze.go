@@ -46,10 +46,17 @@ type tvmazeShow struct {
 	} `json:"webChannel"`
 	Premiered string `json:"premiered"` // "YYYY-MM-DD" or ""
 	Summary   string `json:"summary"`   // may contain HTML tags
+	Embedded  *struct {
+		Cast []struct {
+			Person struct {
+				Name string `json:"name"`
+			} `json:"person"`
+		} `json:"cast"`
+	} `json:"_embedded"`
 }
 
 func (p *tvmazeProvider) Fetch(ctx context.Context, showName string) (*ShowMetadata, error) {
-	endpoint := fmt.Sprintf("%s/singlesearch/shows?q=%s", p.host, url.QueryEscape(showName))
+	endpoint := fmt.Sprintf("%s/singlesearch/shows?q=%s&embed=cast", p.host, url.QueryEscape(showName))
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
 	if err != nil {
@@ -107,7 +114,63 @@ func (p *tvmazeProvider) Fetch(ctx context.Context, showName string) (*ShowMetad
 		meta.PremiereYear = year
 	}
 
+	// Extract top 5 billed cast members from the embedded cast array.
+	if show.Embedded != nil {
+		for i, c := range show.Embedded.Cast {
+			if i >= 5 {
+				break
+			}
+			if c.Person.Name != "" {
+				meta.Cast = append(meta.Cast, c.Person.Name)
+			}
+		}
+	}
+
+	// Fetch creators via secondary crew call (non-fatal).
+	meta.Creators = p.fetchCreators(ctx, show.ID)
+
 	return meta, nil
+}
+
+// fetchCreators calls GET /shows/{id}/crew and returns up to 2 Creator names.
+func (p *tvmazeProvider) fetchCreators(ctx context.Context, showID int) []string {
+	endpoint := fmt.Sprintf("%s/shows/%d/crew", p.host, showID)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	if err != nil {
+		return nil
+	}
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("User-Agent", "rss-curator/metadata")
+
+	resp, err := p.client.Do(req)
+	if err != nil {
+		return nil
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil
+	}
+
+	var crew []struct {
+		Type   string `json:"type"`
+		Person struct {
+			Name string `json:"name"`
+		} `json:"person"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&crew); err != nil {
+		return nil
+	}
+
+	var names []string
+	for _, c := range crew {
+		if c.Type == "Creator" && c.Person.Name != "" {
+			names = append(names, c.Person.Name)
+			if len(names) >= 2 {
+				break
+			}
+		}
+	}
+	return names
 }
 
 // stripHTML removes a limited set of HTML tags from TVMaze summary strings.
