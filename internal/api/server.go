@@ -558,7 +558,14 @@ func (s *Server) handleApprove(w http.ResponseWriter, r *http.Request, id int) {
 		TriggeredAt:  time.Now(),
 	})
 
-	s.logger.Info("torrent accepted and awaiting queue decision", zap.Int("id", id), zap.String("title", torrent.FeedItem.Title))
+	s.logger.Info("torrent accepted and awaiting queue decision",
+		zap.Int("id", id),
+		zap.String("title", torrent.FeedItem.Title),
+		zap.String("show", torrent.FeedItem.ShowName),
+		zap.String("quality", torrent.FeedItem.Quality),
+		zap.String("match_reason", torrent.MatchReason),
+		zap.Float64("ai_score", torrent.AIScore),
+	)
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(ApproveResponse{
 		ID:     id,
@@ -652,7 +659,13 @@ func (s *Server) handleQueue(w http.ResponseWriter, r *http.Request, id int) {
 		TriggeredAt:  time.Now(),
 	})
 
-	s.logger.Info("torrent queued for download", zap.Int("id", id), zap.String("title", torrent.FeedItem.Title))
+	s.logger.Info("torrent queued for download",
+		zap.Int("id", id),
+		zap.String("title", torrent.FeedItem.Title),
+		zap.String("quality", torrent.FeedItem.Quality),
+		zap.String("save_path", queueConfig.SavePath),
+		zap.String("category", queueConfig.Category),
+	)
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(ApproveResponse{
 		ID:     id,
@@ -716,7 +729,14 @@ func (s *Server) handleReject(w http.ResponseWriter, r *http.Request, id int) {
 		TriggeredAt:  time.Now(),
 	})
 
-	s.logger.Info("torrent rejected", zap.Int("id", id), zap.String("title", torrent.FeedItem.Title))
+	s.logger.Info("torrent rejected",
+		zap.Int("id", id),
+		zap.String("title", torrent.FeedItem.Title),
+		zap.String("show", torrent.FeedItem.ShowName),
+		zap.String("quality", torrent.FeedItem.Quality),
+		zap.String("match_reason", torrent.MatchReason),
+		zap.Float64("ai_score", torrent.AIScore),
+	)
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(RejectResponse{
 		ID:     id,
@@ -1581,6 +1601,7 @@ func (s *Server) handleSuggestionsRefresh(w http.ResponseWriter, r *http.Request
 		return
 	}
 
+	s.logger.Info("suggestions refresh triggered via API", zap.Int("job_id", jobID))
 	w.WriteHeader(http.StatusAccepted)
 	json.NewEncoder(w).Encode(JobAcceptedResponse{JobID: jobID, Status: "queued"})
 }
@@ -1632,6 +1653,7 @@ func (s *Server) handleFeedCheck(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	s.logger.Info("feed check triggered via API", zap.Int("job_id", jobID))
 	w.WriteHeader(http.StatusAccepted)
 	json.NewEncoder(w).Encode(JobAcceptedResponse{JobID: jobID, Status: "queued"})
 }
@@ -1909,6 +1931,7 @@ func (s *Server) handleSettings(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		s.applySettings(s.settingsMgr.Get())
+		s.logger.Info("settings updated")
 		// Return updated settings with password masked.
 		updated := s.settingsMgr.Get()
 		if updated.Auth.Password != "" {
@@ -1968,11 +1991,10 @@ func (s *Server) handleSchedulerRun(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	s.logger.Info("scheduler task triggered manually", zap.String("type", taskType))
 	w.WriteHeader(http.StatusAccepted)
 	json.NewEncoder(w).Encode(SchedulerRunResponse{Status: "accepted", Type: taskType})
 }
-
-// ShowsResponse is returned by GET and PUT /api/shows.
 type ShowsResponse struct {
 	models.ShowsConfig
 	ShowsCount int `json:"shows_count"`

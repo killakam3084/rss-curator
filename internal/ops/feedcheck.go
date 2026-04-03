@@ -135,6 +135,12 @@ func RunFeedCheck(ctx context.Context, cfg FeedCheckConfig, deps FeedCheckDeps) 
 			log.Warn("failed to stage torrent", zap.String("title", match.FeedItem.Title), zap.Error(err))
 		} else {
 			totalMatched++
+			log.Debug("staged torrent",
+				zap.String("title", match.FeedItem.Title),
+				zap.String("show", match.FeedItem.ShowName),
+				zap.String("quality", match.FeedItem.Quality),
+				zap.String("reason", match.MatchReason),
+			)
 		}
 	}
 
