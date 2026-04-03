@@ -1,6 +1,6 @@
 const { createApp, ref, reactive, computed, watch, onMounted } = Vue;
 
-createApp({
+const settingsApp = createApp({
     setup() {
         // ── Dark mode ────────────────────────────────────────────────
         const darkMode = ref(
@@ -517,4 +517,10 @@ createApp({
             addSuggestion,
         };
     }
-}).mount('#settings-app');
+});
+
+if (window.registerLogViewerComponent) {
+    window.registerLogViewerComponent(settingsApp);
+}
+
+settingsApp.mount('#settings-app');

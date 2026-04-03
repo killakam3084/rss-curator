@@ -39,16 +39,9 @@ const app = createApp({
         const lastReadAt = ref(new Date(localStorage.getItem('rss-curator-alerts-read-at') || 0));
         let alertsEventSource = null;
 
-        // Log drawer state
+        // Log drawer state (component manages its own SSE/entries/filters)
         const logsDrawerOpen = ref(false);
-        const logEntries = ref([]);
-        const logFilter = ref('');
-        const logLevelFilter = ref(['INFO', 'WARN', 'ERROR', 'DEBUG', 'FATAL']);
-        const logAutoScroll = ref(true);
-        const logSortDesc = ref(true); // true = newest first (default)
         const logsDrawerHeight = ref('60vh');
-        const logsDrawerResizing = ref(false);
-        let logEventSource = null;
         
         // Load dark mode preference from localStorage if available, otherwise use system preference
         const savedDarkMode = localStorage.getItem('rss-curator-dark-mode');
@@ -156,17 +149,6 @@ const app = createApp({
         );
         const recentAlerts = computed(() => alerts.value.slice().reverse().slice(0, 5));
 
-        const filteredLogs = computed(() => {
-            const filtered = logEntries.value.filter(e => {
-                const levelMatch = logLevelFilter.value.includes(e.level);
-                const textMatch = !logFilter.value ||
-                    e.message.toLowerCase().includes(logFilter.value.toLowerCase());
-                return levelMatch && textMatch;
-            });
-            return logSortDesc.value
-                ? filtered.slice().sort((a, b) => b.id - a.id)
-                : filtered.slice().sort((a, b) => a.id - b.id);
-        });
         const displayedTorrents = computed(() => {
             const filtered = torrents.value.filter(t => t.status === activeTab.value);
             return filtered.slice().sort((a, b) => {
@@ -269,81 +251,7 @@ const app = createApp({
             }
         };
 
-        const openLogsDrawer = async () => {
-            logsDrawerOpen.value = true;
-            // Backfill with buffered history
-            try {
-                const res = await fetch('/api/logs');
-                const data = await res.json();
-                if (Array.isArray(data)) {
-                    logEntries.value = data;
-                }
-            } catch (e) {
-                console.error('Failed to fetch initial logs:', e);
-            }
-            // Start live SSE stream
-            if (logEventSource) logEventSource.close();
-            logEventSource = new EventSource('/api/logs/stream');
-            logEventSource.onmessage = (event) => {
-                try {
-                    const entry = JSON.parse(event.data);
-                    logEntries.value.push(entry);
-                    if (logEntries.value.length > 500) {
-                        logEntries.value = logEntries.value.slice(-500);
-                    }
-                    if (logAutoScroll.value) {
-                        nextTick(() => {
-                            const el = document.getElementById('log-drawer-body');
-                            if (el) el.scrollTop = logSortDesc.value ? 0 : el.scrollHeight;
-                        });
-                    }
-                } catch (e) {
-                    // ignore parse errors
-                }
-            };
-            logEventSource.onerror = (e) => {
-                console.warn('Log SSE stream error:', e);
-            };
-        };
-
-        const closeLogsDrawer = () => {
-            logsDrawerOpen.value = false;
-            if (logEventSource) {
-                logEventSource.close();
-                logEventSource = null;
-            }
-        };
-
-        const clearLogs = () => { logEntries.value = []; };
-
-        const toggleLevelFilter = (level) => {
-            const idx = logLevelFilter.value.indexOf(level);
-            if (idx === -1) {
-                logLevelFilter.value.push(level);
-            } else if (logLevelFilter.value.length > 1) {
-                logLevelFilter.value.splice(idx, 1);
-            }
-        };
-
-        const startDrawerResize = (e) => {
-            e.preventDefault();
-            const drawerEl = document.getElementById('log-drawer');
-            const startY = e.clientY;
-            const startHeight = drawerEl ? drawerEl.offsetHeight : window.innerHeight * 0.6;
-            logsDrawerResizing.value = true;
-            const onMove = (mv) => {
-                const delta = startY - mv.clientY; // drag up = taller
-                const clamped = Math.max(80, Math.min(window.innerHeight * 0.92, startHeight + delta));
-                logsDrawerHeight.value = clamped + 'px';
-            };
-            const onUp = () => {
-                logsDrawerResizing.value = false;
-                document.removeEventListener('mousemove', onMove);
-                document.removeEventListener('mouseup', onUp);
-            };
-            document.addEventListener('mousemove', onMove);
-            document.addEventListener('mouseup', onUp);
-        };
+        const closeLogsDrawer = () => { logsDrawerOpen.value = false; };
 
         const showToast = (message, type = 'info', duration = 5000) => {
             const id = toastCounter++;
@@ -1086,15 +994,7 @@ const app = createApp({
             feedStream,
             stats,
             logsDrawerOpen,
-            logEntries,
-            logFilter,
-            logLevelFilter,
-            logAutoScroll,
-            logSortDesc,
             logsDrawerHeight,
-            logsDrawerResizing,
-            startDrawerResize,
-            filteredLogs,
             loading,
             bulkLoading,
             rescoreLoading,
@@ -1130,10 +1030,7 @@ const app = createApp({
             fetchActivities,
             fetchFeedStream,
             fetchStats,
-            openLogsDrawer,
             closeLogsDrawer,
-            clearLogs,
-            toggleLevelFilter,
             approveTorrent,
             rejectTorrent,
             openReviewModal,
@@ -1200,6 +1097,9 @@ const app = createApp({
     }
 });
 
+if (window.registerLogViewerComponent) {
+    window.registerLogViewerComponent(app);
+}
 if (window.registerJobsRailComponent) {
     window.registerJobsRailComponent(app);
 }

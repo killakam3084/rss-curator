@@ -231,11 +231,15 @@
                 </table>
             </div>
 
+            <!-- Log Viewer Panel -->
+            <log-viewer variant="panel" title="// job logs"></log-viewer>
+
             <!-- Footer note -->
             <p class="mt-4 text-xs font-mono text-gray-700 text-center">showing last {{ jobs.length }} jobs · updates live via SSE</p>
         </main>
     </div>
 
+    <script src="components/log-viewer.js"></script>
     <script src="components/ops-banner.js"></script>
     <script src="components/jobs-rail.js"></script>
     <script>
@@ -471,6 +475,9 @@
         }
     });
 
+    if (window.registerLogViewerComponent) {
+        window.registerLogViewerComponent(jobsApp);
+    }
     if (window.registerJobsRailComponent) {
         window.registerJobsRailComponent(jobsApp);
     }
