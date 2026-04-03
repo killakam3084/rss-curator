@@ -6,6 +6,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+## [0.39.0] - 2026-04-03
+
+### Added
+- **CSS design token layer** (`web/style.css`) — `:root` defines a warm ivory light-mode palette as bare RGB triplets (`--c-surface`, `--c-card`, `--c-raised`, `--c-deep`, `--c-border-subtle`, `--c-border-base`, `--c-fg-*`, `--c-accent`) enabling opacity modifiers (`rgb(var(--c-surface) / 0.6)`). `.dark {}` retains the existing terminal palette unchanged.
+- **Semantic utility classes** — `.bg-surface/card/raised/deep` (with `/30`–`/80` opacity variants), `.fg-base/soft/dim/muted/faint/accent`, `.border-subtle/base/accent`, `.border-l-accent`, `.border-t-accent`, `.badge-blue/accent/red/amber/emerald/purple/indigo/green`, and hover utilities (`.hover:bg-accent`, `.hover:bg-raised/40`, `.hover:bg-raised/50`, `.hover:border-accent`).
+
+### Changed
+- **All 5 UI components** migrated from raw Tailwind color classes to semantic token classes: `torrent-card`, `app-sidebar`, `ops-banner`, `log-viewer`, `jobs-rail`.
+- **All 3 HTML pages** migrated to semantic token classes: `index.html`, `jobs.html`, `settings.html`.
+- **CodeMirror editor** uses warm ivory light-mode overrides (background, gutters, syntax tokens) rather than inheriting `material-darker` in light mode.
+
+### Fixed
+- Dropdown items, log message text, and job names were invisible in light mode (`text-gray-300` on light background) — replaced with `fg-soft` throughout.
+
+### Removed
+- Deprecated `html:not(.dark)` override block (~90 lines of `!important` hacks) eliminated; all overrides are now handled by the semantic token classes.
+
 ## [0.38.0] - 2026-04-02
 
 ### Changed
