@@ -69,9 +69,10 @@ func TestMeetsQuality(t *testing.T) {
 		{"2160P", "1080P", true},
 		{"4K", "1080P", true},
 		{"720P", "720P", true},
-		{"", "1080P", true},       // unknown quality passes through
-		{"1080P", "", true},       // no minimum → always pass
-		{"UNKNOWN", "720P", true}, // unrecognised rank → pass
+		{"", "1080P", false},       // no recognised quality token → reject when min is set
+		{"1080P", "", true},        // no minimum → always pass
+		{"UNKNOWN", "720P", false}, // unrecognised quality token → reject when min is set
+		{"UNKNOWN", "", true},      // no minimum → always pass even if quality unknown
 	}
 	for _, tc := range cases {
 		got := meetsQuality(tc.quality, tc.minQuality)

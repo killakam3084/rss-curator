@@ -209,11 +209,17 @@ func meetsQuality(quality, minQuality string) bool {
 		"4K":    3,
 	}
 
-	itemRank, ok1 := qualityRank[strings.ToUpper(quality)]
 	minRank, ok2 := qualityRank[strings.ToUpper(minQuality)]
-
-	if !ok1 || !ok2 {
+	if !ok2 {
+		// Unknown min_quality in config — don't filter.
 		return true
+	}
+
+	itemRank, ok1 := qualityRank[strings.ToUpper(quality)]
+	if !ok1 {
+		// Item has no recognized quality token (e.g. XviD, 480p, mobile).
+		// Reject when a minimum quality is configured.
+		return false
 	}
 
 	return itemRank >= minRank

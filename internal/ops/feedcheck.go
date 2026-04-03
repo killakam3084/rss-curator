@@ -3,6 +3,7 @@ package ops
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/killakam3084/rss-curator/internal/ai"
@@ -82,6 +83,7 @@ func RunFeedCheck(ctx context.Context, cfg FeedCheckConfig, deps FeedCheckDeps) 
 		totalMatched int
 		totalScored  int
 		feedFailed   bool
+		allMatches   []models.StagedTorrent
 	)
 	now := time.Now()
 
@@ -120,12 +122,19 @@ func RunFeedCheck(ctx context.Context, cfg FeedCheckConfig, deps FeedCheckDeps) 
 			totalScored += len(matches)
 		}
 
-		for _, match := range matches {
-			if err := deps.Store.Add(match); err != nil {
-				log.Warn("failed to stage torrent", zap.String("title", match.FeedItem.Title), zap.Error(err))
-			} else {
-				totalMatched++
-			}
+		allMatches = append(allMatches, matches...)
+	}
+
+	// Deduplicate across all feeds: for the same show+season+episode keep the
+	// single best variant (by quality tier, then codec/group preference).
+	allMatches = deduplicateByEpisode(allMatches)
+	log.Info("staging after dedup", zap.Int("count", len(allMatches)))
+
+	for _, match := range allMatches {
+		if err := deps.Store.Add(match); err != nil {
+			log.Warn("failed to stage torrent", zap.String("title", match.FeedItem.Title), zap.Error(err))
+		} else {
+			totalMatched++
 		}
 	}
 
@@ -201,4 +210,58 @@ func RunFeedCheck(ctx context.Context, cfg FeedCheckConfig, deps FeedCheckDeps) 
 		retErr = fmt.Errorf("one or more feeds failed to parse")
 	}
 	return summary, retErr
+}
+
+// deduplicateByEpisode keeps the single best match per (show, season, episode)
+// when multiple variants of the same episode are staged in one feed-check run
+// (common when a broad category feed delivers many codec/quality variants at
+// once). Items without a season+episode are passed through unchanged.
+//
+// "Best" is ranked by: quality tier (2160p > 1080p > 720p) × 4, +2 if the
+// match reason signals a preferred codec, +1 for a preferred release group.
+func deduplicateByEpisode(matches []models.StagedTorrent) []models.StagedTorrent {
+	qualityRank := map[string]int{"720P": 1, "1080P": 2, "2160P": 3, "4K": 3}
+
+	rank := func(t models.StagedTorrent) int {
+		r := qualityRank[strings.ToUpper(t.FeedItem.Quality)] * 4
+		if strings.Contains(t.MatchReason, "preferred codec") {
+			r += 2
+		}
+		if strings.Contains(t.MatchReason, "preferred group") {
+			r++
+		}
+		return r
+	}
+
+	type episodeKey struct {
+		show    string
+		season  int
+		episode int
+	}
+
+	best := make(map[episodeKey]models.StagedTorrent)
+	var unkeyed []models.StagedTorrent
+
+	for _, m := range matches {
+		fi := m.FeedItem
+		if fi.Season == 0 && fi.Episode == 0 {
+			// Season pack or unrecognised pattern — pass through.
+			unkeyed = append(unkeyed, m)
+			continue
+		}
+		k := episodeKey{
+			show:    strings.ToLower(strings.TrimSpace(fi.ShowName)),
+			season:  fi.Season,
+			episode: fi.Episode,
+		}
+		if existing, ok := best[k]; !ok || rank(m) > rank(existing) {
+			best[k] = m
+		}
+	}
+
+	result := make([]models.StagedTorrent, 0, len(best)+len(unkeyed))
+	for _, t := range best {
+		result = append(result, t)
+	}
+	return append(result, unkeyed...)
 }
