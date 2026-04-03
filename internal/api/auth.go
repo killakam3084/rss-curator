@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -60,6 +61,27 @@ func hmacSign(data string, secret []byte) string {
 	mac := hmac.New(sha256.New, secret)
 	mac.Write([]byte(data))
 	return hex.EncodeToString(mac.Sum(nil))
+}
+
+// isSafeRedirect returns true only when target is a same-origin relative path.
+// It rejects absolute URLs (https://evil.com), protocol-relative URLs
+// (//evil.com), and anything that doesn't begin with a single '/'.
+func isSafeRedirect(target string) bool {
+	if target == "" {
+		return false
+	}
+	// Normalise backslashes so \\evil.com isn't bypassed on Windows-tolerant parsers.
+	target = strings.ReplaceAll(target, "\\", "/")
+	u, err := url.Parse(target)
+	if err != nil {
+		return false
+	}
+	// Reject anything with a scheme or host — those are absolute / protocol-relative URLs.
+	if u.Scheme != "" || u.Host != "" {
+		return false
+	}
+	// Path must start with / (rules out relative paths like "evil.com/path").
+	return strings.HasPrefix(u.Path, "/")
 }
 
 // authMiddleware enforces session cookie auth over the wrapped handler.
@@ -118,6 +140,9 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 	inputUser := r.FormValue("username")
 	inputPass := r.FormValue("password")
 	nextURL := r.FormValue("next")
+	if !isSafeRedirect(nextURL) {
+		nextURL = ""
+	}
 
 	// Constant-time comparison to prevent timing-based username enumeration
 	userMatch := hmac.Equal([]byte(inputUser), []byte(s.authUsername))
