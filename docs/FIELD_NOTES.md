@@ -197,4 +197,33 @@ Key Netdata metric names for Prometheus:
 
 ---
 
-*Last updated: 2026-03-16*
+## Roadmap / Deferred Ideas
+
+### qBittorrent Download Status Integration
+**Context:** Queued-for-download torrents now get a `queued` status in the curator DB (written at queue time). The natural next question is: can curator surface actual download progress — downloading, stalled, seeding, completed — back in the UI?
+
+**What would be needed:**
+- A background poller in `internal/ops/` (e.g. `RunStatusSync`) that periodically calls `client.GetTorrents()` and matches results back to curator rows by magnet hash or torrent URL.
+- New status values in the state machine: `downloading`, `stalled`, `seeding`, `completed` (or a narrower subset — just `completed` may be enough).
+- `UpdateStatus` already exists and accepts any string; no schema migration needed beyond accepting new values in the UI and `DeleteOld` cleanup logic.
+- The hard part is the **matching problem**: qBittorrent tracks by info-hash; curator rows store the original magnet/torrent URL. Extracting the hash from a magnet URI is straightforward (`xt=urn:btih:<hash>`); matching .torrent file URLs requires a HEAD/GET to retrieve the hash — adds latency and complexity.
+
+**Design tension:**
+- A poller creates a continuous dependency on qBittorrent availability; curator currently tolerates qBittorrent being down (queue calls fail gracefully).
+- Polling interval vs. staleness: a 60s poll is probably fine for "completed" detection; overkill for "downloading" progress bars.
+- Alternative: webhook/event-driven via qBittorrent's "run external program on completion" hook. Avoids polling but requires an inbound endpoint and careful auth.
+
+**Recommended scope when tackled:**
+1. Hash extraction from magnet URIs only (skip .torrent URL matching for now).
+2. Single new status: `completed` — the most actionable signal.
+3. `RunStatusSync` as a scheduled op (e.g. every 5 minutes), not a live SSE stream.
+4. Surface `completed` as a badge/indicator on the queued tab — not a new 5th tab.
+
+**Go deeper:**
+- qBittorrent Web API: `GET /api/v2/torrents/info?filter=completed` for efficient polling
+- Magnet URI format (RFC-unofficial): `magnet:?xt=urn:btih:<hex-or-base32-hash>&dn=...`
+- Info-hash encoding: SHA-1 hex (40 chars) or Base32 (32 chars); go-qbittorrent normalises to lowercase hex
+
+---
+
+*Last updated: 2026-04-02*

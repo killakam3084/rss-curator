@@ -60,11 +60,12 @@ stateDiagram-v2
         scored --> scored : ai_score 0.0–1.0 (0% = low confidence)
     }
 
-    pending --> approved : human approves (CLI or Web UI)
-    pending --> rejected : human rejects (CLI or Web UI)
+    pending --> accepted : human approves (Web UI)
+    pending --> rejected : human rejects (Web UI)
 
-    approved --> [*] : LogActivity(approve) + qBittorrent.Add()
-    rejected --> [*] : LogActivity(reject)
+    accepted --> queued  : human queues for download + qBittorrent.Add()
+    queued  --> [*]      : LogActivity(queue) — terminal in curator
+    rejected --> [*]     : LogActivity(reject)
 ```
 
 **Diagram legend:**
