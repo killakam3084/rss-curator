@@ -239,6 +239,7 @@
         </main>
     </div>
 
+    <script src="components/auth-guard.js"></script>
     <script src="components/log-viewer.js"></script>
     <script src="components/ops-banner.js"></script>
     <script src="components/jobs-rail.js"></script>
@@ -316,6 +317,7 @@
                     sseConnected.value = false;
                     eventSource.close();
                     eventSource = null;
+                    window.__authProbe?.();
                     setTimeout(openStream, 5000);
                 };
             };

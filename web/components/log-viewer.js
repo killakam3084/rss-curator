@@ -92,7 +92,7 @@
                             }
                         } catch (_) {}
                     };
-                    logEventSource.onerror = () => {};
+                    logEventSource.onerror = () => { window.__authProbe?.(); };
                 };
 
                 const closeStream = () => {

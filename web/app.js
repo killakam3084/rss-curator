@@ -824,6 +824,7 @@ const app = createApp({
             jobsEventSource.onerror = () => {
                 jobsEventSource.close();
                 jobsEventSource = null;
+                window.__authProbe?.();
                 // Reconnect after 5 seconds
                 setTimeout(openJobsStream, 5000);
             };
@@ -933,6 +934,7 @@ const app = createApp({
             alertsEventSource.onerror = () => {
                 alertsEventSource.close();
                 alertsEventSource = null;
+                window.__authProbe?.();
                 setTimeout(openAlertsStream, 5000);
             };
         };
