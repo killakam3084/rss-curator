@@ -182,7 +182,7 @@
                         </button>
                     </div>
 
-                    <button @click="save('scheduler')" :disabled="saving" class="px-5 py-2 bg-accent hover:bg-accent text-white font-mono text-sm font-bold rounded transition-colors duration-150 disabled:opacity-50 disabled:cursor-not-allowed">
+                    <button @click="save('scheduler')" :disabled="saving" class="px-5 py-2 bg-raised hover:bg-deep border border-base fg-accent font-mono text-sm font-bold rounded transition-colors duration-150 disabled:opacity-50 disabled:cursor-not-allowed">
                         {{ saving ? 'saving…' : 'save scheduler' }}
                     </button>
                 </section>
@@ -217,7 +217,7 @@
                         </div>
                     </div>
 
-                    <button @click="save('alerts')" :disabled="saving" class="px-5 py-2 bg-accent hover:bg-accent text-white font-mono text-sm font-bold rounded transition-colors duration-150 disabled:opacity-50 disabled:cursor-not-allowed">
+                    <button @click="save('alerts')" :disabled="saving" class="px-5 py-2 bg-raised hover:bg-deep border border-base fg-accent font-mono text-sm font-bold rounded transition-colors duration-150 disabled:opacity-50 disabled:cursor-not-allowed">
                         {{ saving ? 'saving…' : 'save alerts' }}
                     </button>
                 </section>
@@ -272,7 +272,7 @@
                         </div>
                     </div>
 
-                    <button @click="save('match')" :disabled="saving" class="px-5 py-2 bg-accent hover:bg-accent text-white font-mono text-sm font-bold rounded transition-colors duration-150 disabled:opacity-50 disabled:cursor-not-allowed">
+                    <button @click="save('match')" :disabled="saving" class="px-5 py-2 bg-raised hover:bg-deep border border-base fg-accent font-mono text-sm font-bold rounded transition-colors duration-150 disabled:opacity-50 disabled:cursor-not-allowed">
                         {{ saving ? 'saving…' : 'save match' }}
                     </button>
                 </section>
@@ -307,7 +307,7 @@
                         </div>
                     </div>
 
-                    <button @click="save('auth')" :disabled="saving" class="px-5 py-2 bg-accent hover:bg-accent text-white font-mono text-sm font-bold rounded transition-colors duration-150 disabled:opacity-50 disabled:cursor-not-allowed">
+                    <button @click="save('auth')" :disabled="saving" class="px-5 py-2 bg-raised hover:bg-deep border border-base fg-accent font-mono text-sm font-bold rounded transition-colors duration-150 disabled:opacity-50 disabled:cursor-not-allowed">
                         {{ saving ? 'saving…' : 'save auth' }}
                     </button>
                 </section>
@@ -394,7 +394,7 @@
                                 </div>
                                 <button
                                     @click="addSuggestion(s)"
-                                    class="shrink-0 px-3 py-1 rounded border border-accent fg-accent hover:bg-accent hover:text-white font-mono text-xs transition-colors"
+                                    class="shrink-0 px-3 py-1 rounded border border-base fg-accent hover:bg-deep font-mono text-xs transition-colors"
                                 >+ add</button>
                             </div>
                         </div>
@@ -439,7 +439,7 @@
                         <button
                             @click="saveShows"
                             :disabled="showsSaving"
-                            class="px-5 py-2 bg-accent hover:bg-accent text-white font-mono text-sm font-bold rounded transition-colors duration-150 disabled:opacity-50 disabled:cursor-not-allowed"
+                            class="px-5 py-2 bg-raised hover:bg-deep border border-base fg-accent font-mono text-sm font-bold rounded transition-colors duration-150 disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                             {{ showsSaving ? 'saving…' : 'save shows.json' }}
                         </button>
