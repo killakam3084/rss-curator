@@ -45,7 +45,7 @@ jobs:
             ./... -coverprofile=coverage.out -covermode=atomic
 
       - name: Publish test results
-        uses: dorny/test-reporter@v1
+        uses: dorny/test-reporter@v3
         if: always()
         with:
           name: Go Unit Tests
