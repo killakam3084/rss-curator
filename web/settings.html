@@ -382,10 +382,10 @@
                                     </div>
                                     <p class="text-xs font-mono fg-dim mt-0.5">{{ s.reason }}</p>
                                     <div v-if="s.meta" class="mt-1.5 flex flex-wrap gap-1 items-center">
-                                        <span v-for="g in (s.meta.genres || [])" class="px-1.5 py-0.5 rounded bg-indigo-900/50 text-indigo-300 text-xs font-mono">{{ g }}</span>
+                                        <span v-for="g in (s.meta.genres || [])" class="px-1.5 py-0.5 rounded badge-indigo text-xs font-mono">{{ g }}</span>
                                         <span v-if="s.meta.network" class="px-1.5 py-0.5 rounded bg-raised fg-soft text-xs font-mono">{{ s.meta.network }}</span>
                                         <span v-if="s.meta.status" class="px-1.5 py-0.5 rounded text-xs font-mono"
-                                            :class="s.meta.status.toLowerCase().includes('end') ? 'bg-raised fg-muted' : 'bg-green-900/50 text-green-400'">
+                                            :class="s.meta.status.toLowerCase().includes('end') ? 'bg-raised fg-muted' : 'badge-green'">
                                             {{ s.meta.status }}
                                         </span>
                                         <span v-if="s.meta.premiere_year" class="text-xs fg-dim font-mono">{{ s.meta.premiere_year }}</span>
