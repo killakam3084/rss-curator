@@ -226,4 +226,25 @@ Key Netdata metric names for Prometheus:
 
 ---
 
-*Last updated: 2026-04-02*
+### WebSockets vs SSE — Streaming Architecture
+**Context:** Evaluated switching the four live-update streams (`/api/jobs/stream`, `/api/alerts/stream`, `/api/logs/stream`, `/api/feed/stream`) from Server-Sent Events to WebSockets, primarily motivated by wanting the server to be able to push session-expiry events directly to the browser rather than relying on the `__authProbe()` pattern.
+
+**What WebSockets would gain:**
+- Bidirectional channel — server can push a `session_expired` event explicitly without the client needing to probe.
+- Single persistent connection instead of 3–4 parallel SSE streams.
+
+**What it costs:**
+- **nginx:** Requires `Upgrade: websocket` + `Connection: Upgrade` headers and `proxy_read_timeout` tuning — easy to get subtly wrong, causing silent connection drops behind the reverse proxy.
+- **Go backend:** Swap `net/http` SSE fan-out for a WS hub with goroutine-per-connection or a multiplexed channel — touches every streaming handler.
+- **Frontend:** Replace 4 `EventSource` instances with a single WS + message-type routing layer across all three pages.
+- **Auth:** Cookie-based session validation happens on every HTTP request under the current middleware; a WebSocket upgrade is a single HTTP handshake — session expiry over the long-lived connection must be managed explicitly in-band.
+
+**Decision: keep SSE.**
+SSE is unidirectional by design and that's all this app needs — the server pushes, the browser acts via normal `fetch`. The only penalty SSE has over WS is that `onerror` handlers can't inspect HTTP status codes, which means a 401 from an expired session can't be detected directly. That's addressed by `web/components/auth-guard.js`: a patched `window.fetch` intercepts 401s from all API calls and redirects to `/login`, plus a debounced `__authProbe()` function for SSE `onerror` handlers to trigger the same check. Total: ~20 lines.
+
+**When to revisit:**
+WebSockets become the right call if the four SSE streams are consolidated into a single multiplexed channel (reduces connection count, simplifies reconnect logic) — at that point the WS hub pays for itself regardless of the auth angle. Also relevant if meaningful client→server push (e.g. collaborative editing, sub-100ms latency commands) is ever needed.
+
+---
+
+*Last updated: 2026-04-03*
