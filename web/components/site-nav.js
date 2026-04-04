@@ -16,34 +16,44 @@
             setup() {
                 const { ref, onMounted } = Vue;
 
-                const darkMode = ref(false);
+                // 'light' | 'dark' | 'auto'
+                const themeMode = ref('auto');
 
-                const applyDarkMode = () => {
-                    document.documentElement.classList.toggle('dark', darkMode.value);
+                const systemDark = () => window.matchMedia('(prefers-color-scheme: dark)').matches;
+
+                const applyTheme = () => {
+                    const dark = themeMode.value === 'dark' ||
+                        (themeMode.value === 'auto' && systemDark());
+                    document.documentElement.classList.toggle('dark', dark);
                 };
 
-                const toggleDarkMode = () => {
-                    darkMode.value = !darkMode.value;
-                    applyDarkMode();
-                    localStorage.setItem('rss-curator-dark-mode', JSON.stringify(darkMode.value));
+                const cycleTheme = () => {
+                    const order = ['light', 'dark', 'auto'];
+                    themeMode.value = order[(order.indexOf(themeMode.value) + 1) % 3];
+                    applyTheme();
+                    if (themeMode.value === 'auto') {
+                        localStorage.removeItem('rss-curator-dark-mode');
+                    } else {
+                        localStorage.setItem('rss-curator-dark-mode', themeMode.value);
+                    }
                 };
 
                 onMounted(() => {
                     const saved = localStorage.getItem('rss-curator-dark-mode');
-                    darkMode.value = saved === 'true' ||
-                        (saved === null && window.matchMedia('(prefers-color-scheme: dark)').matches);
-                    applyDarkMode();
+                    // Migrate old JSON-boolean format
+                    if (saved === 'true')  { themeMode.value = 'dark';  localStorage.setItem('rss-curator-dark-mode', 'dark'); }
+                    else if (saved === 'false') { themeMode.value = 'light'; localStorage.setItem('rss-curator-dark-mode', 'light'); }
+                    else if (saved === 'dark' || saved === 'light') { themeMode.value = saved; }
+                    else { themeMode.value = 'auto'; }
+                    applyTheme();
 
-                    // Follow system preference changes only when the user has not set a manual override.
-                    window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', (e) => {
-                        if (localStorage.getItem('rss-curator-dark-mode') === null) {
-                            darkMode.value = e.matches;
-                            applyDarkMode();
-                        }
+                    // Re-apply when OS appearance changes and we're in auto mode.
+                    window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
+                        if (themeMode.value === 'auto') applyTheme();
                     });
                 });
 
-                return { darkMode, toggleDarkMode };
+                return { themeMode, cycleTheme };
             },
 
             template: `
@@ -91,11 +101,24 @@
                             </svg>
                         </button>
                         <button
-                            @click="toggleDarkMode"
-                            class="p-2 rounded border border-transparent hover:bg-raised hover:border-base transition-colors duration-150"
-                            :title="darkMode ? 'Switch to light mode' : 'Switch to dark mode'"
+                            @click="cycleTheme"
+                            class="p-2 rounded border border-transparent hover:bg-raised hover:border-base transition-colors duration-150 fg-dim"
+                            :title="themeMode === 'light' ? 'Light \u2014 click for dark' : themeMode === 'dark' ? 'Dark \u2014 click for auto' : 'Auto (follows system) \u2014 click for light'"
                         >
-                            <span class="text-base leading-none select-none">{{ darkMode ? '☀️' : '🌙' }}</span>
+                            <!-- Sun: light mode -->
+                            <svg v-if="themeMode === 'light'" class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24">
+                                <circle cx="12" cy="12" r="4" stroke-linecap="round"/>
+                                <path stroke-linecap="round" d="M12 2v2M12 20v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M2 12h2M20 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/>
+                            </svg>
+                            <!-- Moon: dark mode -->
+                            <svg v-else-if="themeMode === 'dark'" class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+                            </svg>
+                            <!-- Monitor: auto/system mode -->
+                            <svg v-else class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24">
+                                <rect x="2" y="3" width="20" height="14" rx="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M8 21h8M12 17v4"/>
+                            </svg>
                         </button>
                         <form method="POST" action="/logout" style="margin:0">
                             <button type="submit" class="px-3 py-1.5 rounded font-mono text-xs fg-dim hover:text-red-400 hover:bg-raised border border-transparent hover:border-base transition-colors duration-150 uppercase tracking-widest">logout</button>
