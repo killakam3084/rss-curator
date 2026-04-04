@@ -257,6 +257,12 @@ func (sg *Suggester) Suggest(ctx context.Context, limit int) ([]Suggestion, erro
 		validated := suggestions[:0]
 		for i := range suggestions {
 			if meta := sg.metaLookup.Resolve(ctx, suggestions[i].ShowName); meta != nil {
+				// Use the provider's canonical name so the LLM's possessive/mangled
+				// variants ("Luther's", "The Americans'") are corrected before display.
+				if meta.ShowName != "" {
+					suggestions[i].ShowName = meta.ShowName
+					suggestions[i].SuggestedRule.Name = meta.ShowName
+				}
 				suggestions[i].Meta = &SuggestionMeta{
 					ProviderURL:  meta.ProviderURL,
 					Genres:       meta.Genres,
