@@ -56,7 +56,7 @@
 <body class="bg-surface fg-base min-h-screen">
     <div id="settings-app">
         <!-- ── Primary Navigation ── -->
-        <site-nav page="settings"></site-nav>
+        <site-nav page="settings" :logs-open="logsOpen" @toggle-logs="logsOpen = !logsOpen"></site-nav>
 
         <!-- Content -->
         <main class="pt-14 min-h-screen flex">
@@ -430,8 +430,8 @@
                 </section>
 
             </div>
-            <!-- Log Viewer Panel -->
-            <log-viewer variant="panel"></log-viewer>
+            <!-- Log Viewer Side Panel -->
+            <log-viewer variant="side" :open="logsOpen" @close="logsOpen = false"></log-viewer>
         </main>
     </div>
 

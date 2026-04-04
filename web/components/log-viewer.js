@@ -63,7 +63,7 @@
 
                 // True when the log stream is connected and active.
                 const streamActive = computed(() =>
-                    props.variant === 'drawer' ? props.open : panelOpen.value
+                    props.variant !== 'panel' ? props.open : panelOpen.value
                 );
 
                 // ── SSE helpers ────────────────────────────────────────────
@@ -103,9 +103,9 @@
                 };
 
                 // ── SSE lifecycle watchers ─────────────────────────────────
-                // Drawer variant: host controls open prop.
+                // Drawer + side variants: host controls open prop.
                 watch(() => props.open, (isOpen) => {
-                    if (props.variant !== 'drawer') return;
+                    if (props.variant === 'panel') return;
                     if (isOpen) openStream();
                     else        closeStream();
                 }, { immediate: true });
@@ -222,6 +222,89 @@
                                 class="px-2 py-0.5 rounded text-xs font-mono uppercase bg-raised fg-dim border border-base hover:border-accent transition-colors"
                             >&#10005;</button>
                         </div>
+                        <div id="lv-log-body" class="flex-1 overflow-y-auto font-mono text-xs p-2 bg-surface">
+                            <div v-if="filteredLogs.length === 0" class="fg-muted p-4 text-center">no log entries</div>
+                            <div
+                                v-for="entry in filteredLogs"
+                                :key="entry.id"
+                                class="flex items-baseline gap-2 px-2 py-0.5 rounded hover:bg-raised/40"
+                            >
+                                <span :class="[
+                                    'shrink-0 px-1 rounded text-xs font-bold uppercase w-12 text-center',
+                                    entry.level === 'ERROR' || entry.level === 'FATAL' ? 'badge-red' :
+                                    entry.level === 'WARN'  ? 'badge-amber' :
+                                    entry.level === 'DEBUG' ? 'badge-blue' :
+                                    'bg-raised fg-dim'
+                                ]">{{ entry.level }}</span>
+                                <span class="shrink-0 fg-muted">{{ new Date(entry.time).toLocaleTimeString() }}</span>
+                                <span class="fg-soft break-all">{{ entry.message }}</span>
+                                <span v-if="entry.fields && Object.keys(entry.fields).length" class="fg-muted break-all">
+                                    {{ Object.entries(entry.fields).map(([k,v]) => k + '=' + v).join(' ') }}
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                </template>
+
+                <!-- ═══════════════════════════════════════════════════
+                     SIDE variant (fixed full-height right panel, 600px)
+                     ═══════════════════════════════════════════════════ -->
+                <template v-else-if="variant === 'side'">
+                    <div
+                        class="fixed top-14 right-0 bottom-0 z-40 flex flex-col bg-card border-l border-subtle shadow-2xl"
+                        :style="{
+                            width: '600px',
+                            transform: open ? 'translateX(0)' : 'translateX(100%)',
+                            transition: 'transform 0.3s cubic-bezier(0.4,0,0.2,1)'
+                        }"
+                    >
+                        <!-- Toolbar -->
+                        <div class="flex items-center gap-2 px-4 py-2 border-b border-subtle bg-card shrink-0 flex-wrap">
+                            <span class="text-xs font-mono fg-accent font-bold whitespace-nowrap">{{ title }}</span>
+                            <span
+                                :class="['w-2 h-2 rounded-full shrink-0', open ? 'bg-accent animate-pulse' : 'bg-gray-600']"
+                                title="SSE stream"
+                            ></span>
+                            <div class="flex-1"></div>
+                            <button
+                                v-for="level in ['INFO', 'WARN', 'ERROR']"
+                                :key="level"
+                                @click="toggleLevelFilter(level)"
+                                :class="[
+                                    'px-2 py-0.5 rounded text-xs font-mono font-bold uppercase transition-colors',
+                                    logLevelFilter.includes(level)
+                                        ? level === 'WARN'  ? 'badge-amber border'
+                                        : level === 'ERROR' ? 'badge-red border'
+                                        : 'bg-raised border-base fg-soft'
+                                        : 'bg-card fg-muted border-subtle'
+                                ]"
+                            >{{ level }}</button>
+                            <input
+                                v-model="logFilter"
+                                type="text"
+                                placeholder="filter..."
+                                class="px-2 py-0.5 bg-raised border border-base rounded text-xs font-mono fg-soft placeholder-gray-500 focus:border-accent focus:outline-none w-28"
+                            >
+                            <button
+                                @click="logAutoScroll = !logAutoScroll"
+                                :class="['px-2 py-0.5 rounded text-xs font-mono uppercase border transition-colors', logAutoScroll ? 'badge-accent border' : 'bg-raised fg-dim border-base']"
+                                title="Toggle auto-scroll"
+                            >&#8595;</button>
+                            <button
+                                @click="logSortDesc = !logSortDesc"
+                                :title="logSortDesc ? 'Newest first — click for oldest first' : 'Oldest first — click for newest first'"
+                                class="px-2 py-0.5 rounded text-xs font-mono uppercase bg-raised fg-dim border border-base hover:border-accent transition-colors"
+                            >{{ logSortDesc ? '↓ new' : '↑ old' }}</button>
+                            <button
+                                @click="clearLogs"
+                                class="px-2 py-0.5 rounded text-xs font-mono uppercase bg-raised fg-dim border border-base hover:border-red-700 hover:text-red-400 transition-colors"
+                            >clear</button>
+                            <button
+                                @click="$emit('close')"
+                                class="px-2 py-0.5 rounded text-xs font-mono uppercase bg-raised fg-dim border border-base hover:border-accent transition-colors"
+                            >&#10005;</button>
+                        </div>
+                        <!-- Log body -->
                         <div id="lv-log-body" class="flex-1 overflow-y-auto font-mono text-xs p-2 bg-surface">
                             <div v-if="filteredLogs.length === 0" class="fg-muted p-4 text-center">no log entries</div>
                             <div

@@ -4,17 +4,16 @@
             props: {
                 collapsed:    { type: Boolean,  required: true },
                 stats:        { type: Object,   required: true },
-                logsOpen:     { type: Boolean,  required: true },
                 tab:          { type: String,   default: 'activity' },
                 activities:   { type: Array,    default: () => [] },
                 feedStream:   { type: Array,    default: () => [] },
                 formatSizeFn: { type: Function, required: true },
             },
 
-            emits: ['toggle-collapse', 'update:tab', 'toggle-logs'],
+            emits: ['toggle-collapse', 'update:tab'],
 
             template: `
-                <aside :style="{width: collapsed ? '64px' : '320px'}" class="fixed top-14 right-0 h-[calc(100vh-3.5rem)] bg-card border-l border-subtle shadow-2xl transition-all duration-300 z-40">
+                <aside :style="{width: collapsed ? '64px' : '320px'}" class="fixed top-14 left-0 h-[calc(100vh-3.5rem)] bg-card border-r border-subtle shadow-2xl transition-all duration-300 z-30">
                     <!-- Console Header with Hamburger Toggle -->
                     <div class="flex items-center justify-between p-4 border-b border-subtle bg-raised/50">
                         <h2 v-if="!collapsed" class="text-sm font-bold font-mono fg-accent uppercase">
@@ -73,19 +72,6 @@
                             </div>
                             </div>
                         </div>
-                    </div>
-
-                    <!-- Logs Drawer Trigger -->
-                    <div class="border-b border-subtle">
-                        <button
-                            @click="$emit('toggle-logs')"
-                            :class="['w-full flex items-center gap-3 p-3 transition-colors duration-200', collapsed ? 'justify-center' : '', logsOpen ? 'bg-raised/80' : 'hover:bg-raised/40']"
-                            :title="logsOpen ? 'Close log drawer' : 'Open log drawer'"
-                        >
-                            <span :class="['font-mono text-base', logsOpen ? 'fg-accent' : 'fg-dim']">&#9166;</span>
-                            <span v-if="!collapsed" :class="['text-xs font-mono font-bold uppercase', logsOpen ? 'fg-accent' : 'fg-dim']">logs</span>
-                            <span v-if="!collapsed && logsOpen" class="ml-auto w-2 h-2 rounded-full bg-accent animate-pulse"></span>
-                        </button>
                     </div>
 
                     <!-- Tab Switcher -->

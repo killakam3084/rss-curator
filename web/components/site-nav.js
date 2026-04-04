@@ -3,15 +3,15 @@
         app.component('site-nav', {
             props: {
                 // 'index' | 'jobs' | 'settings' — drives active-link highlighting
-                page:         { type: String, default: '' },
-                // Used by index.html to shift the nav's right edge alongside the collapsible sidebar.
-                // Pass e.g. :right-offset="sidebarCollapsed ? '64px' : '320px'". Defaults to '0px'
-                // (full-width) for pages without a sidebar.
-                rightOffset:  { type: String, default: '0px' },
+                page:         { type: String,  default: '' },
+                // Shows the logs panel toggle button as active when true.
+                logsOpen:     { type: Boolean, default: false },
                 // Pass the SSE connection state on pages that have a live indicator (jobs page).
                 // Leaving it at the default null hides the indicator entirely.
                 sseConnected: { default: null },
             },
+
+            emits: ['toggle-logs'],
 
             setup() {
                 const { ref, onMounted } = Vue;
@@ -48,8 +48,7 @@
 
             template: `
                 <nav
-                    :style="{ right: rightOffset }"
-                    class="fixed top-0 left-0 z-40 h-14 bg-card border-b border-subtle flex items-center justify-between px-6 transition-all duration-300"
+                    class="fixed top-0 left-0 right-0 z-40 h-14 bg-card border-b border-subtle flex items-center justify-between px-6"
                 >
                     <!-- Left: wordmark + page links -->
                     <div class="flex items-center gap-6">
@@ -79,6 +78,18 @@
                             <span :class="['w-2 h-2 rounded-full', sseConnected ? 'bg-accent animate-pulse-dot' : 'bg-gray-600']"></span>
                             {{ sseConnected ? 'live' : 'connecting\u2026' }}
                         </span>
+                        <button
+                            @click="$emit('toggle-logs')"
+                            class="p-2 rounded border transition-colors duration-150"
+                            :class="logsOpen
+                                ? 'bg-raised border-base fg-accent'
+                                : 'border-transparent hover:bg-raised hover:border-base fg-dim'"
+                            title="Toggle logs"
+                        >
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 10h16M4 14h10M4 18h8"/>
+                            </svg>
+                        </button>
                         <button
                             @click="toggleDarkMode"
                             class="p-2 rounded border border-transparent hover:bg-raised hover:border-base transition-colors duration-150"

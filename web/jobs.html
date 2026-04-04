@@ -50,7 +50,7 @@
 <body class="bg-surface fg-base min-h-screen">
     <div id="jobs-app">
         <!-- ── Primary Navigation ── -->
-        <site-nav page="jobs" :sse-connected="sseConnected"></site-nav>
+        <site-nav page="jobs" :sse-connected="sseConnected" :logs-open="logsOpen" @toggle-logs="logsOpen = !logsOpen"></site-nav>
 
         <!-- Ops In-Progress Banner -->
         <ops-banner :running-jobs="runningJobs" :cancel-job-fn="cancelJob"></ops-banner>
@@ -207,7 +207,7 @@
             </div>
 
             <!-- Log Viewer Panel -->
-            <log-viewer variant="panel" title="// job logs"></log-viewer>
+            <log-viewer variant="side" :open="logsOpen" @close="logsOpen = false" title="// job logs"></log-viewer>
 
             <!-- Footer note -->
             <p class="mt-4 text-xs font-mono fg-faint text-center">showing last {{ jobs.length }} jobs · updates live via SSE</p>
@@ -230,6 +230,7 @@
             const expandedIds = reactive(new Set());
             const cancelingIds = reactive(new Set());
             const sseConnected = ref(false);
+            const logsOpen = ref(false);
             let eventSource = null;
 
             const runningJobs = computed(() => jobs.value.filter(j => j.status === 'running'));
@@ -445,7 +446,8 @@
                 tabCount, toggleExpand,
                 formatRelative, duration, cancelJob, cancelingIds,
                 runningJobs, failedJobs, cancelledJobs, latestTerminalJob,
-                railRunningJobs, jobsRailVisible, batchStats, jobSummaryLine
+                railRunningJobs, jobsRailVisible, batchStats, jobSummaryLine,
+                logsOpen
             };
         }
     });

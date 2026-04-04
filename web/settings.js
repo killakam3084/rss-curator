@@ -13,6 +13,7 @@ const settingsApp = createApp({
         ];
         const activeSection = ref('scheduler');
         const loading = ref(true);
+        const logsOpen = ref(false);
         const saving = ref(false);
 
         // ── Shows editor state ────────────────────────────────────────
@@ -508,6 +509,7 @@ const settingsApp = createApp({
             feedCheckRunning,
             runFeedCheck,
             addSuggestion,
+            logsOpen,
         };
     }
 });
