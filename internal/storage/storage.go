@@ -237,7 +237,7 @@ func (s *Storage) List(status, query, contentType string) ([]models.StagedTorren
 		args = append(args, contentType)
 	}
 
-	sqlStr := `SELECT id, link, feed_item, match_reason, staged_at, status, approved_at, ai_score, ai_reason, ai_scored, match_confidence, match_confidence_reason
+	sqlStr := `SELECT id, link, feed_item, match_reason, staged_at, status, approved_at, ai_score, ai_reason, ai_scored, match_confidence, match_confidence_reason, content_type
 		FROM staged_torrents`
 	if len(conds) > 0 {
 		sqlStr += " WHERE "
@@ -263,14 +263,19 @@ func (s *Storage) List(status, query, contentType string) ([]models.StagedTorren
 		var feedItemJSON string
 		var link string
 		var approvedAt sql.NullTime
+		var contentTypeDB string
 
-		err := rows.Scan(&t.ID, &link, &feedItemJSON, &t.MatchReason, &t.StagedAt, &t.Status, &approvedAt, &t.AIScore, &t.AIReason, &t.AIScored, &t.MatchConfidence, &t.MatchConfidenceReason)
+		err := rows.Scan(&t.ID, &link, &feedItemJSON, &t.MatchReason, &t.StagedAt, &t.Status, &approvedAt, &t.AIScore, &t.AIReason, &t.AIScored, &t.MatchConfidence, &t.MatchConfidenceReason, &contentTypeDB)
 		if err != nil {
 			return nil, err
 		}
 
 		if err := json.Unmarshal([]byte(feedItemJSON), &t.FeedItem); err != nil {
 			return nil, fmt.Errorf("failed to unmarshal feed item: %w", err)
+		}
+		// DB column is authoritative — overwrite whatever the JSON blob says.
+		if contentTypeDB != "" {
+			t.FeedItem.ContentType = models.ContentType(contentTypeDB)
 		}
 
 		if approvedAt.Valid {
@@ -290,11 +295,12 @@ func (s *Storage) Get(id int) (*models.StagedTorrent, error) {
 	var link string
 	var approvedAt sql.NullTime
 
+	var contentTypeDB string
 	err := s.db.QueryRow(`
-		SELECT id, link, feed_item, match_reason, staged_at, status, approved_at, ai_score, ai_reason, ai_scored, match_confidence, match_confidence_reason
+		SELECT id, link, feed_item, match_reason, staged_at, status, approved_at, ai_score, ai_reason, ai_scored, match_confidence, match_confidence_reason, content_type
 		FROM staged_torrents
 		WHERE id = ?
-	`, id).Scan(&t.ID, &link, &feedItemJSON, &t.MatchReason, &t.StagedAt, &t.Status, &approvedAt, &t.AIScore, &t.AIReason, &t.AIScored, &t.MatchConfidence, &t.MatchConfidenceReason)
+	`, id).Scan(&t.ID, &link, &feedItemJSON, &t.MatchReason, &t.StagedAt, &t.Status, &approvedAt, &t.AIScore, &t.AIReason, &t.AIScored, &t.MatchConfidence, &t.MatchConfidenceReason, &contentTypeDB)
 
 	if err == sql.ErrNoRows {
 		return nil, fmt.Errorf("torrent not found")
@@ -305,6 +311,9 @@ func (s *Storage) Get(id int) (*models.StagedTorrent, error) {
 
 	if err := json.Unmarshal([]byte(feedItemJSON), &t.FeedItem); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal feed item: %w", err)
+	}
+	if contentTypeDB != "" {
+		t.FeedItem.ContentType = models.ContentType(contentTypeDB)
 	}
 
 	if approvedAt.Valid {
@@ -379,11 +388,12 @@ func (s *Storage) GetByID(id int) (*models.StagedTorrent, error) {
 	var feedItemJSON string
 	var approvedAt sql.NullTime
 
+	var contentTypeDB string
 	err := s.db.QueryRow(`
-		SELECT id, feed_item, match_reason, staged_at, status, approved_at, ai_score, ai_reason, ai_scored, match_confidence, match_confidence_reason
+		SELECT id, feed_item, match_reason, staged_at, status, approved_at, ai_score, ai_reason, ai_scored, match_confidence, match_confidence_reason, content_type
 		FROM staged_torrents
 		WHERE id = ?
-	`, id).Scan(&t.ID, &feedItemJSON, &t.MatchReason, &t.StagedAt, &t.Status, &approvedAt, &t.AIScore, &t.AIReason, &t.AIScored, &t.MatchConfidence, &t.MatchConfidenceReason)
+	`, id).Scan(&t.ID, &feedItemJSON, &t.MatchReason, &t.StagedAt, &t.Status, &approvedAt, &t.AIScore, &t.AIReason, &t.AIScored, &t.MatchConfidence, &t.MatchConfidenceReason, &contentTypeDB)
 
 	if err == sql.ErrNoRows {
 		return nil, nil
@@ -394,6 +404,9 @@ func (s *Storage) GetByID(id int) (*models.StagedTorrent, error) {
 
 	if err := json.Unmarshal([]byte(feedItemJSON), &t.FeedItem); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal feed item: %w", err)
+	}
+	if contentTypeDB != "" {
+		t.FeedItem.ContentType = models.ContentType(contentTypeDB)
 	}
 
 	if approvedAt.Valid {
