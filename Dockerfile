@@ -23,8 +23,8 @@ RUN CGO_ENABLED=1 GOOS=linux go build -a -installsuffix cgo -o curator ./cmd/cur
 # Stage 2: Runtime stage
 FROM alpine:latest
 
-# Install runtime dependencies (sqlite3 for dynamic linking)
-RUN apk add --no-cache ca-certificates sqlite-libs
+# Install runtime dependencies (sqlite3 for dynamic linking + CLI for debugging)
+RUN apk add --no-cache ca-certificates sqlite-libs sqlite
 
 # Create app directory
 WORKDIR /app
