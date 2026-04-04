@@ -303,6 +303,119 @@ func TestMatchAllEmpty(t *testing.T) {
 	}
 }
 
+// ── movieRuleNameParts ────────────────────────────────────────────────────────
+
+func TestMovieRuleNameParts(t *testing.T) {
+	cases := []struct {
+		input    string
+		wantName string
+		wantYear int
+	}{
+		{"Joker 2019", "Joker", 2019},
+		{"The Dark Knight 2008", "The Dark Knight", 2008},
+		{"Joker", "Joker", 0},                             // no year in rule
+		{"The Thing", "The Thing", 0},                     // no year
+		{"The Thing 1982", "The Thing", 1982},             // older film
+		{"The Thing 2011", "The Thing", 2011},             // remake
+		{"  Dune Part Two 2024  ", "Dune Part Two", 2024}, // trimmed
+	}
+	for _, tc := range cases {
+		gotName, gotYear := movieRuleNameParts(tc.input)
+		if gotName != tc.wantName || gotYear != tc.wantYear {
+			t.Errorf("movieRuleNameParts(%q) = (%q, %d), want (%q, %d)",
+				tc.input, gotName, gotYear, tc.wantName, tc.wantYear)
+		}
+	}
+}
+
+// ── movie matcher ─────────────────────────────────────────────────────────────
+
+func makeMovieCfg(ruleName, minQuality string) *models.ShowsConfig {
+	return &models.ShowsConfig{
+		Movies: []models.MovieRule{
+			{Name: ruleName, MinQuality: minQuality},
+		},
+		Defaults: models.DefaultRules{MinQuality: "720P"},
+	}
+}
+
+func TestMovieMatchWithYearInRuleName(t *testing.T) {
+	// Rule "Joker 2019" must match a parsed item with ShowName="Joker", ReleaseYear=2019
+	m := NewMatcher(makeMovieCfg("Joker 2019", "1080P"), nil)
+	ok, reason := m.Match(models.FeedItem{
+		ContentType: models.ContentTypeMovie,
+		ShowName:    "Joker",
+		ReleaseYear: 2019,
+		Quality:     "2160P",
+	})
+	if !ok {
+		t.Fatalf("expected Joker 2019 to match, got: %q", reason)
+	}
+}
+
+func TestMovieMatchWithYearInRuleNameRejectsWrongYear(t *testing.T) {
+	// "The Thing 1982" rule must NOT match The Thing (2011)
+	m := NewMatcher(makeMovieCfg("The Thing 1982", "1080P"), nil)
+	ok, reason := m.Match(models.FeedItem{
+		ContentType: models.ContentTypeMovie,
+		ShowName:    "The Thing",
+		ReleaseYear: 2011,
+		Quality:     "1080P",
+	})
+	if ok {
+		t.Fatal("expected The Thing 2011 to be rejected by The Thing 1982 rule")
+	}
+	if reason != "movie not in watch list" {
+		t.Errorf("unexpected reason: %q", reason)
+	}
+}
+
+func TestMovieMatchWithoutYearInRuleMatchesAnyYear(t *testing.T) {
+	// Rule "Joker" (no year) should match regardless of release year
+	m := NewMatcher(makeMovieCfg("Joker", "1080P"), nil)
+	ok, _ := m.Match(models.FeedItem{
+		ContentType: models.ContentTypeMovie,
+		ShowName:    "Joker",
+		ReleaseYear: 2019,
+		Quality:     "1080P",
+	})
+	if !ok {
+		t.Fatal("expected year-less rule to match any release year")
+	}
+}
+
+func TestMovieMatchQualityTooLow(t *testing.T) {
+	m := NewMatcher(makeMovieCfg("Joker 2019", "1080P"), nil)
+	ok, reason := m.Match(models.FeedItem{
+		ContentType: models.ContentTypeMovie,
+		ShowName:    "Joker",
+		ReleaseYear: 2019,
+		Quality:     "720P",
+	})
+	if ok {
+		t.Fatal("expected reject for quality below minimum")
+	}
+	if !contains(reason, "720P") {
+		t.Errorf("unexpected reason: %q", reason)
+	}
+}
+
+func TestMovieMatchUnlistedMovieRejects(t *testing.T) {
+	m := NewMatcher(makeMovieCfg("Joker 2019", "1080P"), nil)
+	ok, reason := m.Match(models.FeedItem{
+		ContentType: models.ContentTypeMovie,
+		ShowName:    "Batman",
+		ReleaseYear: 2022,
+		Quality:     "1080P",
+	})
+	if ok {
+		t.Fatal("expected reject for movie not in watch list")
+	}
+	if reason != "movie not in watch list" {
+		t.Errorf("unexpected reason: %q", reason)
+	}
+}
+
 // helper
 func contains(s, sub string) bool {
 	return len(s) >= len(sub) && (s == sub || len(sub) == 0 ||

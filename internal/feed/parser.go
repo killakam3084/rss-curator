@@ -239,7 +239,7 @@ func extractMetadata(item *models.FeedItem) {
 		// Movie title formats:
 		//   "Transfusion 2023 1080p ..." (bare year)
 		//   "Junk Films (2007) 1080p ..." (parenthesised year)
-		yearRe := regexp.MustCompile(`(?:^|\s)\(?((19|20)\d{2})\)?(?:\s|$)`)
+		yearRe := regexp.MustCompile(`(?:^|[\s.])\(?((19|20)\d{2})\)?(?:[\s.]|$)`)
 		if m := yearRe.FindStringSubmatchIndex(title); m != nil {
 			yearStr := title[m[2]:m[3]]
 			if yr, err := strconv.Atoi(yearStr); err == nil {

@@ -3,6 +3,7 @@ package matcher
 import (
 	"fmt"
 	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -145,7 +146,13 @@ func (m *Matcher) matchMovie(item models.FeedItem) (bool, string) {
 
 	var movieRule *models.MovieRule
 	for i := range m.showsConfig.Movies {
-		if matchShowName(item.ShowName, m.showsConfig.Movies[i].Name) {
+		baseName, ruleYear := movieRuleNameParts(m.showsConfig.Movies[i].Name)
+		if matchShowName(item.ShowName, baseName) {
+			// If the rule name includes a year, require it to match so that
+			// "The Thing 1982" and "The Thing 2011" stay distinct.
+			if ruleYear != 0 && item.ReleaseYear != 0 && ruleYear != item.ReleaseYear {
+				continue
+			}
 			movieRule = &m.showsConfig.Movies[i]
 			break
 		}
@@ -219,6 +226,19 @@ func (m *Matcher) matchLegacy(item models.FeedItem) (bool, string) {
 	}
 
 	return true, strings.Join(reasons, ", ")
+}
+
+// movieRuleNameParts splits a movie rule name into a base title and an
+// optional release year. "Joker 2019" → ("Joker", 2019). This lets users
+// disambiguate same-named movies by year in shows.json while still matching
+// against the parsed ShowName (which never includes the year).
+func movieRuleNameParts(name string) (baseName string, year int) {
+	re := regexp.MustCompile(`^(.*?)\s+((19|20)\d{2})$`)
+	if m := re.FindStringSubmatch(strings.TrimSpace(name)); m != nil {
+		yr, _ := strconv.Atoi(m[2])
+		return strings.TrimSpace(m[1]), yr
+	}
+	return strings.TrimSpace(name), 0
 }
 
 // matchShowName returns true when ruleName appears in itemShowName as a

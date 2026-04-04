@@ -256,3 +256,76 @@ func TestParse_MalformedXMLReturnsError(t *testing.T) {
 		t.Fatal("expected error for malformed XML")
 	}
 }
+
+func TestParseTitleMetadata_Movie(t *testing.T) {
+	cases := []struct {
+		name        string
+		title       string
+		wantName    string
+		wantYear    int
+		wantQuality string
+	}{
+		{
+			name:        "bare year space-separated",
+			title:       "Transfusion 2023 1080p WEB-DL x265-GROUP",
+			wantName:    "Transfusion",
+			wantYear:    2023,
+			wantQuality: "1080P",
+		},
+		{
+			name:        "bare year dot-separated",
+			title:       "Transfusion.2023.1080p.WEB-DL.x265-GROUP",
+			wantName:    "Transfusion",
+			wantYear:    2023,
+			wantQuality: "1080P",
+		},
+		{
+			name:        "parenthesized year space-separated",
+			title:       "Avengers Endgame (2019) 1080p WEB-DL x265-GROUP",
+			wantName:    "Avengers Endgame",
+			wantYear:    2019,
+			wantQuality: "1080P",
+		},
+		{
+			name:        "parenthesized year dot-separated",
+			title:       "Avengers.Endgame.(2019).1080p.WEB-DL.x265-GROUP",
+			wantName:    "Avengers Endgame",
+			wantYear:    2019,
+			wantQuality: "1080P",
+		},
+		{
+			name:        "multi-word title parenthesized year dot-separated",
+			title:       "The.Dark.Knight.(2008).1080p.BluRay.x264-GROUP",
+			wantName:    "The Dark Knight",
+			wantYear:    2008,
+			wantQuality: "1080P",
+		},
+		{
+			name:        "4K with parenthesized year",
+			title:       "Dune.Part.Two.(2024).2160p.WEB-DL.x265-FLUX",
+			wantName:    "Dune Part Two",
+			wantYear:    2024,
+			wantQuality: "2160P",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			item := &models.FeedItem{
+				Title:       tc.title,
+				ContentType: models.ContentTypeMovie,
+			}
+			ParseTitleMetadata(item)
+
+			if item.ShowName != tc.wantName {
+				t.Errorf("ShowName = %q, want %q", item.ShowName, tc.wantName)
+			}
+			if item.ReleaseYear != tc.wantYear {
+				t.Errorf("ReleaseYear = %d, want %d", item.ReleaseYear, tc.wantYear)
+			}
+			if tc.wantQuality != "" && item.Quality != tc.wantQuality {
+				t.Errorf("Quality = %q, want %q", item.Quality, tc.wantQuality)
+			}
+		})
+	}
+}
