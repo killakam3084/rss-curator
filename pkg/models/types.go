@@ -2,6 +2,20 @@ package models
 
 import "time"
 
+// ContentType identifies whether a feed item or rule is for a show or a movie.
+type ContentType string
+
+const (
+	ContentTypeShow  ContentType = "show"
+	ContentTypeMovie ContentType = "movie"
+)
+
+// FeedConfig pairs an RSS feed URL with the content type it carries.
+type FeedConfig struct {
+	URL         string      `yaml:"url"`
+	ContentType ContentType `yaml:"content_type"`
+}
+
 // FeedItem represents a parsed RSS feed item
 type FeedItem struct {
 	Title       string    `json:"title"`
@@ -12,13 +26,15 @@ type FeedItem struct {
 	Description string    `json:"description"`
 
 	// Parsed metadata
-	ShowName     string `json:"show_name"`
-	Season       int    `json:"season"`
-	Episode      int    `json:"episode"`
-	Quality      string `json:"quality"`
-	Codec        string `json:"codec"`
-	Source       string `json:"source"`
-	ReleaseGroup string `json:"release_group"`
+	ContentType  ContentType `json:"content_type"`
+	ShowName     string      `json:"show_name"`
+	Season       int         `json:"season"`
+	Episode      int         `json:"episode"`
+	ReleaseYear  int         `json:"release_year,omitempty"`
+	Quality      string      `json:"quality"`
+	Codec        string      `json:"codec"`
+	Source       string      `json:"source"`
+	ReleaseGroup string      `json:"release_group"`
 }
 
 // StagedTorrent represents a torrent waiting for approval
@@ -67,6 +83,15 @@ type ShowRule struct {
 	ExcludeGroups   []string `json:"exclude_groups,omitempty"`
 }
 
+// MovieRule represents rules for a specific movie (mirrors ShowRule).
+type MovieRule struct {
+	Name            string   `json:"name"`
+	MinQuality      string   `json:"min_quality,omitempty"`
+	PreferredCodec  string   `json:"preferred_codec,omitempty"`
+	PreferredGroups []string `json:"preferred_groups,omitempty"`
+	ExcludeGroups   []string `json:"exclude_groups,omitempty"`
+}
+
 // DefaultRules represents default matching rules
 type DefaultRules struct {
 	MinQuality      string   `json:"min_quality"`
@@ -78,6 +103,7 @@ type DefaultRules struct {
 // ShowsConfig represents the shows.json structure
 type ShowsConfig struct {
 	Shows    []ShowRule   `json:"shows"`
+	Movies   []MovieRule  `json:"movies"`
 	Defaults DefaultRules `json:"defaults"`
 }
 
@@ -92,12 +118,14 @@ type MatchRule struct {
 
 // Config represents application configuration
 type Config struct {
-	FeedURLs     []string  `yaml:"feed_urls"`
-	PollInterval int       `yaml:"poll_interval"`
-	QBittorrent  QBConfig  `yaml:"qbittorrent"`
-	MatchRules   MatchRule `yaml:"match_rules"`
-	StoragePath  string    `yaml:"storage_path"`
-	ShowsConfig  *ShowsConfig
+	FeedURLs      []string     `yaml:"feed_urls"`
+	MovieFeedURLs []string     `yaml:"movie_feed_urls"`
+	Feeds         []FeedConfig `yaml:"-"` // built from FeedURLs + MovieFeedURLs in loadConfig
+	PollInterval  int          `yaml:"poll_interval"`
+	QBittorrent   QBConfig     `yaml:"qbittorrent"`
+	MatchRules    MatchRule    `yaml:"match_rules"`
+	StoragePath   string       `yaml:"storage_path"`
+	ShowsConfig   *ShowsConfig
 }
 
 // QBConfig represents qBittorrent connection settings

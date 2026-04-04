@@ -28,7 +28,7 @@ func (m *mockStorage) Get(id int) (*models.StagedTorrent, error) {
 }
 
 // List returns torrents by status
-func (m *mockStorage) List(status, query string) ([]models.StagedTorrent, error) {
+func (m *mockStorage) List(status, query, contentType string) ([]models.StagedTorrent, error) {
 	var result []models.StagedTorrent
 	for _, t := range m.torrents {
 		if status != "" && t.Status != status {

@@ -67,6 +67,14 @@ const app = createApp({
         const searchQuery = ref('');
         let   searchDebounceTimer = null;
 
+        // Content type filter: '' = all, 'show', 'movie'
+        const contentTypeFilter = ref('');
+        const contentTypeOptions = [
+            { value: '',      label: 'All' },
+            { value: 'show',  label: 'Shows' },
+            { value: 'movie', label: 'Movies' },
+        ];
+
         // Sort field display labels
         const sortFields = [
             { key: 'staged_at', label: 'Date Staged' },
@@ -182,7 +190,8 @@ const app = createApp({
             loading.value = true;
             try {
                 const q = searchQuery.value ? `&q=${encodeURIComponent(searchQuery.value)}` : '';
-                const response = await fetch(`/api/torrents?status=${status}${q}`);
+                const ct = contentTypeFilter.value ? `&content_type=${contentTypeFilter.value}` : '';
+                const response = await fetch(`/api/torrents?status=${status}${q}${ct}`);
                 const data = await response.json();
                 torrents.value = data.torrents || [];
             } catch (error) {
@@ -195,12 +204,13 @@ const app = createApp({
 
         const fetchAllTorrents = async () => {
             try {
-                const q = searchQuery.value ? `&q=${encodeURIComponent(searchQuery.value)}` : '';
+				const q = searchQuery.value ? `&q=${encodeURIComponent(searchQuery.value)}` : '';
+                const ct = contentTypeFilter.value ? `&content_type=${contentTypeFilter.value}` : '';
                 const [pending, accepted, queued, rejected] = await Promise.all([
-                    fetch(`/api/torrents?status=pending${q}`).then(r => r.json()),
-                    fetch(`/api/torrents?status=accepted${q}`).then(r => r.json()),
-                    fetch(`/api/torrents?status=queued${q}`).then(r => r.json()),
-                    fetch(`/api/torrents?status=rejected${q}`).then(r => r.json())
+                    fetch(`/api/torrents?status=pending${q}${ct}`).then(r => r.json()),
+                    fetch(`/api/torrents?status=accepted${q}${ct}`).then(r => r.json()),
+                    fetch(`/api/torrents?status=queued${q}${ct}`).then(r => r.json()),
+                    fetch(`/api/torrents?status=rejected${q}${ct}`).then(r => r.json())
                 ]);
                 torrents.value = [
                     ...(pending.torrents || []),
@@ -700,6 +710,12 @@ const app = createApp({
             searchDebounceTimer = setTimeout(() => fetchAllTorrents(), 300);
         });
 
+        // Content type filter: re-fetch immediately when changed
+        watch(contentTypeFilter, () => {
+            currentPage.value = 1;
+            fetchAllTorrents();
+        });
+
         // Load initial data
         onMounted(() => {
             // Apply dark mode class immediately based on initial value
@@ -994,6 +1010,8 @@ const app = createApp({
             pageSizeOptions,
             currentPage,
             searchQuery,
+            contentTypeFilter,
+            contentTypeOptions,
             fetchTorrents,
             fetchAllTorrents,
             fetchActivities,

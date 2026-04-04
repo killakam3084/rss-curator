@@ -6,17 +6,22 @@ GET {{base}}/api/shows
 HTTP 200
 [Asserts]
 header "Content-Type" contains "application/json"
-jsonpath "$.shows"       isCollection
-jsonpath "$.shows_count" isInteger
+jsonpath "$.shows"        isCollection
+jsonpath "$.movies"       isCollection
+jsonpath "$.shows_count"  isInteger
+jsonpath "$.movies_count" isInteger
 
 
-# PUT — a minimal valid config; verify round-trip shape and shows_count.
+# PUT — a config with both shows and movies; verify round-trip shape.
 PUT {{base}}/api/shows
 Content-Type: application/json
 ```json
 {
   "shows": [
     { "name": "Test Show", "min_quality": "1080p" }
+  ],
+  "movies": [
+    { "name": "Test Movie", "min_quality": "1080p" }
   ],
   "defaults": {
     "min_quality": "720p",
@@ -30,9 +35,12 @@ Content-Type: application/json
 HTTP 200
 [Asserts]
 header "Content-Type" contains "application/json"
-jsonpath "$.shows"        isCollection
-jsonpath "$.shows_count"  == 1
-jsonpath "$.shows[0].name" == "Test Show"
+jsonpath "$.shows"          isCollection
+jsonpath "$.movies"         isCollection
+jsonpath "$.shows_count"    == 1
+jsonpath "$.movies_count"   == 1
+jsonpath "$.shows[0].name"  == "Test Show"
+jsonpath "$.movies[0].name" == "Test Movie"
 
 
 # PUT — invalid JSON → 400 Bad Request.

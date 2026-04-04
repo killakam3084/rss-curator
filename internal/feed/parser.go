@@ -61,8 +61,9 @@ type item struct {
 	Enclosure   enclosure `xml:"enclosure"`
 }
 
-// Parse fetches and parses an RSS feed
-func (p *Parser) Parse(feedURL string) ([]models.FeedItem, error) {
+// Parse fetches and parses an RSS feed. The contentType is applied to every
+// item returned so callers can route show and movie feeds differently.
+func (p *Parser) Parse(feedURL string, contentType models.ContentType) ([]models.FeedItem, error) {
 	resp, err := p.client.Get(feedURL)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch feed: %w", err)
@@ -115,7 +116,8 @@ func (p *Parser) Parse(feedURL string) ([]models.FeedItem, error) {
 		}
 
 		// Extract metadata from title
-		ParseTitleMetadata(&item)
+		item.ContentType = contentType
+		ParseParserMetadata(&item)
 
 		// Optionally enrich missing fields via AI.
 		if p.enricher != nil {
@@ -165,12 +167,29 @@ func parseSize(description string) int64 {
 }
 
 // ParseTitleMetadata resets parsed metadata fields and reparses them from the
-// title using the current regex rules. Intended for normal feed ingestion and
-// for rematch/re-evaluation workflows that need parser parity.
+// title using the current regex rules. The item's ContentType must already be
+// set before calling so movie vs. show logic is routed correctly. Intended for
+// normal feed ingestion and for rematch/re-evaluation workflows.
 func ParseTitleMetadata(item *models.FeedItem) {
 	item.ShowName = ""
 	item.Season = 0
 	item.Episode = 0
+	item.ReleaseYear = 0
+	item.Quality = ""
+	item.Codec = ""
+	item.Source = ""
+	item.ReleaseGroup = ""
+
+	extractMetadata(item)
+}
+
+// ParseParserMetadata is an alias for ParseTitleMetadata kept for internal use
+// inside Parse so the ContentType is preserved after being set by the caller.
+func ParseParserMetadata(item *models.FeedItem) {
+	item.ShowName = ""
+	item.Season = 0
+	item.Episode = 0
+	item.ReleaseYear = 0
 	item.Quality = ""
 	item.Codec = ""
 	item.Source = ""
@@ -215,7 +234,35 @@ func extractMetadata(item *models.FeedItem) {
 		item.ReleaseGroup = matches[1]
 	}
 
-	// Extract show name, season, episode
+	// Extract show name, season, episode (shows) or movie name + year (movies)
+	if item.ContentType == models.ContentTypeMovie {
+		// Movie title formats:
+		//   "Transfusion 2023 1080p ..." (bare year)
+		//   "Junk Films (2007) 1080p ..." (parenthesised year)
+		yearRe := regexp.MustCompile(`(?:^|\s)\(?((19|20)\d{2})\)?(?:\s|$)`)
+		if m := yearRe.FindStringSubmatchIndex(title); m != nil {
+			yearStr := title[m[2]:m[3]]
+			if yr, err := strconv.Atoi(yearStr); err == nil {
+				item.ReleaseYear = yr
+			}
+			// Movie name is everything before the year token
+			movieName := strings.TrimSpace(title[:m[0]])
+			movieNameCleaned := strings.ReplaceAll(movieName, ".", " ")
+			movieNameCleaned = strings.TrimSpace(movieNameCleaned)
+			if movieNameCleaned == "" {
+				movieNameCleaned = movieName
+			}
+			item.ShowName = movieNameCleaned
+		} else {
+			// Fallback: strip after resolution token
+			movName := regexp.MustCompile(`(?i)\b(2160p|1080p|720p|4K)\b.*`).ReplaceAllString(title, "")
+			movName = strings.ReplaceAll(movName, ".", " ")
+			item.ShowName = strings.TrimSpace(movName)
+		}
+		return
+	}
+
+	// Show: extract show name, season, episode
 	// Pattern: Show.Name.S01E02 or Show.Name.S01 or Show Name S01E02
 	seasonEpisodeRe := regexp.MustCompile(`^(.+?)[\s.]+[Ss](\d+)(?:[Ee](\d+))?`)
 	if matches := seasonEpisodeRe.FindStringSubmatch(title); len(matches) >= 3 {

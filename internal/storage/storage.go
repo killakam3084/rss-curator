@@ -24,7 +24,7 @@ type WindowStats struct {
 // Store defines the interface for storage operations
 type Store interface {
 	Get(id int) (*models.StagedTorrent, error)
-	List(status, query string) ([]models.StagedTorrent, error)
+	List(status, query, contentType string) ([]models.StagedTorrent, error)
 	Add(torrent models.StagedTorrent) error
 	UpdateStatus(id int, status string) error
 	LogActivity(torrentID int, title, action, matchReason string) error
@@ -178,6 +178,9 @@ func (s *Storage) migrate() error {
 			suggestions_json TEXT NOT NULL DEFAULT '[]',
 			generated_at DATETIME NOT NULL
 		)`,
+		// Migration 9: content_type column for show/movie differentiation
+		`ALTER TABLE staged_torrents ADD COLUMN content_type TEXT NOT NULL DEFAULT 'show'`,
+		`CREATE INDEX IF NOT EXISTS idx_content_type ON staged_torrents(content_type)`,
 	}
 
 	for _, migration := range migrations {
@@ -199,49 +202,55 @@ func (s *Storage) Add(torrent models.StagedTorrent) error {
 
 	torrent.StagedAt = time.Now()
 
+	contentType := string(torrent.FeedItem.ContentType)
+	if contentType == "" {
+		contentType = "show"
+	}
+
 	_, err = s.db.Exec(`
-		INSERT OR IGNORE INTO staged_torrents (link, feed_item, match_reason, staged_at, status, ai_score, ai_reason, ai_scored, match_confidence, match_confidence_reason)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-	`, torrent.FeedItem.Link, feedItemJSON, torrent.MatchReason, torrent.StagedAt, torrent.Status, torrent.AIScore, torrent.AIReason, torrent.AIScored, torrent.MatchConfidence, torrent.MatchConfidenceReason)
+		INSERT OR IGNORE INTO staged_torrents (link, feed_item, match_reason, staged_at, status, ai_score, ai_reason, ai_scored, match_confidence, match_confidence_reason, content_type)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`, torrent.FeedItem.Link, feedItemJSON, torrent.MatchReason, torrent.StagedAt, torrent.Status, torrent.AIScore, torrent.AIReason, torrent.AIScored, torrent.MatchConfidence, torrent.MatchConfidenceReason, contentType)
 
 	return err
 }
 
-// List returns torrents optionally filtered by status and/or a title substring.
-// An empty status matches all statuses; an empty query matches all titles.
-func (s *Storage) List(status, query string) ([]models.StagedTorrent, error) {
+// List returns torrents optionally filtered by status, title substring, and/or content type.
+// Empty strings match all values for their respective filters.
+func (s *Storage) List(status, query, contentType string) ([]models.StagedTorrent, error) {
 	var rows *sql.Rows
 	var err error
 
-	switch {
-	case status == "" && query == "":
-		rows, err = s.db.Query(`
-			SELECT id, link, feed_item, match_reason, staged_at, status, approved_at, ai_score, ai_reason, ai_scored, match_confidence, match_confidence_reason
-			FROM staged_torrents
-			ORDER BY staged_at DESC
-		`)
-	case status == "" && query != "":
-		rows, err = s.db.Query(`
-			SELECT id, link, feed_item, match_reason, staged_at, status, approved_at, ai_score, ai_reason, ai_scored, match_confidence, match_confidence_reason
-			FROM staged_torrents
-			WHERE json_extract(feed_item, '$.title') LIKE ?
-			ORDER BY staged_at DESC
-		`, "%"+query+"%")
-	case status != "" && query == "":
-		rows, err = s.db.Query(`
-			SELECT id, link, feed_item, match_reason, staged_at, status, approved_at, ai_score, ai_reason, ai_scored, match_confidence, match_confidence_reason
-			FROM staged_torrents
-			WHERE status = ?
-			ORDER BY staged_at DESC
-		`, status)
-	default:
-		rows, err = s.db.Query(`
-			SELECT id, link, feed_item, match_reason, staged_at, status, approved_at, ai_score, ai_reason, ai_scored, match_confidence, match_confidence_reason
-			FROM staged_torrents
-			WHERE status = ? AND json_extract(feed_item, '$.title') LIKE ?
-			ORDER BY staged_at DESC
-		`, status, "%"+query+"%")
+	// Build dynamic WHERE clause
+	conds := []string{}
+	args := []interface{}{}
+	if status != "" {
+		conds = append(conds, "status = ?")
+		args = append(args, status)
 	}
+	if query != "" {
+		conds = append(conds, "json_extract(feed_item, '$.title') LIKE ?")
+		args = append(args, "%"+query+"%")
+	}
+	if contentType != "" {
+		conds = append(conds, "content_type = ?")
+		args = append(args, contentType)
+	}
+
+	sqlStr := `SELECT id, link, feed_item, match_reason, staged_at, status, approved_at, ai_score, ai_reason, ai_scored, match_confidence, match_confidence_reason
+		FROM staged_torrents`
+	if len(conds) > 0 {
+		sqlStr += " WHERE "
+		for i, c := range conds {
+			if i > 0 {
+				sqlStr += " AND "
+			}
+			sqlStr += c
+		}
+	}
+	sqlStr += " ORDER BY staged_at DESC"
+
+	rows, err = s.db.Query(sqlStr, args...)
 
 	if err != nil {
 		return nil, err

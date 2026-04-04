@@ -17,9 +17,9 @@ import (
 
 // FeedCheckConfig holds the feed-specific parameters for a check run.
 type FeedCheckConfig struct {
-	FeedURLs []string
-	Matcher  *matcher.Matcher
-	RawTTL   time.Duration // TTL for raw feed items; defaults to 24h when zero.
+	Feeds   []models.FeedConfig
+	Matcher *matcher.Matcher
+	RawTTL  time.Duration // TTL for raw feed items; defaults to 24h when zero.
 	// JobID, when non-zero, indicates the caller has already created the job
 	// record and emitted the initial "running" SSE event. RunFeedCheck will
 	// use this ID rather than allocating a new one.
@@ -87,15 +87,15 @@ func RunFeedCheck(ctx context.Context, cfg FeedCheckConfig, deps FeedCheckDeps) 
 	)
 	now := time.Now()
 
-	for _, feedURL := range cfg.FeedURLs {
+	for _, fc := range cfg.Feeds {
 		if ctx.Err() != nil {
 			break
 		}
-		log.Info("fetching feed", zap.String("url", feedURL))
+		log.Info("fetching feed", zap.String("url", fc.URL), zap.String("type", string(fc.ContentType)))
 
-		items, err := parser.Parse(feedURL)
+		items, err := parser.Parse(fc.URL, fc.ContentType)
 		if err != nil {
-			log.Error("failed to parse feed", zap.String("url", feedURL), zap.Error(err))
+			log.Error("failed to parse feed", zap.String("url", fc.URL), zap.Error(err))
 			feedFailed = true
 			continue
 		}
@@ -114,7 +114,7 @@ func RunFeedCheck(ctx context.Context, cfg FeedCheckConfig, deps FeedCheckDeps) 
 		}
 
 		matches := cfg.Matcher.MatchAll(items)
-		log.Info("matched items", zap.String("url", feedURL), zap.Int("count", len(matches)))
+		log.Info("matched items", zap.String("url", fc.URL), zap.Int("count", len(matches)))
 
 		if deps.ScorerProv != nil && deps.ScorerProv.Available() && deps.Scorer != nil {
 			history, _ := deps.Store.GetActivity(50, 0, "")
@@ -186,7 +186,7 @@ func RunFeedCheck(ctx context.Context, cfg FeedCheckConfig, deps FeedCheckDeps) 
 			log.Warn("could not create rescore_backfill job", zap.Error(backfillJobErr))
 		}
 
-		all, err := deps.Store.List("", "")
+		all, err := deps.Store.List("", "", "")
 		if err == nil {
 			history, _ := deps.Store.GetActivity(50, 0, "")
 			backfilled := 0

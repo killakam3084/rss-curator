@@ -125,8 +125,8 @@ func cmdCheck(cfg models.Config, store *storage.Storage, metaLookup *metadata.Lo
 	}
 
 	summary, err := ops.RunFeedCheck(context.Background(), ops.FeedCheckConfig{
-		FeedURLs: cfg.FeedURLs,
-		Matcher:  m,
+		Feeds:   cfg.Feeds,
+		Matcher: m,
 	}, ops.FeedCheckDeps{
 		Store:      store,
 		Enricher:   enricher,
@@ -157,7 +157,7 @@ func cmdList(store *storage.Storage) {
 		status = os.Args[2]
 	}
 
-	torrents, err := store.List(status, "")
+	torrents, err := store.List(status, "", "")
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error listing torrents: %v\n", err)
 		os.Exit(1)
@@ -260,7 +260,7 @@ func cmdReject(store *storage.Storage, args []string) {
 }
 
 func cmdReview(cfg models.Config, store *storage.Storage) {
-	torrents, err := store.List("pending", "")
+	torrents, err := store.List("pending", "", "")
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error listing torrents: %v\n", err)
 		os.Exit(1)
@@ -327,9 +327,9 @@ func cmdTest(cfg models.Config) {
 
 	// Test RSS feeds
 	parser := feed.NewParser()
-	for i, feedURL := range cfg.FeedURLs {
-		fmt.Printf("RSS feed %d... ", i+1)
-		items, err := parser.Parse(feedURL)
+	for i, fc := range cfg.Feeds {
+		fmt.Printf("RSS feed %d (%s)... ", i+1, fc.ContentType)
+		items, err := parser.Parse(fc.URL, fc.ContentType)
 		if err != nil {
 			fmt.Printf("✗ Failed: %v\n", err)
 		} else {
@@ -343,6 +343,10 @@ func cmdTest(cfg models.Config) {
 		for _, show := range cfg.ShowsConfig.Shows {
 			fmt.Printf("  - %s\n", show.Name)
 		}
+		fmt.Printf("Movies configured: %d\n", len(cfg.ShowsConfig.Movies))
+		for _, movie := range cfg.ShowsConfig.Movies {
+			fmt.Printf("  - %s\n", movie.Name)
+		}
 	}
 }
 
@@ -352,6 +356,9 @@ func loadConfig() (models.Config, error) {
 	cfg := models.Config{
 		FeedURLs: []string{
 			os.Getenv("RSS_FEED_URL"),
+		},
+		MovieFeedURLs: []string{
+			os.Getenv("RSS_MOVIE_FEED_URL"),
 		},
 		PollInterval: 30,
 		QBittorrent: models.QBConfig{
@@ -375,6 +382,7 @@ func loadConfig() (models.Config, error) {
 	// Log all configured options at startup
 	fmt.Println("\n========== Configuration Loaded ==========")
 	fmt.Printf("[Config] RSS_FEED_URL: %s\n", cfg.FeedURLs[0])
+	fmt.Printf("[Config] RSS_MOVIE_FEED_URL: %s\n", cfg.MovieFeedURLs[0])
 	fmt.Printf("[Config] POLL_INTERVAL: %d seconds\n", cfg.PollInterval)
 	fmt.Println("\n--- QBittorrent Settings ---")
 	fmt.Printf("[Config] QBITTORRENT_HOST: %s\n", cfg.QBittorrent.Host)
@@ -396,6 +404,18 @@ func loadConfig() (models.Config, error) {
 	// Validate required fields
 	if cfg.FeedURLs[0] == "" {
 		return cfg, fmt.Errorf("RSS_FEED_URL environment variable is required")
+	}
+
+	// Build combined Feeds slice from FeedURLs + MovieFeedURLs
+	for _, u := range cfg.FeedURLs {
+		if u != "" {
+			cfg.Feeds = append(cfg.Feeds, models.FeedConfig{URL: u, ContentType: models.ContentTypeShow})
+		}
+	}
+	for _, u := range cfg.MovieFeedURLs {
+		if u != "" {
+			cfg.Feeds = append(cfg.Feeds, models.FeedConfig{URL: u, ContentType: models.ContentTypeMovie})
+		}
 	}
 
 	// Try to load shows.json
@@ -729,8 +749,8 @@ func cmdServe(cfg models.Config, store *storage.Storage, buf *logbuffer.Buffer, 
 		}
 	}
 	feedCheckCfg := ops.FeedCheckConfig{
-		FeedURLs: cfg.FeedURLs,
-		Matcher:  m,
+		Feeds:   cfg.Feeds,
+		Matcher: m,
 	}
 	feedCheckDeps := ops.FeedCheckDeps{
 		Store:      store,

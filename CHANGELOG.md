@@ -8,8 +8,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.42.0] - 2026-04-03
+
 ### Added
-- **`docs/FRONTEND.md`** — comprehensive frontend reference covering: stack overview, file layout, component registration pattern (IIFE + `window.registerXxxComponent`), full component inventory with props/emits tables for all 7 components, design token reference (all `--c-*` custom properties with light and dark values), semantic utility class reference (surfaces, text, borders, badges, action buttons), theme system end-to-end (dark mode ownership, FOUC prevention, `localStorage` key), page-to-component wiring table, and a step-by-step guide for adding a new component.
+- **Movie support** — movies are now a first-class content type alongside shows.
+  - New `ContentType` type (`"show"` / `"movie"`) and `FeedConfig` struct (`URL` + `ContentType` pair) in `pkg/models`.
+  - New `MovieRule` struct in `pkg/models` mirroring `ShowRule`; `ShowsConfig` gains a `"movies"` array — fully backwards-compatible with existing `shows.json` files.
+  - `Config` gains `MovieFeedURLs []string` and a derived `Feeds []FeedConfig` slice built in `loadConfig()`.
+  - `RSS_MOVIE_FEED_URL` environment variable wires a dedicated movie RSS feed; items from that feed are tagged `content_type = "movie"` automatically.
+- **Feed parser** — `Parse()` now accepts a `contentType` parameter and stamps every returned `FeedItem` with it. Movie titles are parsed specially: year tokens (`2023` or `(2023)`) are extracted into `FeedItem.ReleaseYear` and the movie name is everything before the year.
+- **Matcher** — `matchWithShowsConfig` branches on `ContentType`: show items match against `ShowsConfig.Shows`, movie items against `ShowsConfig.Movies`; defaults apply to both.
+- **Storage** — schema migration 9 adds `content_type TEXT NOT NULL DEFAULT 'show'` column with an index to `staged_torrents`; `Add()` persists the value; `List()` gains a third `contentType string` filter parameter.
+- **API** — `GET /api/torrents?content_type=show|movie` filters by content type; `TorrentResponse` exposes `content_type` and `release_year`; `GET /api/shows` returns `movies_count` in addition to `shows_count`; `PUT /api/shows` accepts and persists the `movies` array.
+- **Frontend** — All / Shows / Movies filter pills (SVG icons, no emoji) above the torrent list; `torrent-card` shows a content-type badge (TV icon for shows, film-strip icon for movies) and a year row for movies.
+- **Settings UI** — shows.json editor subtitle updated to "per-show & per-movie watch rules"; movies count displayed alongside shows count after save; `formatShows` sorts the `movies` array alphabetically.
+
+### [Unreleased]
 
 ## [0.40.0] - 2026-04-03
 

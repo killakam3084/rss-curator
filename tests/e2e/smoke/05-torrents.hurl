@@ -17,3 +17,21 @@ HTTP 200
 [Asserts]
 jsonpath "$.torrents" isCollection
 jsonpath "$.count"    isInteger
+
+
+# Content type filter — shows only.
+GET {{base}}/api/torrents?content_type=show
+
+HTTP 200
+[Asserts]
+jsonpath "$.torrents" isCollection
+jsonpath "$.count"    isInteger
+
+
+# Content type filter — movies only.
+GET {{base}}/api/torrents?content_type=movie
+
+HTTP 200
+[Asserts]
+jsonpath "$.torrents" isCollection
+jsonpath "$.count"    isInteger

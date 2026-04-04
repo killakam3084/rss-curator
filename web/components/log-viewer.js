@@ -251,7 +251,7 @@
                      ═══════════════════════════════════════════════════ -->
                 <template v-else-if="variant === 'side'">
                     <div
-                        class="fixed top-14 right-0 bottom-0 z-40 flex flex-col bg-card border-l border-subtle shadow-2xl"
+                        class="fixed top-14 right-0 bottom-0 z-40 flex flex-col bg-card/85 backdrop-blur-sm border-l border-subtle shadow-2xl"
                         :style="{
                             width: '600px',
                             transform: open ? 'translateX(0)' : 'translateX(100%)',
@@ -259,7 +259,7 @@
                         }"
                     >
                         <!-- Toolbar -->
-                        <div class="flex items-center gap-2 px-4 py-2 border-b border-subtle bg-card shrink-0 flex-wrap">
+                        <div class="flex items-center gap-2 px-4 py-2 border-b border-subtle bg-card/85 shrink-0 flex-wrap">
                             <span class="text-xs font-mono fg-accent font-bold whitespace-nowrap">{{ title }}</span>
                             <span
                                 :class="['w-2 h-2 rounded-full shrink-0', open ? 'bg-accent animate-pulse' : 'bg-gray-600']"
@@ -305,7 +305,7 @@
                             >&#10005;</button>
                         </div>
                         <!-- Log body -->
-                        <div id="lv-log-body" class="flex-1 overflow-y-auto font-mono text-xs p-2 bg-surface">
+                        <div id="lv-log-body" class="flex-1 overflow-y-auto font-mono text-xs p-2 bg-surface/85">
                             <div v-if="filteredLogs.length === 0" class="fg-muted p-4 text-center">no log entries</div>
                             <div
                                 v-for="entry in filteredLogs"

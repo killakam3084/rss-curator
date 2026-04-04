@@ -265,7 +265,7 @@
                     <!-- Controls -->
                     <div class="bg-card border border-subtle rounded-lg shadow-lg p-6">
                         <!-- Filter Tabs -->
-                        <div class="flex gap-2 mb-6 flex-wrap">
+                        <div class="flex gap-2 mb-4 flex-wrap">
                             <button 
                                 v-for="tab in tabs" 
                                 :key="tab"
@@ -278,6 +278,29 @@
                                 ]"
                             >
                                 > {{ tab }}
+                            </button>
+                        </div>
+
+                        <!-- Content Type Filter Pills -->
+                        <div class="flex gap-2 mb-6 flex-wrap">
+                            <button
+                                v-for="ct in contentTypeOptions"
+                                :key="ct.value"
+                                @click="contentTypeFilter = ct.value"
+                                :class="[
+                                    'inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-mono font-semibold transition-all duration-200 border',
+                                    contentTypeFilter === ct.value
+                                        ? 'bg-accent text-white border-accent shadow'
+                                        : 'bg-raised fg-dim border-base hover:border-accent hover:fg-accent'
+                                ]"
+                            >
+                                <!-- All icon -->
+                                <svg v-if="ct.value === ''" xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+                                <!-- Show / TV icon -->
+                                <svg v-if="ct.value === 'show'" xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
+                                <!-- Movie / film icon -->
+                                <svg v-if="ct.value === 'movie'" xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="20" rx="2"/><path d="M7 2v20M17 2v20M2 12h20M2 7h5M2 17h5M17 7h5M17 17h5"/></svg>
+                                {{ ct.label }}
                             </button>
                         </div>
 

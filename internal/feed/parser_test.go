@@ -160,7 +160,7 @@ func TestParse_ReturnsTwoItems(t *testing.T) {
 	defer srv.Close()
 
 	p := NewParser()
-	items, err := p.Parse(srv.URL)
+	items, err := p.Parse(srv.URL, models.ContentTypeShow)
 	if err != nil {
 		t.Fatalf("Parse: %v", err)
 	}
@@ -176,7 +176,7 @@ func TestParse_MetadataExtracted(t *testing.T) {
 	defer srv.Close()
 
 	p := NewParser()
-	items, _ := p.Parse(srv.URL)
+	items, _ := p.Parse(srv.URL, models.ContentTypeShow)
 	bb := items[0]
 
 	if bb.ShowName != "Breaking Bad" {
@@ -200,7 +200,7 @@ func TestParse_EnclosureSizePreferredOverDescription(t *testing.T) {
 	defer srv.Close()
 
 	p := NewParser()
-	items, _ := p.Parse(srv.URL)
+	items, _ := p.Parse(srv.URL, models.ContentTypeShow)
 	bcs := items[1]
 
 	if bcs.Size != 3_221_225_472 {
@@ -215,7 +215,7 @@ func TestParse_DescriptionSizeFallback(t *testing.T) {
 	defer srv.Close()
 
 	p := NewParser()
-	items, _ := p.Parse(srv.URL)
+	items, _ := p.Parse(srv.URL, models.ContentTypeShow)
 	bb := items[0]
 
 	if bb.Size == 0 {
@@ -230,7 +230,7 @@ func TestParse_Non200ReturnsError(t *testing.T) {
 	defer srv.Close()
 
 	p := NewParser()
-	_, err := p.Parse(srv.URL)
+	_, err := p.Parse(srv.URL, models.ContentTypeShow)
 	if err == nil {
 		t.Fatal("expected error for non-200 response")
 	}
@@ -238,7 +238,7 @@ func TestParse_Non200ReturnsError(t *testing.T) {
 
 func TestParse_InvalidURLReturnsError(t *testing.T) {
 	p := NewParser()
-	_, err := p.Parse("http://127.0.0.1:1")
+	_, err := p.Parse("http://127.0.0.1:1", models.ContentTypeShow)
 	if err == nil {
 		t.Fatal("expected error for unreachable URL")
 	}
@@ -251,7 +251,7 @@ func TestParse_MalformedXMLReturnsError(t *testing.T) {
 	defer srv.Close()
 
 	p := NewParser()
-	_, err := p.Parse(srv.URL)
+	_, err := p.Parse(srv.URL, models.ContentTypeShow)
 	if err == nil {
 		t.Fatal("expected error for malformed XML")
 	}

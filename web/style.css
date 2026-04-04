@@ -173,7 +173,9 @@ input.outline-none:focus-visible {
 
 /* bg-card and bg-deep opacity variants                                       */
 .bg-card\/60  { background-color: rgb(var(--c-card) / 0.6); }
+.bg-card\/85  { background-color: rgb(var(--c-card) / 0.85); }
 .bg-deep\/60  { background-color: rgb(var(--c-deep) / 0.6); }
+.bg-surface\/85 { background-color: rgb(var(--c-surface) / 0.85); }
 
 /* Accent surface tint                                                        */
 .bg-accent-surface { background-color: rgb(var(--c-accent-surface)); }

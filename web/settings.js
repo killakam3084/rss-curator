@@ -19,6 +19,7 @@ const settingsApp = createApp({
         // ── Shows editor state ────────────────────────────────────────
         const showsSaving = ref(false);
         const showsCount  = ref(null); // null until first load
+        const moviesCount = ref(null); // null until first load
         const showsError  = ref('');
         let   showsCM     = null;      // CodeMirror instance (created lazily)
 
@@ -208,9 +209,10 @@ const settingsApp = createApp({
                 const res  = await fetch('/api/shows');
                 if (!res.ok) throw new Error(`HTTP ${res.status}`);
                 const data = await res.json();
-                // data.shows_count exists; strip it before pretty-printing the config
-                const { shows_count, ...cfg } = data;
-                showsCount.value = shows_count ?? (data.shows ? data.shows.length : 0);
+                // data.shows_count and data.movies_count exist; strip before pretty-printing
+                const { shows_count, movies_count, ...cfg } = data;
+                showsCount.value  = shows_count  ?? (data.shows  ? data.shows.length  : 0);
+                moviesCount.value = movies_count ?? (data.movies ? data.movies.length : 0);
                 const pretty = JSON.stringify(cfg, null, 2);
                 // Editor may not be in DOM yet if tab hasn't been opened — store for later
                 if (showsCM) {
@@ -258,12 +260,17 @@ const settingsApp = createApp({
                 if (!res.ok) {
                     showsError.value = data.error || `HTTP ${res.status}`;
                 } else {
-                    showsCount.value = data.shows_count ?? (data.shows ? data.shows.length : 0);
+                    showsCount.value  = data.shows_count  ?? (data.shows  ? data.shows.length  : 0);
+                    moviesCount.value = data.movies_count ?? (data.movies ? data.movies.length : 0);
                     // Normalise editor content to what the server wrote
-                    const { shows_count, ...saved } = data;
+                    const { shows_count, movies_count, ...saved } = data;
                     const pretty = JSON.stringify(saved, null, 2);
                     if (showsCM) showsCM.setValue(pretty);
-                    showToast(`shows.json saved (${showsCount.value} show${showsCount.value !== 1 ? 's' : ''})`, 'success');
+                    const sl = showsCount.value;
+                    const ml = moviesCount.value;
+                    const parts = [`${sl} show${sl !== 1 ? 's' : ''}`];
+                    if (ml > 0) parts.push(`${ml} movie${ml !== 1 ? 's' : ''}`);
+                    showToast(`shows.json saved (${parts.join(', ')})`, 'success');
                 }
             } catch (err) {
                 showsError.value = `save failed: ${err.message}`;
@@ -280,6 +287,11 @@ const settingsApp = createApp({
                 const parsed = JSON.parse(raw);
                 if (Array.isArray(parsed.shows)) {
                     parsed.shows.sort((a, b) =>
+                        (a.name || '').localeCompare(b.name || '', undefined, { sensitivity: 'base' })
+                    );
+                }
+                if (Array.isArray(parsed.movies)) {
+                    parsed.movies.sort((a, b) =>
                         (a.name || '').localeCompare(b.name || '', undefined, { sensitivity: 'base' })
                     );
                 }
@@ -492,6 +504,7 @@ const settingsApp = createApp({
             // Shows tab
             showsSaving,
             showsCount,
+            moviesCount,
             showsError,
             ensureShowsEditor,
             saveShows,

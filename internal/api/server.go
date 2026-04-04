@@ -77,19 +77,21 @@ type ErrorResponse struct {
 }
 
 type TorrentResponse struct {
-	ID                    int       `json:"id"`
-	Title                 string    `json:"title"`
-	Size                  int64     `json:"size"`
-	PubDate               time.Time `json:"pub_date"`
-	StagedAt              time.Time `json:"staged_at"`
-	MatchReason           string    `json:"match_reason"`
-	Status                string    `json:"status"`
-	Link                  string    `json:"link"`
-	AIScore               float64   `json:"ai_score"`
-	AIReason              string    `json:"ai_reason"`
-	AIScored              bool      `json:"ai_scored"`
-	MatchConfidence       float64   `json:"match_confidence"`
-	MatchConfidenceReason string    `json:"match_confidence_reason"`
+	ID                    int                `json:"id"`
+	Title                 string             `json:"title"`
+	Size                  int64              `json:"size"`
+	PubDate               time.Time          `json:"pub_date"`
+	StagedAt              time.Time          `json:"staged_at"`
+	MatchReason           string             `json:"match_reason"`
+	Status                string             `json:"status"`
+	Link                  string             `json:"link"`
+	AIScore               float64            `json:"ai_score"`
+	AIReason              string             `json:"ai_reason"`
+	AIScored              bool               `json:"ai_scored"`
+	MatchConfidence       float64            `json:"match_confidence"`
+	MatchConfidenceReason string             `json:"match_confidence_reason"`
+	ContentType           models.ContentType `json:"content_type"`
+	ReleaseYear           int                `json:"release_year,omitempty"`
 }
 
 type ListResponse struct {
@@ -174,6 +176,8 @@ func torrentToResponse(t models.StagedTorrent) TorrentResponse {
 		AIScored:              t.AIScored,
 		MatchConfidence:       t.MatchConfidence,
 		MatchConfidenceReason: t.MatchConfidenceReason,
+		ContentType:           t.FeedItem.ContentType,
+		ReleaseYear:           t.FeedItem.ReleaseYear,
 	}
 }
 
@@ -424,8 +428,9 @@ func (s *Server) handleList(w http.ResponseWriter, r *http.Request) {
 		status = "pending"
 	}
 	q := r.URL.Query().Get("q")
+	contentType := r.URL.Query().Get("content_type")
 
-	torrents, err := s.store.List(status, q)
+	torrents, err := s.store.List(status, q, contentType)
 	if err != nil {
 		s.logger.Error("failed to list torrents", zap.String("status", status), zap.Error(err))
 		w.Header().Set("Content-Type", "application/json")
@@ -2002,7 +2007,8 @@ func (s *Server) handleSchedulerRun(w http.ResponseWriter, r *http.Request) {
 
 type ShowsResponse struct {
 	models.ShowsConfig
-	ShowsCount int `json:"shows_count"`
+	ShowsCount  int `json:"shows_count"`
+	MoviesCount int `json:"movies_count"`
 }
 
 // handleShows serves GET /api/shows and PUT /api/shows.
@@ -2024,12 +2030,17 @@ func (s *Server) handleShows(w http.ResponseWriter, r *http.Request) {
 			// Return an empty template so the UI always has a valid starting point.
 			cfg = &models.ShowsConfig{
 				Shows:    []models.ShowRule{},
+				Movies:   []models.MovieRule{},
 				Defaults: models.DefaultRules{},
 			}
+		}
+		if cfg.Movies == nil {
+			cfg.Movies = []models.MovieRule{}
 		}
 		json.NewEncoder(w).Encode(ShowsResponse{
 			ShowsConfig: *cfg,
 			ShowsCount:  len(cfg.Shows),
+			MoviesCount: len(cfg.Movies),
 		})
 
 	case http.MethodPut:
@@ -2039,9 +2050,12 @@ func (s *Server) handleShows(w http.ResponseWriter, r *http.Request) {
 			json.NewEncoder(w).Encode(ErrorResponse{Error: "invalid JSON: " + err.Error()})
 			return
 		}
-		// Ensure Shows is never null in the serialised output.
+		// Ensure Shows and Movies are never null in the serialised output.
 		if cfg.Shows == nil {
 			cfg.Shows = []models.ShowRule{}
+		}
+		if cfg.Movies == nil {
+			cfg.Movies = []models.MovieRule{}
 		}
 
 		// Marshal to canonical pretty-printed JSON and write to disk.
@@ -2063,11 +2077,12 @@ func (s *Server) handleShows(w http.ResponseWriter, r *http.Request) {
 
 		// Hot-reload the matcher.
 		s.matcher.SetShowsConfig(&cfg)
-		s.logger.Info("shows.json reloaded", zap.Int("shows", len(cfg.Shows)))
+		s.logger.Info("shows.json reloaded", zap.Int("shows", len(cfg.Shows)), zap.Int("movies", len(cfg.Movies)))
 
 		json.NewEncoder(w).Encode(ShowsResponse{
 			ShowsConfig: cfg,
 			ShowsCount:  len(cfg.Shows),
+			MoviesCount: len(cfg.Movies),
 		})
 
 	default:

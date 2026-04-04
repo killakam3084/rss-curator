@@ -309,10 +309,12 @@
                     <div class="flex items-start justify-between">
                         <div>
                             <h2 class="text-xl font-bold font-mono fg-accent mb-1">> shows.json</h2>
-                            <p class="text-sm fg-dim font-mono">per-show watch rules &mdash; edit, upload, or paste JSON then save</p>
+                            <p class="text-sm fg-dim font-mono">per-show &amp; per-movie watch rules &mdash; edit, upload, or paste JSON then save</p>
                         </div>
                         <span v-if="showsCount !== null" class="text-xs font-mono fg-dim mt-1 shrink-0">
-                            {{ showsCount }} show{{ showsCount !== 1 ? 's' : '' }} configured
+                            {{ showsCount }} show{{ showsCount !== 1 ? 's' : '' }}
+                            <template v-if="moviesCount > 0">&nbsp;&middot;&nbsp;{{ moviesCount }} movie{{ moviesCount !== 1 ? 's' : '' }}</template>
+                            &nbsp;configured
                         </span>
                     </div>
 

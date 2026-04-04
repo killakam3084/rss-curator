@@ -67,8 +67,16 @@ func (m *Matcher) ShowsConfig() *models.ShowsConfig {
 	return &cp
 }
 
-// matchWithShowsConfig uses the new per-show rules
+// matchWithShowsConfig uses the new per-show/per-movie rules
 func (m *Matcher) matchWithShowsConfig(item models.FeedItem) (bool, string) {
+	if item.ContentType == models.ContentTypeMovie {
+		return m.matchMovie(item)
+	}
+	return m.matchShow(item)
+}
+
+// matchShow applies show-specific rules from ShowsConfig.
+func (m *Matcher) matchShow(item models.FeedItem) (bool, string) {
 	reasons := []string{}
 
 	// Snapshot defaults under read lock before any comparisons.
@@ -96,39 +104,87 @@ func (m *Matcher) matchWithShowsConfig(item models.FeedItem) (bool, string) {
 	if minQuality == "" {
 		minQuality = defaultRules.MinQuality
 	}
-
 	preferredCodec := showRule.PreferredCodec
 	if preferredCodec == "" {
 		preferredCodec = defaultRules.PreferredCodec
 	}
-
 	preferredGroups := showRule.PreferredGroups
 	if len(preferredGroups) == 0 {
 		preferredGroups = defaultRules.PreferredGroups
 	}
-
 	excludeGroups := showRule.ExcludeGroups
 	if len(excludeGroups) == 0 {
 		excludeGroups = defaultRules.ExcludeGroups
 	}
 
-	// Check quality
 	if !meetsQuality(item.Quality, minQuality) {
 		return false, fmt.Sprintf("quality %s below minimum %s", item.Quality, minQuality)
 	}
 	reasons = append(reasons, fmt.Sprintf("quality: %s", item.Quality))
 
-	// Check codec preference
 	if preferredCodec != "" && strings.EqualFold(item.Codec, preferredCodec) {
 		reasons = append(reasons, fmt.Sprintf("preferred codec: %s", item.Codec))
 	}
-
-	// Check release group exclusions
 	if isExcludedGroup(item.ReleaseGroup, excludeGroups) {
 		return false, fmt.Sprintf("release group %s is excluded", item.ReleaseGroup)
 	}
+	if isPreferredGroup(item.ReleaseGroup, preferredGroups) {
+		reasons = append(reasons, fmt.Sprintf("preferred group: %s", item.ReleaseGroup))
+	}
 
-	// Check preferred release groups
+	return true, strings.Join(reasons, ", ")
+}
+
+// matchMovie applies movie-specific rules from ShowsConfig.Movies.
+func (m *Matcher) matchMovie(item models.FeedItem) (bool, string) {
+	reasons := []string{}
+
+	m.mu.RLock()
+	defaultRules := m.showsConfig.Defaults
+	m.mu.RUnlock()
+
+	var movieRule *models.MovieRule
+	for i := range m.showsConfig.Movies {
+		if matchShowName(item.ShowName, m.showsConfig.Movies[i].Name) {
+			movieRule = &m.showsConfig.Movies[i]
+			break
+		}
+	}
+
+	if movieRule == nil {
+		return false, "movie not in watch list"
+	}
+
+	reasons = append(reasons, fmt.Sprintf("matches movie: %s", movieRule.Name))
+
+	minQuality := movieRule.MinQuality
+	if minQuality == "" {
+		minQuality = defaultRules.MinQuality
+	}
+	preferredCodec := movieRule.PreferredCodec
+	if preferredCodec == "" {
+		preferredCodec = defaultRules.PreferredCodec
+	}
+	preferredGroups := movieRule.PreferredGroups
+	if len(preferredGroups) == 0 {
+		preferredGroups = defaultRules.PreferredGroups
+	}
+	excludeGroups := movieRule.ExcludeGroups
+	if len(excludeGroups) == 0 {
+		excludeGroups = defaultRules.ExcludeGroups
+	}
+
+	if !meetsQuality(item.Quality, minQuality) {
+		return false, fmt.Sprintf("quality %s below minimum %s", item.Quality, minQuality)
+	}
+	reasons = append(reasons, fmt.Sprintf("quality: %s", item.Quality))
+
+	if preferredCodec != "" && strings.EqualFold(item.Codec, preferredCodec) {
+		reasons = append(reasons, fmt.Sprintf("preferred codec: %s", item.Codec))
+	}
+	if isExcludedGroup(item.ReleaseGroup, excludeGroups) {
+		return false, fmt.Sprintf("release group %s is excluded", item.ReleaseGroup)
+	}
 	if isPreferredGroup(item.ReleaseGroup, preferredGroups) {
 		reasons = append(reasons, fmt.Sprintf("preferred group: %s", item.ReleaseGroup))
 	}

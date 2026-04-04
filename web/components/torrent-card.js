@@ -59,6 +59,20 @@
                             ]">
                                 {{ torrent.status }}
                             </span>
+                            <!-- Content type badge -->
+                            <span
+                                :class="[
+                                    'inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-mono font-semibold border',
+                                    torrent.content_type === 'movie' ? 'badge-purple border' : 'badge-blue border'
+                                ]"
+                                :title="torrent.content_type === 'movie' ? 'Movie' : 'Show'"
+                            >
+                                <!-- TV icon for shows -->
+                                <svg v-if="torrent.content_type !== 'movie'" xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
+                                <!-- Film icon for movies -->
+                                <svg v-if="torrent.content_type === 'movie'" xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="20" rx="2"/><path d="M7 2v20M17 2v20M2 12h20M2 7h5M2 17h5M17 7h5M17 17h5"/></svg>
+                                {{ torrent.content_type === 'movie' ? 'movie' : 'show' }}
+                            </span>
                         </div>
                         <!-- Kebab options menu: hidden during multi-select -->
                         <div class="relative" @click.stop v-show="!multiSelectActive">
@@ -93,6 +107,10 @@
                             <div class="flex items-center justify-between">
                                 <span class="fg-dim font-mono">size:</span>
                                 <span class="fg-accent font-mono font-bold">{{ formatSize(torrent.size) }}</span>
+                            </div>
+                            <div v-if="torrent.content_type === 'movie' && torrent.release_year" class="flex items-center justify-between">
+                                <span class="fg-dim font-mono">year:</span>
+                                <span class="fg-accent font-mono font-bold">{{ torrent.release_year }}</span>
                             </div>
                             <div class="flex items-center justify-between">
                                 <span class="fg-dim font-mono">match:</span>
