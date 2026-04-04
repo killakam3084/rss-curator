@@ -181,6 +181,10 @@ func (s *Storage) migrate() error {
 		// Migration 9: content_type column for show/movie differentiation
 		`ALTER TABLE staged_torrents ADD COLUMN content_type TEXT NOT NULL DEFAULT 'show'`,
 		`CREATE INDEX IF NOT EXISTS idx_content_type ON staged_torrents(content_type)`,
+		// Migration 10: backfill content_type for rows staged on old code where the
+		// column defaulted to 'show' even for movies. Rows whose match_reason begins
+		// with 'matches movie:' are authoritative movie matches.
+		`UPDATE staged_torrents SET content_type = 'movie' WHERE match_reason LIKE 'matches movie:%' AND content_type != 'movie'`,
 	}
 
 	for _, migration := range migrations {

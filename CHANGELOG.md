@@ -8,6 +8,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.42.1] - 2026-04-04
+
+### Fixed
+- Movie torrent-card badge showed "show" instead of "movie" — `content_type` DB column is now SELECTed and used as authoritative source in `List`, `Get`, and `GetByID`, overriding the JSON blob
+- Parser year regex extended to accept `.` as delimiter so dot-separated titles like `Avengers.Endgame.(2019).1080p` correctly extract year and movie name
+- Movie rule names containing a year (e.g. `Joker 2019`) now match the parsed `ShowName` (`Joker`) by stripping the year, with exact year enforcement to disambiguate remakes
+- Migration 10: backfills `content_type = 'movie'` for any rows whose `match_reason` starts with `matches movie:` but were stored with the wrong value by older code
+
 ## [0.42.0] - 2026-04-03
 
 ### Added
