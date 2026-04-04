@@ -447,21 +447,7 @@ func (s *Server) handleList(w http.ResponseWriter, r *http.Request) {
 	}
 
 	for _, t := range torrents {
-		resp.Torrents = append(resp.Torrents, TorrentResponse{
-			ID:                    t.ID,
-			Title:                 t.FeedItem.Title,
-			Size:                  t.FeedItem.Size,
-			PubDate:               t.FeedItem.PubDate,
-			StagedAt:              t.StagedAt,
-			MatchReason:           t.MatchReason,
-			Status:                t.Status,
-			Link:                  t.FeedItem.Link,
-			AIScore:               t.AIScore,
-			AIReason:              t.AIReason,
-			AIScored:              t.AIScored,
-			MatchConfidence:       t.MatchConfidence,
-			MatchConfidenceReason: t.MatchConfidenceReason,
-		})
+		resp.Torrents = append(resp.Torrents, torrentToResponse(t))
 	}
 
 	w.Header().Set("Content-Type", "application/json")
