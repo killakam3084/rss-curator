@@ -63,6 +63,7 @@ type Server struct {
 	feedCheckCfg     ops.FeedCheckConfig
 	feedCheckDeps    ops.FeedCheckDeps
 	httpSrv          *http.Server
+	metrics          metricsState
 }
 
 type jobCancelState struct {
@@ -314,6 +315,8 @@ func (s *Server) WithSettings(mgr *settings.Manager) *Server {
 
 // Start begins listening for HTTP requests
 func (s *Server) Start() error {
+	s.startMetricsCollector()
+
 	mux := http.NewServeMux()
 
 	// API endpoints
@@ -341,6 +344,7 @@ func (s *Server) Start() error {
 	mux.HandleFunc("/api/shows", s.handleShows)
 	mux.HandleFunc("/api/scheduler/run/", s.handleSchedulerRun)
 	mux.HandleFunc("/api/scheduler/tasks", s.handleSchedulerTasks)
+	mux.HandleFunc("/api/metrics", s.handleMetrics)
 
 	// Static files and UI
 	mux.Handle("/style.css", http.FileServer(http.Dir("./web")))
