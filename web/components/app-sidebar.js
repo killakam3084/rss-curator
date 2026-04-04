@@ -15,6 +15,7 @@
             data() {
                 return {
                     cpuHistory:    [],
+                    memHistory:    [],
                     netInHistory:  [],
                     netOutHistory: [],
                     metricsTimer:  null,
@@ -25,6 +26,10 @@
                 cpuCurrent() {
                     if (!this.cpuHistory.length) return '—';
                     return this.cpuHistory[this.cpuHistory.length - 1].toFixed(1) + '%';
+                },
+                memCurrent() {
+                    if (!this.memHistory.length) return '—';
+                    return this.memHistory[this.memHistory.length - 1].toFixed(1) + '%';
                 },
                 netInCurrent() {
                     if (!this.netInHistory.length) return '—';
@@ -44,6 +49,8 @@
                             if (!data) return;
                             this.cpuHistory.push(data.cpu_pct);
                             if (this.cpuHistory.length > 30) this.cpuHistory.shift();
+                            this.memHistory.push(data.mem_pct);
+                            if (this.memHistory.length > 30) this.memHistory.shift();
                             this.netInHistory.push(data.net_in_bps);
                             if (this.netInHistory.length > 30) this.netInHistory.shift();
                             this.netOutHistory.push(data.net_out_bps);
@@ -92,7 +99,7 @@
 
             mounted() {
                 this.fetchMetrics();
-                this.metricsTimer = setInterval(this.fetchMetrics, 500);
+                this.metricsTimer = setInterval(this.fetchMetrics, 750);
             },
 
             beforeUnmount() {
@@ -179,6 +186,17 @@
                                 </svg>
                             </div>
                             <span class="text-xs font-mono fg-accent w-[46px] text-right shrink-0 leading-none tabular-nums">{{ cpuCurrent }}</span>
+                        </div>
+                        <!-- Mem -->
+                        <div class="flex items-center gap-2 mb-1.5">
+                            <span class="text-xs font-mono fg-dim w-7 shrink-0 leading-none">mem</span>
+                            <div class="flex-1 min-w-0">
+                                <svg viewBox="0 0 200 20" preserveAspectRatio="none" width="100%" height="20" class="text-violet-400 block">
+                                    <polygon v-if="memHistory.length > 1" :points="sparklineArea(memHistory, 100)" fill="currentColor" opacity="0.12"/>
+                                    <polyline v-if="memHistory.length > 1" :points="sparklinePoints(memHistory, 100)" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"/>
+                                </svg>
+                            </div>
+                            <span class="text-xs font-mono text-violet-400 w-[46px] text-right shrink-0 leading-none tabular-nums">{{ memCurrent }}</span>
                         </div>
                         <!-- Net In -->
                         <div class="flex items-center gap-2 mb-1.5">
