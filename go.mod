@@ -1,6 +1,6 @@
 module github.com/killakam3084/rss-curator
 
-go 1.23.0
+go 1.26.1
 
 require (
 	github.com/autobrr/go-qbittorrent v1.9.0
