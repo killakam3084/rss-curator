@@ -276,6 +276,7 @@ func meetsQuality(quality, minQuality string) bool {
 	}
 
 	qualityRank := map[string]int{
+		"480P":  0,
 		"720P":  1,
 		"1080P": 2,
 		"2160P": 3,

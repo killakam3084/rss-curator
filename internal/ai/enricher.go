@@ -163,15 +163,22 @@ func (e *Enricher) enrich(item *models.FeedItem, force bool) {
 	if result.Episode > 0 && (force || item.Episode == 0) {
 		item.Episode = result.Episode
 	}
-	if result.Quality != "" && (force || item.Quality == "") {
-		item.Quality = strings.ToUpper(strings.TrimSpace(result.Quality))
-	}
-	if result.Codec != "" && (force || item.Codec == "") {
-		codec := strings.ToUpper(strings.TrimSpace(result.Codec))
-		if strings.Contains(codec, "265") || codec == "HEVC" {
-			item.Codec = "x265"
-		} else if strings.Contains(codec, "264") {
-			item.Codec = "x264"
+	// Quality and codec must come from the deterministic regex parser only.
+	// Letting the LLM infer these values bypasses the quality gate — e.g. an
+	// XviD release gets labelled "2160P" / "x265" by the model, causing it to
+	// pass a min_quality:2160p rule.  Only apply them when force=true (debug /
+	// rematch workflows where the caller explicitly wants AI overrides).
+	if force {
+		if result.Quality != "" {
+			item.Quality = strings.ToUpper(strings.TrimSpace(result.Quality))
+		}
+		if result.Codec != "" {
+			codec := strings.ToUpper(strings.TrimSpace(result.Codec))
+			if strings.Contains(codec, "265") || codec == "HEVC" {
+				item.Codec = "x265"
+			} else if strings.Contains(codec, "264") {
+				item.Codec = "x264"
+			}
 		}
 	}
 	if result.Source != "" && (force || item.Source == "") {

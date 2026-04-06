@@ -202,8 +202,8 @@ func ParseParserMetadata(item *models.FeedItem) {
 func extractMetadata(item *models.FeedItem) {
 	title := item.Title
 
-	// Extract quality (1080p, 2160p, 720p, 4K)
-	qualityRe := regexp.MustCompile(`(?i)\b(2160p|1080p|720p|4K)\b`)
+	// Extract quality (2160p, 1080p, 720p, 480p, 4K)
+	qualityRe := regexp.MustCompile(`(?i)\b(2160p|1080p|720p|480p|4K)\b`)
 	if matches := qualityRe.FindStringSubmatch(title); len(matches) > 0 {
 		item.Quality = strings.ToUpper(matches[1])
 	}

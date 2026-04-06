@@ -87,6 +87,9 @@ func TestMeetsQuality(t *testing.T) {
 		{"2160P", "1080P", true},
 		{"4K", "1080P", true},
 		{"720P", "720P", true},
+		{"480P", "1080P", false},   // 480p below 1080p minimum → reject
+		{"480P", "480P", true},     // exactly meets 480p minimum → accept
+		{"480P", "720P", false},    // 480p below 720p minimum → reject
 		{"", "1080P", false},       // no recognised quality token → reject when min is set
 		{"1080P", "", true},        // no minimum → always pass
 		{"UNKNOWN", "720P", false}, // unrecognised quality token → reject when min is set
