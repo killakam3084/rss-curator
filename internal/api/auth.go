@@ -139,10 +139,7 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 
 	inputUser := r.FormValue("username")
 	inputPass := r.FormValue("password")
-	nextURL := r.FormValue("next")
-	if !isSafeRedirect(nextURL) {
-		nextURL = ""
-	}
+	nextURL := sanitizeNextURL(r.FormValue("next"))
 
 	// Constant-time comparison to prevent timing-based username enumeration
 	userMatch := hmac.Equal([]byte(inputUser), []byte(s.authUsername))
@@ -175,6 +172,49 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		nextURL = "/"
 	}
 	http.Redirect(w, r, nextURL, http.StatusFound)
+}
+
+// sanitizeNextURL validates and normalizes a user-supplied "next" parameter
+// so that it can be safely used in a redirect. It only allows relative paths
+// without a scheme or host and normalizes them to start with a leading "/".
+func sanitizeNextURL(raw string) string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return ""
+	}
+
+	// Replace backslashes with forward slashes to avoid ambiguity in some browsers.
+	raw = strings.ReplaceAll(raw, "\\", "/")
+
+	u, err := url.Parse(raw)
+	if err != nil {
+		return ""
+	}
+
+	// Disallow absolute URLs or protocol-relative URLs by requiring empty Scheme and Host.
+	if u.Scheme != "" || u.Host != "" {
+		return ""
+	}
+
+	path := u.Path
+	if path == "" {
+		return ""
+	}
+
+	// Ensure the path is rooted at the application.
+	if !strings.HasPrefix(path, "/") {
+		path = "/" + path
+	}
+
+	// Reconstruct any query or fragment if present.
+	if u.RawQuery != "" {
+		path = path + "?" + u.RawQuery
+	}
+	if u.Fragment != "" {
+		path = path + "#" + u.Fragment
+	}
+
+	return path
 }
 
 // handleLogout clears the session cookie and redirects to /login.
