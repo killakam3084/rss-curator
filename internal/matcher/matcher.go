@@ -249,14 +249,11 @@ func matchShowName(itemShowName, ruleName string) bool {
 	if ruleName == "" {
 		return false
 	}
-
-	pattern := `(?i)\b` + regexp.QuoteMeta(ruleName) + `\b`
-	re, err := regexp.Compile(pattern)
-	if err != nil {
-		// Fallback to plain contains if the rule name cannot be compiled
-		return strings.Contains(strings.ToLower(itemShowName), strings.ToLower(ruleName))
-	}
-	return re.MatchString(itemShowName)
+	// Exact case-insensitive comparison: the parsed show name must equal the
+	// rule name. Substring/prefix matching caused false positives like
+	// "Saturday Night Live UK" matching a "Saturday Night Live" rule, or
+	// "The Great Celebrity Bake Off" matching a "The Great" rule.
+	return strings.EqualFold(strings.TrimSpace(itemShowName), ruleName)
 }
 
 // matchesShowName checks a show name against a list of rule names using

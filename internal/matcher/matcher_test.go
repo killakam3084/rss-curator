@@ -38,6 +38,24 @@ func TestMatchShowNameWordBoundary(t *testing.T) {
 	}
 }
 
+func TestMatchShowNameDoesNotMatchPrefixOfLongerShowName(t *testing.T) {
+	// "Saturday Night Live" rule must NOT fire for "Saturday Night Live UK"
+	if matchShowName("Saturday Night Live UK", "Saturday Night Live") {
+		t.Fatal("expected 'Saturday Night Live' not to match 'Saturday Night Live UK'")
+	}
+	// "The Great" rule must NOT fire for "The Great Celebrity Bake Off for SU2C"
+	if matchShowName("The Great Celebrity Bake Off for SU2C", "The Great") {
+		t.Fatal("expected 'The Great' not to match 'The Great Celebrity Bake Off for SU2C'")
+	}
+	// Exact matches must still work in both directions
+	if !matchShowName("Saturday Night Live", "Saturday Night Live") {
+		t.Fatal("expected 'Saturday Night Live' to match itself")
+	}
+	if !matchShowName("The Great", "The Great") {
+		t.Fatal("expected 'The Great' to match itself")
+	}
+}
+
 func TestLegacyMatchNoConfiguredShowsRejects(t *testing.T) {
 	m := NewMatcher(nil, &models.MatchRule{
 		ShowNames:  nil,
