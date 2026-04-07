@@ -4,7 +4,7 @@ go 1.26.1
 
 require (
 	github.com/autobrr/go-qbittorrent v1.9.0
-	github.com/mattn/go-sqlite3 v1.14.19
+	github.com/mattn/go-sqlite3 v1.14.41
 	go.uber.org/zap v1.27.1
 )
 
