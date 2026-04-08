@@ -336,6 +336,7 @@ func (s *Server) Start() error {
 	mux.HandleFunc("/api/logs/stream", s.handleLogsStream)
 	mux.HandleFunc("/api/suggestions/status", s.handleSuggestionsStatus)
 	mux.HandleFunc("/api/suggestions/refresh", s.handleSuggestionsRefresh)
+	mux.HandleFunc("/api/suggestions/dismiss", s.handleSuggestionsDismiss)
 	mux.HandleFunc("/api/suggestions", s.handleSuggestions)
 	mux.HandleFunc("/api/feed-check", s.handleFeedCheck)
 	mux.HandleFunc("/api/jobs/stream", s.handleJobsStream)
@@ -1599,6 +1600,32 @@ func (s *Server) handleSuggestionsRefresh(w http.ResponseWriter, r *http.Request
 	s.logger.Info("suggestions refresh triggered via API", zap.Int("job_id", jobID))
 	w.WriteHeader(http.StatusAccepted)
 	json.NewEncoder(w).Encode(JobAcceptedResponse{JobID: jobID, Status: "queued"})
+}
+
+// handleSuggestionsDismiss removes a single suggestion from the DB cache.
+// POST /api/suggestions/dismiss — body: {"show_name": "..."}.
+func (s *Server) handleSuggestionsDismiss(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+
+	var req struct {
+		ShowName string `json:"show_name"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || strings.TrimSpace(req.ShowName) == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(ErrorResponse{Error: "show_name is required"})
+		return
+	}
+	if err := s.store.DeleteCachedSuggestion(req.ShowName); err != nil {
+		s.logger.Error("handleSuggestionsDismiss: delete failed", zap.Error(err))
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(ErrorResponse{Error: err.Error()})
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
 // handleFeedCheck submits an on-demand feed-check job to the queue.

@@ -468,6 +468,20 @@ const settingsApp = createApp({
             showToast(`added "${suggestion.show_name}" — remember to save`, 'success');
         }
 
+        async function dismissSuggestion(suggestion) {
+            // Optimistic removal — no spinner needed.
+            suggestions.value = suggestions.value.filter(s => s.show_name !== suggestion.show_name);
+            try {
+                await fetch('/api/suggestions/dismiss', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ show_name: suggestion.show_name }),
+                });
+            } catch (err) {
+                console.error('dismissSuggestion:', err);
+            }
+        }
+
         // ── Lifecycle ────────────────────────────────────────────────
         onMounted(() => {
             loadSettings();
@@ -522,6 +536,7 @@ const settingsApp = createApp({
             feedCheckRunning,
             runFeedCheck,
             addSuggestion,
+            dismissSuggestion,
             logsOpen,
         };
     }

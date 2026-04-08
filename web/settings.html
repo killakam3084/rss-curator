@@ -386,7 +386,11 @@
                                     </div>
                                     <div v-if="s.meta && s.meta.overview" class="mt-1 text-xs fg-soft italic leading-snug line-clamp-2">{{ s.meta.overview }}</div>
                                 </div>
-                                <curator-btn size="sm" @click="addSuggestion(s)" class="shrink-0">+ add</curator-btn>
+                                <div class="shrink-0 flex items-center gap-1">
+                                    <button @click="dismissSuggestion(s)" title="Dismiss suggestion"
+                                        class="w-6 h-6 flex items-center justify-center rounded fg-muted hover:text-red-400 hover:bg-raised transition-colors font-mono text-sm">✕</button>
+                                    <curator-btn size="sm" @click="addSuggestion(s)">+ add</curator-btn>
+                                </div>
                             </div>
                         </div>
                     </div>

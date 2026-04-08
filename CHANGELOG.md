@@ -8,6 +8,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.43.0] - 2026-04-05
+
+### Added
+- **Suggestion accumulation** — each AI refresh run now *merges* its results into the existing pool instead of replacing it. Suggestions accumulate up to a configurable cap (default 25, `CURATOR_AI_SUGGESTER_CACHE_LIMIT`) so sparse single-run returns no longer wipe out previously found recommendations.
+- **Per-suggestion dismiss** — each suggestion card has a ✕ button that removes that entry from the cache immediately (optimistic UI removal + `POST /api/suggestions/dismiss`). Dismissed suggestions can reappear on the next LLM refresh.
+- **`POST /api/suggestions/dismiss`** — new endpoint that deletes a single suggestion from the DB cache by `show_name`.
+
+### Changed
+- Default suggestion cache cap bumped from 10 → 25.
+
 ## [0.42.1] - 2026-04-04
 
 ### Fixed

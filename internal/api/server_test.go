@@ -192,7 +192,9 @@ func (m *mockStorage) GetApprovalQualityProfile() (string, string, error) { retu
 func (m *mockStorage) GetCachedSuggestions() (json.RawMessage, time.Time, error) {
 	return nil, time.Time{}, nil
 }
-func (m *mockStorage) SetCachedSuggestions(data json.RawMessage) error { return nil }
+func (m *mockStorage) SetCachedSuggestions(data json.RawMessage) error               { return nil }
+func (m *mockStorage) MergeCachedSuggestions(newData json.RawMessage, cap int) error { return nil }
+func (m *mockStorage) DeleteCachedSuggestion(showName string) error                  { return nil }
 
 // setupTestServer creates a test server instance
 func setupTestServer(t *testing.T) (*Server, *mockStorage) {

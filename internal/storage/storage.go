@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/killakam3084/rss-curator/pkg/models"
@@ -66,6 +67,15 @@ type Store interface {
 	// SetCachedSuggestions stores a fresh JSON blob from a suggest_refresh run,
 	// replacing any previously cached data (single-row upsert).
 	SetCachedSuggestions(data json.RawMessage) error
+	// MergeCachedSuggestions appends new suggestions to the existing pool,
+	// deduplicating by normalized show name (existing items win). The combined
+	// slice is trimmed to cap entries before being persisted. generated_at is
+	// updated only when new items are actually added.
+	MergeCachedSuggestions(newData json.RawMessage, cap int) error
+	// DeleteCachedSuggestion removes a single suggestion from the cached pool
+	// by show name (case-insensitive, alphanumeric normalisation). The
+	// generated_at timestamp is preserved.
+	DeleteCachedSuggestion(showName string) error
 }
 
 // Storage handles persistent storage of staged torrents
@@ -794,6 +804,145 @@ func (s *Storage) SetCachedSuggestions(data json.RawMessage) error {
 	_, err := s.db.Exec(
 		`INSERT OR REPLACE INTO suggestion_cache (id, suggestions_json, generated_at) VALUES (1, ?, ?)`,
 		string(data), time.Now().UTC(),
+	)
+	return err
+}
+
+// normalizeSuggestName returns a lowercase alphanumeric-only key used to
+// deduplicate suggestion show names in the cache (mirrors suggester.normalizeName).
+func normalizeSuggestName(s string) string {
+	var b strings.Builder
+	for _, r := range strings.ToLower(s) {
+		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') {
+			b.WriteRune(r)
+		}
+	}
+	return b.String()
+}
+
+// MergeCachedSuggestions appends newData items to the existing suggestion pool,
+// deduplicating by normalized show name (existing items win their position).
+// The combined slice is trimmed to cap entries. generated_at is updated to now
+// only when at least one new item was actually appended.
+func (s *Storage) MergeCachedSuggestions(newData json.RawMessage, cap int) error {
+	// Read the current cache (nil = cold cache, use empty slice).
+	existingRaw, generatedAt, err := s.GetCachedSuggestions()
+	if err != nil {
+		return fmt.Errorf("MergeCachedSuggestions: read: %w", err)
+	}
+
+	// We operate on raw JSON objects to avoid an import cycle with the
+	// suggester package. Each item must have a "show_name" string field.
+	type minItem struct {
+		ShowName string `json:"show_name"`
+	}
+
+	var existing []json.RawMessage
+	if existingRaw != nil {
+		if err := json.Unmarshal(existingRaw, &existing); err != nil {
+			// Corrupt cache — start fresh.
+			existing = nil
+		}
+	}
+
+	var incoming []json.RawMessage
+	if err := json.Unmarshal(newData, &incoming); err != nil {
+		return fmt.Errorf("MergeCachedSuggestions: unmarshal new: %w", err)
+	}
+
+	// Build a set of normalized names already in the existing pool.
+	seen := make(map[string]bool, len(existing))
+	for _, raw := range existing {
+		var item minItem
+		if json.Unmarshal(raw, &item) == nil && item.ShowName != "" {
+			seen[normalizeSuggestName(item.ShowName)] = true
+		}
+	}
+
+	// Append new items not yet seen.
+	added := 0
+	for _, raw := range incoming {
+		var item minItem
+		if json.Unmarshal(raw, &item) != nil || item.ShowName == "" {
+			continue
+		}
+		key := normalizeSuggestName(item.ShowName)
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+		existing = append(existing, raw)
+		added++
+	}
+
+	// Enforce cap (oldest/existing items are kept; newest overflow trimmed).
+	if cap > 0 && len(existing) > cap {
+		existing = existing[:cap]
+	}
+
+	merged, err := json.Marshal(existing)
+	if err != nil {
+		return fmt.Errorf("MergeCachedSuggestions: marshal: %w", err)
+	}
+
+	// Only bump generated_at when we actually added something new.
+	newGeneratedAt := generatedAt
+	if added > 0 || generatedAt.IsZero() {
+		newGeneratedAt = time.Now().UTC()
+	}
+
+	_, err = s.db.Exec(
+		`INSERT OR REPLACE INTO suggestion_cache (id, suggestions_json, generated_at) VALUES (1, ?, ?)`,
+		string(merged), newGeneratedAt,
+	)
+	return err
+}
+
+// DeleteCachedSuggestion removes the suggestion with the given show name from
+// the cached pool (case-insensitive, alphanumeric normalisation). The
+// generated_at timestamp is preserved.
+func (s *Storage) DeleteCachedSuggestion(showName string) error {
+	existingRaw, generatedAt, err := s.GetCachedSuggestions()
+	if err != nil {
+		return fmt.Errorf("DeleteCachedSuggestion: read: %w", err)
+	}
+	if existingRaw == nil {
+		return nil // nothing to delete
+	}
+
+	type minItem struct {
+		ShowName string `json:"show_name"`
+	}
+
+	var items []json.RawMessage
+	if err := json.Unmarshal(existingRaw, &items); err != nil {
+		return fmt.Errorf("DeleteCachedSuggestion: unmarshal: %w", err)
+	}
+
+	target := normalizeSuggestName(showName)
+	filtered := items[:0]
+	for _, raw := range items {
+		var item minItem
+		if json.Unmarshal(raw, &item) == nil && normalizeSuggestName(item.ShowName) == target {
+			continue // drop this entry
+		}
+		filtered = append(filtered, raw)
+	}
+
+	if len(filtered) == len(items) {
+		return nil // nothing matched — no write needed
+	}
+
+	updated, err := json.Marshal(filtered)
+	if err != nil {
+		return fmt.Errorf("DeleteCachedSuggestion: marshal: %w", err)
+	}
+
+	// Preserve the existing generated_at — the cache content aged from the
+	// last refresh, not from this dismissal.
+	_, err = s.db.Exec(
+		`INSERT OR REPLACE INTO suggestion_cache (id, suggestions_json, generated_at) VALUES (1, ?, ?)`,
+		string(updated), generatedAt,
 	)
 	return err
 }

@@ -118,10 +118,11 @@ func New(store storage.Store, provider ai.Provider, m *matcher.Matcher, lu *meta
 		}
 	}
 
-	// cacheLimit: CURATOR_AI_SUGGESTER_CACHE_LIMIT > 10.
-	// Background refreshes generate more results than on-demand since inference
-	// cost is paid asynchronously.
-	cacheLimit := 10
+	// cacheLimit: CURATOR_AI_SUGGESTER_CACHE_LIMIT (default 25).
+	// Each refresh merges into the existing pool rather than replacing it, so
+	// a higher default means the pool fills up meaningfully even when individual
+	// LLM runs are thinned by metadata validation.
+	cacheLimit := 25
 	if v := os.Getenv("CURATOR_AI_SUGGESTER_CACHE_LIMIT"); v != "" {
 		if n, err := strconv.Atoi(v); err == nil && n > 0 {
 			cacheLimit = n
@@ -139,9 +140,10 @@ func New(store storage.Store, provider ai.Provider, m *matcher.Matcher, lu *meta
 }
 
 // RefreshCache runs Suggest with the configured cache limit, marshals the
-// results, and persists them via store.SetCachedSuggestions. This is called
-// by the background scheduler task and by the manual refresh API endpoint.
-// The context should carry the caller's deadline/cancellation.
+// results, and merges them into the existing suggestion pool via
+// store.MergeCachedSuggestions. New items are deduplicated against the current
+// pool so the pool accumulates across runs rather than resetting each time.
+// This is called by the background scheduler and the manual refresh endpoint.
 func (sg *Suggester) RefreshCache(ctx context.Context) error {
 	suggestions, err := sg.Suggest(ctx, sg.cacheLimit)
 	if err != nil {
@@ -151,7 +153,7 @@ func (sg *Suggester) RefreshCache(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("suggester: RefreshCache marshal: %w", err)
 	}
-	return sg.store.SetCachedSuggestions(data)
+	return sg.store.MergeCachedSuggestions(data, sg.cacheLimit)
 }
 
 // Available reports whether the underlying AI provider is reachable.
