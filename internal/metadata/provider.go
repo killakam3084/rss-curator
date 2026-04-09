@@ -21,7 +21,9 @@ type MetadataProvider interface {
 // NewMetadataProvider constructs a MetadataProvider from environment variables.
 //
 //	CURATOR_META_PROVIDER   "tvmaze" (default) | "tmdb" | "tvdb" | "disabled"
-//	CURATOR_META_KEY        API key — required for tmdb and tvdb
+//	 CURATOR_META_KEY        API key/token — required for tmdb and tvdb.
+//	                          For tmdb: use the API Read Access Token
+//	                          (Bearer auth) from themoviedb.org/settings/api.
 //	CURATOR_META_HOST       override base URL (useful for self-hosted mirrors)
 func NewMetadataProvider() MetadataProvider {
 	providerType := strings.ToLower(os.Getenv("CURATOR_META_PROVIDER"))

@@ -85,3 +85,44 @@ func (l *Lookup) Resolve(ctx context.Context, showName string) *ShowMetadata {
 
 	return meta
 }
+
+// ResolveMovie is like Resolve but resolves a movie title using the provider's
+// FetchMovie method when available (e.g. TMDB). Results are stored in the same
+// cache with a "movie:" key prefix to avoid collisions with TV shows that
+// share a title. Returns nil when the provider has no movie support or the
+// movie is not found.
+func (l *Lookup) ResolveMovie(ctx context.Context, movieName string) *ShowMetadata {
+	if movieName == "" {
+		return nil
+	}
+	key := "movie:" + strings.ToLower(strings.TrimSpace(movieName))
+
+	// 1. Cache lookup.
+	if l.cache != nil {
+		if cached, err := l.cache.Get(key); err == nil && cached != nil {
+			if time.Since(cached.FetchedAt) < l.ttl {
+				return cached
+			}
+		}
+	}
+
+	// 2. Type-assert to the optional movie-fetch capability.
+	type movieFetcher interface {
+		FetchMovie(ctx context.Context, name string) (*ShowMetadata, error)
+	}
+	mf, ok := l.provider.(movieFetcher)
+	if !ok {
+		return nil
+	}
+
+	meta, err := mf.FetchMovie(ctx, movieName)
+	if err != nil || meta == nil {
+		return nil
+	}
+	meta.FetchedAt = time.Now().UTC()
+
+	if l.cache != nil {
+		_ = l.cache.Put(key, l.provider.Name(), meta)
+	}
+	return meta
+}
