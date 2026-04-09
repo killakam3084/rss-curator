@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"strconv"
@@ -498,18 +499,23 @@ func (a *anthropicProvider) Available() bool {
 	fmt.Fprintf(os.Stderr, "[AI:anthropic] ping → %s model=%s\n", a.host, a.model)
 	resp, err := a.client.Do(req)
 	if err != nil {
+		fmt.Fprintf(os.Stderr, "[AI:anthropic] ping failed: %v\n", err)
 		return false
 	}
-	resp.Body.Close()
+	defer resp.Body.Close()
 	// 200 = success; 400 = bad request shape but API is up; 401 = key rejected
 	// but endpoint is reachable (config issue, not a dead provider).
 	// All three count as "available" so the suggester can surface a real error
 	// message from Complete() rather than a generic "provider unavailable".
 	switch resp.StatusCode {
 	case http.StatusOK, http.StatusBadRequest, http.StatusUnauthorized:
+		if resp.StatusCode == http.StatusUnauthorized {
+			fmt.Fprintf(os.Stderr, "[AI:anthropic] ping returned HTTP 401 — check CURATOR_AI_SUGGESTER_KEY\n")
+		}
 		return true
 	default:
-		fmt.Fprintf(os.Stderr, "[AI:anthropic] ping returned HTTP %d\n", resp.StatusCode)
+		body, _ := io.ReadAll(resp.Body)
+		fmt.Fprintf(os.Stderr, "[AI:anthropic] ping returned HTTP %d: %s\n", resp.StatusCode, strings.TrimSpace(string(body)))
 		return false
 	}
 }
