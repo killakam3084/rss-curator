@@ -192,6 +192,7 @@ type SuggestionsResponse struct {
 type SuggestionsStatusResponse struct {
 	Available     bool       `json:"available"`
 	ShowsCount    int        `json:"shows_count"`
+	MoviesCount   int        `json:"movies_count"`
 	CachedCount   int        `json:"cached_count"`
 	LastRefreshed *time.Time `json:"last_refreshed,omitempty"`
 }
@@ -1452,12 +1453,15 @@ func (s *Server) handleSuggestionsStatus(w http.ResponseWriter, r *http.Request)
 	w.Header().Set("Content-Type", "application/json")
 	available := s.suggester != nil && s.suggester.Available()
 	showsCount := 0
+	moviesCount := 0
 	if s.suggester != nil {
 		showsCount = s.suggester.ShowsCount()
+		moviesCount = s.suggester.MoviesCount()
 	}
 	resp := SuggestionsStatusResponse{
-		Available:  available,
-		ShowsCount: showsCount,
+		Available:   available,
+		ShowsCount:  showsCount,
+		MoviesCount: moviesCount,
 	}
 	// Attach cache stats when available.
 	if raw, generatedAt, err := s.store.GetCachedSuggestions(); err == nil && raw != nil {
@@ -1500,13 +1504,16 @@ func (s *Server) handleSuggestions(w http.ResponseWriter, r *http.Request) {
 		suggestions = []suggester.Suggestion{}
 	}
 
-	// Re-filter against the current watchlist in case shows were added after
-	// the last refresh — cheap in-memory pass, no LLM involved.
+	// Re-filter against the current watchlist in case shows or movies were added
+	// after the last refresh — cheap in-memory pass, no LLM involved.
 	if s.matcher != nil {
 		if cfg := s.matcher.ShowsConfig(); cfg != nil {
-			existing := make(map[string]bool, len(cfg.Shows))
+			existing := make(map[string]bool, len(cfg.Shows)+len(cfg.Movies))
 			for _, show := range cfg.Shows {
 				existing[strings.ToLower(show.Name)] = true
+			}
+			for _, movie := range cfg.Movies {
+				existing[strings.ToLower(movie.Name)] = true
 			}
 			filtered := suggestions[:0]
 			for _, sg := range suggestions {
