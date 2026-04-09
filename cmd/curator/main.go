@@ -653,11 +653,18 @@ func cmdServe(cfg models.Config, store *storage.Storage, buf *logbuffer.Buffer, 
 	enricherProvider := ai.NewProviderFor("enricher")
 	enricher := ai.NewEnricher(enricherProvider, nil)
 	if scorerProvider.Available() {
-		fmt.Println("[Serve] AI provider available — on-demand rescore enabled")
+		fmt.Println("[Serve] AI scorer provider available — on-demand rescore enabled")
+	} else {
+		fmt.Println("[Serve] AI scorer provider unavailable — rescore disabled")
 	}
 
 	// Suggester uses its own provider/model config so it can be tuned independently.
 	suggestProvider := ai.NewProviderFor("suggester")
+	if suggestProvider.Available() {
+		fmt.Println("[Serve] AI suggester provider available — suggestions enabled")
+	} else {
+		fmt.Println("[Serve] AI suggester provider unavailable — suggestions disabled (check CURATOR_AI_SUGGESTER_PROVIDER/KEY/HOST)")
+	}
 
 	// Create matcher config once for API rematch operations.
 	var m *matcher.Matcher
