@@ -326,6 +326,9 @@
                                 <span v-if="suggestGeneratedAt" class="text-xs font-mono fg-muted italic">
                                     generated {{ new Date(suggestGeneratedAt).toLocaleString() }}
                                 </span>
+                                <span v-if="suggestShowsCount !== null" class="text-xs font-mono fg-dim">
+                                    {{ suggestShowsCount }} show{{ suggestShowsCount !== 1 ? 's' : '' }}<template v-if="suggestMoviesCount > 0">&nbsp;&middot;&nbsp;{{ suggestMoviesCount }} movie{{ suggestMoviesCount !== 1 ? 's' : '' }}</template>
+                                </span>
                             </div>
                             <template v-if="suggestAvailable">
                                 <button
@@ -383,6 +386,8 @@
                                             {{ s.meta.status }}
                                         </span>
                                         <span v-if="s.meta.premiere_year" class="text-xs fg-dim font-mono">{{ s.meta.premiere_year }}</span>
+                                        <span class="px-1.5 py-0.5 rounded text-xs font-mono"
+                                            :class="s.content_type === 'movie' ? 'badge-indigo' : 'bg-raised fg-muted'">{{ s.content_type === 'movie' ? 'movie' : 'show' }}</span>
                                     </div>
                                     <div v-if="s.meta && s.meta.overview" class="mt-1 text-xs fg-soft italic leading-snug line-clamp-2">{{ s.meta.overview }}</div>
                                 </div>

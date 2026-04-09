@@ -24,8 +24,8 @@ const settingsApp = createApp({
         let   showsCM     = null;      // CodeMirror instance (created lazily)
 
         // ── Suggestions state ─────────────────────────────────────────
-        const suggestAvailable   = ref(false);
-        const suggestions        = ref([]);
+        const suggestAvailable   = ref(false);        const suggestShowsCount  = ref(null);   // from /api/suggestions/status
+        const suggestMoviesCount = ref(0);        const suggestions        = ref([]);
         const suggestsLoading    = ref(false);
         const suggestError       = ref('');
         const suggestGeneratedAt = ref(null);   // ISO string from cache
@@ -329,7 +329,9 @@ const settingsApp = createApp({
                 const res = await fetch('/api/suggestions/status');
                 if (!res.ok) return;
                 const data = await res.json();
-                suggestAvailable.value = data.available ?? false;
+                suggestAvailable.value   = data.available ?? false;
+                suggestShowsCount.value  = data.shows_count  ?? null;
+                suggestMoviesCount.value = data.movies_count ?? 0;
                 if (data.last_refreshed) suggestGeneratedAt.value = data.last_refreshed;
             } catch (e) {
                 suggestAvailable.value = false;
@@ -451,21 +453,28 @@ const settingsApp = createApp({
                 showsError.value = `invalid JSON — ${e.message}`;
                 return;
             }
-            if (!Array.isArray(cfg.shows)) cfg.shows = [];
-            const already = cfg.shows.some(s =>
-                s.name.toLowerCase() === suggestion.show_name.toLowerCase()
-            );
-            if (already) {
+            const isMovie = suggestion.content_type === 'movie';
+            if (!Array.isArray(cfg.shows))  cfg.shows  = [];
+            if (!Array.isArray(cfg.movies)) cfg.movies = [];
+            // Check for duplicates in both arrays.
+            const alreadyInShows  = cfg.shows.some(s  => s.name.toLowerCase() === suggestion.show_name.toLowerCase());
+            const alreadyInMovies = cfg.movies.some(m => m.name.toLowerCase() === suggestion.show_name.toLowerCase());
+            if (alreadyInShows || alreadyInMovies) {
                 showToast(`"${suggestion.show_name}" is already in the watchlist`, 'error');
                 return;
             }
-            cfg.shows.push(suggestion.suggested_rule);
-            cfg.shows.sort((a, b) => a.name.localeCompare(b.name));
+            if (isMovie) {
+                cfg.movies.push(suggestion.suggested_rule);
+                cfg.movies.sort((a, b) => a.name.localeCompare(b.name));
+            } else {
+                cfg.shows.push(suggestion.suggested_rule);
+                cfg.shows.sort((a, b) => a.name.localeCompare(b.name));
+            }
             showsCM.setValue(JSON.stringify(cfg, null, 2));
             showsCM.refresh();
-            // Remove from suggestions list so the row disappears after add
+            // Remove from suggestions list so the row disappears after add.
             suggestions.value = suggestions.value.filter(s => s.show_name !== suggestion.show_name);
-            showToast(`added "${suggestion.show_name}" — remember to save`, 'success');
+            showToast(`added "${suggestion.show_name}" to ${isMovie ? 'movies' : 'shows'} — remember to save`, 'success');
         }
 
         async function dismissSuggestion(suggestion) {
@@ -526,6 +535,8 @@ const settingsApp = createApp({
             onShowsFileUpload,
             // Suggestions
             suggestAvailable,
+            suggestShowsCount,
+            suggestMoviesCount,
             suggestions,
             suggestsLoading,
             suggestError,
