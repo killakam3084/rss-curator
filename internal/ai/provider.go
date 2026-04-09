@@ -300,10 +300,15 @@ func (o *ollamaProvider) Available() bool {
 	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, o.host+"/api/tags", nil)
 	resp, err := o.client.Do(req)
 	if err != nil {
+		fmt.Fprintf(os.Stderr, "[AI:ollama] ping failed: %v\n", err)
 		return false
 	}
 	resp.Body.Close()
-	return resp.StatusCode == http.StatusOK
+	if resp.StatusCode != http.StatusOK {
+		fmt.Fprintf(os.Stderr, "[AI:ollama] ping returned HTTP %d\n", resp.StatusCode)
+		return false
+	}
+	return true
 }
 
 // ─── OpenAI-compatible ────────────────────────────────────────────────────────
@@ -383,10 +388,15 @@ func (o *openAIProvider) Available() bool {
 	}
 	resp, err := o.client.Do(req)
 	if err != nil {
+		fmt.Fprintf(os.Stderr, "[AI:openai] ping failed: %v\n", err)
 		return false
 	}
 	resp.Body.Close()
-	return resp.StatusCode == http.StatusOK
+	if resp.StatusCode != http.StatusOK {
+		fmt.Fprintf(os.Stderr, "[AI:openai] ping returned HTTP %d\n", resp.StatusCode)
+		return false
+	}
+	return true
 }
 
 // ─── Anthropic ────────────────────────────────────────────────────────────────
@@ -487,9 +497,22 @@ func (a *anthropicProvider) Available() bool {
 	req.Header.Set("anthropic-version", anthropicAPIVersion)
 	resp, err := a.client.Do(req)
 	if err != nil {
+		fmt.Fprintf(os.Stderr, "[AI:anthropic] ping failed: %v\n", err)
 		return false
 	}
 	resp.Body.Close()
-	// 200 = key valid and reachable; 400 = bad request but API is up (still available).
-	return resp.StatusCode == http.StatusOK || resp.StatusCode == http.StatusBadRequest
+	// 200 = success; 400 = bad request shape but API is up; 401 = key rejected
+	// but endpoint is reachable (config issue, not a dead provider).
+	// All three count as "available" so the suggester can surface a real error
+	// message from Complete() rather than a generic "provider unavailable".
+	switch resp.StatusCode {
+	case http.StatusOK, http.StatusBadRequest, http.StatusUnauthorized:
+		if resp.StatusCode == http.StatusUnauthorized {
+			fmt.Fprintf(os.Stderr, "[AI:anthropic] ping returned HTTP 401 — check CURATOR_AI_SUGGESTER_KEY\n")
+		}
+		return true
+	default:
+		fmt.Fprintf(os.Stderr, "[AI:anthropic] ping returned HTTP %d\n", resp.StatusCode)
+		return false
+	}
 }
