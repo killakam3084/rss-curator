@@ -32,10 +32,10 @@ type FormatSetter interface {
 // NewProvider constructs a Provider from environment variables using the
 // shared model setting. Equivalent to NewProviderFor("").
 //
-//	CURATOR_AI_PROVIDER   "ollama" (default) | "openai" | "disabled"
+//	CURATOR_AI_PROVIDER   "ollama" (default) | "openai" | "anthropic" | "disabled"
 //	CURATOR_AI_HOST       base URL, e.g. http://localhost:11434
 //	CURATOR_AI_MODEL      model name, e.g. llama3.2
-//	CURATOR_AI_KEY        API key (openai / compatible endpoints only)
+//	CURATOR_AI_KEY        API key (openai / anthropic / compatible endpoints only)
 func NewProvider() Provider {
 	return NewProviderFor("")
 }
@@ -113,6 +113,20 @@ func NewProviderFor(subsystem string) Provider {
 	}
 
 	switch providerType {
+	case "anthropic":
+		if host == "" {
+			host = "https://api.anthropic.com"
+		}
+		if model == "" {
+			model = "claude-haiku-3-5"
+		}
+		return &anthropicProvider{
+			host:        host,
+			model:       model,
+			key:         key,
+			client:      &http.Client{},
+			temperature: temperature,
+		}
 	case "openai":
 		if host == "" {
 			host = "https://api.openai.com"
@@ -328,4 +342,109 @@ func (o *openAIProvider) Available() bool {
 	}
 	resp.Body.Close()
 	return resp.StatusCode == http.StatusOK
+}
+
+// ─── Anthropic ────────────────────────────────────────────────────────────────
+
+type anthropicProvider struct {
+	host        string
+	model       string
+	key         string
+	client      *http.Client
+	temperature float64
+}
+
+// anthropicRequest matches the Anthropic Messages API v1 request shape.
+// https://docs.anthropic.com/en/api/messages
+type anthropicRequest struct {
+	Model       string             `json:"model"`
+	MaxTokens   int                `json:"max_tokens"`
+	Temperature float64            `json:"temperature"`
+	System      string             `json:"system"`
+	Messages    []anthropicMessage `json:"messages"`
+}
+
+type anthropicMessage struct {
+	Role    string `json:"role"`
+	Content string `json:"content"`
+}
+
+type anthropicResponse struct {
+	Content []struct {
+		Type string `json:"type"`
+		Text string `json:"text"`
+	} `json:"content"`
+	Error *struct {
+		Type    string `json:"type"`
+		Message string `json:"message"`
+	} `json:"error,omitempty"`
+}
+
+const anthropicAPIVersion = "2023-06-01"
+
+func (a *anthropicProvider) Complete(ctx context.Context, system, user string) (string, error) {
+	body, _ := json.Marshal(anthropicRequest{
+		Model:       a.model,
+		MaxTokens:   2048,
+		Temperature: a.temperature,
+		System:      system,
+		Messages: []anthropicMessage{
+			{Role: "user", Content: user},
+		},
+	})
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, a.host+"/v1/messages", bytes.NewReader(body))
+	if err != nil {
+		return "", fmt.Errorf("anthropic: build request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("x-api-key", a.key)
+	req.Header.Set("anthropic-version", anthropicAPIVersion)
+
+	resp, err := a.client.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("anthropic: request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	var result anthropicResponse
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return "", fmt.Errorf("anthropic: decode response: %w", err)
+	}
+	if result.Error != nil {
+		return "", fmt.Errorf("anthropic: %s: %s", result.Error.Type, result.Error.Message)
+	}
+	for _, block := range result.Content {
+		if block.Type == "text" {
+			return block.Text, nil
+		}
+	}
+	return "", fmt.Errorf("anthropic: empty response")
+}
+
+func (a *anthropicProvider) Available() bool {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	// Anthropic has no unauthenticated ping endpoint; send a minimal
+	// completion to verify the key and reachability in one round-trip.
+	body, _ := json.Marshal(anthropicRequest{
+		Model:     a.model,
+		MaxTokens: 1,
+		System:    "ping",
+		Messages:  []anthropicMessage{{Role: "user", Content: "ping"}},
+	})
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, a.host+"/v1/messages", bytes.NewReader(body))
+	if err != nil {
+		return false
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("x-api-key", a.key)
+	req.Header.Set("anthropic-version", anthropicAPIVersion)
+	resp, err := a.client.Do(req)
+	if err != nil {
+		return false
+	}
+	resp.Body.Close()
+	// 200 = key valid and reachable; 400 = bad request but API is up (still available).
+	return resp.StatusCode == http.StatusOK || resp.StatusCode == http.StatusBadRequest
 }

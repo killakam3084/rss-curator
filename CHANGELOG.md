@@ -8,6 +8,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.45.0] - 2026-04-09
+
+### Added
+- **Anthropic provider** — set `CURATOR_AI_PROVIDER=anthropic` and `CURATOR_AI_KEY=<API key>` to use Claude models. Default model is `claude-haiku-3-5`; override per-subsystem via `CURATOR_AI_SUGGESTER_MODEL`, `CURATOR_AI_SCORER_MODEL`, etc. Recommended for the suggestion engine where large watchlist+metadata prompts routinely timeout local inference.
+- `curator.env.sample` updated with Anthropic configuration guidance and model defaults for all three providers.
+
 ## [0.44.0] - 2026-04-08
 
 ### Added
