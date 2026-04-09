@@ -226,7 +226,17 @@ type FeedStreamResponse struct {
 // buf may be nil; when provided, logs are tee'd into it for /api/logs streaming.
 // scorer and aiProvider may be nil when AI is disabled.
 func NewServer(store storage.Store, client *client.Client, port int, buf *logbuffer.Buffer, scorer *ai.Scorer, aiProvider ai.Provider, m *matcher.Matcher, enricher *ai.Enricher, auth AuthConfig) *Server {
-	prodCore, err := zap.NewProduction()
+	// Build a structured JSON logger. CURATOR_LOG_LEVEL=debug lowers the
+	// minimum level from Info to Debug; all other values keep the Info default.
+	// The production encoder config is used in both cases so container log
+	// aggregators always receive machine-readable JSON.
+	logLevel := zapcore.InfoLevel
+	if strings.EqualFold(os.Getenv("CURATOR_LOG_LEVEL"), "debug") {
+		logLevel = zapcore.DebugLevel
+	}
+	zapCfg := zap.NewProductionConfig()
+	zapCfg.Level = zap.NewAtomicLevelAt(logLevel)
+	prodCore, err := zapCfg.Build()
 	if err != nil {
 		panic(fmt.Sprintf("failed to create logger: %v", err))
 	}
