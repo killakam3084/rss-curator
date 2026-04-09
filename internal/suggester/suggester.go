@@ -74,8 +74,11 @@ type Suggestion struct {
 }
 
 // llmSuggestion is the raw JSON shape the LLM writes per suggestion.
+// Title is accepted as a fallback for models that emit "title" instead of the
+// requested "show_name" field.
 type llmSuggestion struct {
 	ShowName    string `json:"show_name"`
+	Title       string `json:"title"` // fallback when model ignores show_name
 	Reason      string `json:"reason"`
 	Quality     string `json:"quality"`
 	Codec       string `json:"codec"`
@@ -450,11 +453,21 @@ func (sg *Suggester) parseResponse(raw, defaultQuality, defaultCodec string) ([]
 		content = strings.TrimSpace(content)
 	}
 
-	// Extract the outermost JSON object to survive any remaining preamble.
-	start := strings.Index(content, "{")
-	end := strings.LastIndex(content, "}")
-	if start >= 0 && end > start {
-		content = content[start : end+1]
+	// If the LLM returned a bare array instead of {"suggestions":[...]}, wrap it.
+	if strings.HasPrefix(content, "[") {
+		start := strings.Index(content, "[")
+		end := strings.LastIndex(content, "]")
+		if start >= 0 && end > start {
+			content = content[start : end+1]
+		}
+		content = `{"suggestions":` + content + `}`
+	} else {
+		// Extract the outermost JSON object to survive any remaining preamble.
+		start := strings.Index(content, "{")
+		end := strings.LastIndex(content, "}")
+		if start >= 0 && end > start {
+			content = content[start : end+1]
+		}
 	}
 
 	var resp llmResponse
@@ -464,7 +477,12 @@ func (sg *Suggester) parseResponse(raw, defaultQuality, defaultCodec string) ([]
 
 	out := make([]Suggestion, 0, len(resp.Suggestions))
 	for _, s := range resp.Suggestions {
-		if s.ShowName == "" {
+		// Prefer show_name; fall back to title for models that ignore the schema.
+		name := s.ShowName
+		if name == "" {
+			name = s.Title
+		}
+		if name == "" {
 			continue
 		}
 		quality := sanitizeQuality(s.Quality, defaultQuality)
@@ -474,11 +492,11 @@ func (sg *Suggester) parseResponse(raw, defaultQuality, defaultCodec string) ([]
 			ct = models.ContentTypeMovie
 		}
 		out = append(out, Suggestion{
-			ShowName:    s.ShowName,
+			ShowName:    name,
 			Reason:      s.Reason,
 			ContentType: ct,
 			SuggestedRule: models.ShowRule{
-				Name:           s.ShowName,
+				Name:           name,
 				MinQuality:     quality,
 				PreferredCodec: codec,
 			},

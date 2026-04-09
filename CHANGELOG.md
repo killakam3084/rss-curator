@@ -8,6 +8,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.46.5] - 2026-04-09
+
+### Fixed
+- **Suggester parse error when LLM returns a bare JSON array** — Haiku 4.5 returns a plain `[...]` array instead of the requested `{"suggestions":[...]}` object. The `{`/`}` extractor was pulling individual object slices from the array, yielding comma-separated partial JSON and the error "invalid character ',' after top-level value". `parseResponse` now detects a `[`-prefixed response and wraps it before unmarshalling.
+- **Suggester silently drops all results when LLM uses `"title"` instead of `"show_name"`** — Haiku 4.5 ignores the output schema field name. Added `Title string \`json:"title"\`` to `llmSuggestion` as a fallback; the name resolution loop now uses `show_name` when present, otherwise `title`. All downstream fields (`ShowName`, `SuggestedRule.Name`) use the resolved name.
+
 ## [0.46.4] - 2026-04-09
 
 ### Fixed
