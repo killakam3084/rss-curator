@@ -495,9 +495,9 @@ func (a *anthropicProvider) Available() bool {
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("x-api-key", a.key)
 	req.Header.Set("anthropic-version", anthropicAPIVersion)
+	fmt.Fprintf(os.Stderr, "[AI:anthropic] ping → %s model=%s\n", a.host, a.model)
 	resp, err := a.client.Do(req)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "[AI:anthropic] ping failed: %v\n", err)
 		return false
 	}
 	resp.Body.Close()
@@ -507,9 +507,6 @@ func (a *anthropicProvider) Available() bool {
 	// message from Complete() rather than a generic "provider unavailable".
 	switch resp.StatusCode {
 	case http.StatusOK, http.StatusBadRequest, http.StatusUnauthorized:
-		if resp.StatusCode == http.StatusUnauthorized {
-			fmt.Fprintf(os.Stderr, "[AI:anthropic] ping returned HTTP 401 — check CURATOR_AI_SUGGESTER_KEY\n")
-		}
 		return true
 	default:
 		fmt.Fprintf(os.Stderr, "[AI:anthropic] ping returned HTTP %d\n", resp.StatusCode)
