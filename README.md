@@ -147,7 +147,7 @@ export CURATOR_AI_KEY=                                # API key (OpenAI / Anthro
 # Per-subsystem overrides (PROVIDER, KEY, and MODEL each fall back to the global value)
 export CURATOR_AI_SUGGESTER_PROVIDER=anthropic        # e.g. Anthropic for suggestions only
 export CURATOR_AI_SUGGESTER_KEY=sk-ant-...            # subsystem-specific key
-export CURATOR_AI_SUGGESTER_MODEL=claude-3-5-haiku-20241022  # subsystem-specific model
+export CURATOR_AI_SUGGESTER_MODEL=claude-haiku-4-5-20251001  # subsystem-specific model
 ```
 
 ### Metadata provider (optional)

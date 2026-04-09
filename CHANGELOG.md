@@ -8,6 +8,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.46.4] - 2026-04-09
+
+### Fixed
+- **Anthropic default model updated to `claude-haiku-4-5-20251001`** — the previous default (`claude-3-5-haiku-20241022`) is no longer broadly available on all Anthropic tiers; the new default is the current Haiku 4.5 model that is universally available. Users with an explicit `CURATOR_AI_SUGGESTER_MODEL=claude-3-5-haiku-20241022` in their config should remove it or update to `claude-haiku-4-5-20251001`.
+- **Anthropic `Available()` now treats HTTP 404 as reachable** — a 404 response means the API is up but the configured model is unknown (a config issue, not a dead provider). The UI now shows the provider as available so that the job failure message gives an actionable error instead of a generic "provider unavailable". A log line is emitted for any non-200 status.
+
 ## [0.46.1] - 2026-04-09
 
 ### Fixed
@@ -21,7 +27,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.45.0] - 2026-04-09
 
 ### Added
-- **Anthropic provider** — set `CURATOR_AI_PROVIDER=anthropic` and `CURATOR_AI_KEY=<API key>` to use Claude models. Default model is `claude-3-5-haiku-20241022`; override per-subsystem via `CURATOR_AI_SUGGESTER_MODEL`, `CURATOR_AI_SCORER_MODEL`, etc. Recommended for the suggestion engine where large watchlist+metadata prompts routinely timeout local inference.
+- **Anthropic provider** — set `CURATOR_AI_PROVIDER=anthropic` and `CURATOR_AI_KEY=<API key>` to use Claude models. Default model is `claude-haiku-4-5-20251001`; override per-subsystem via `CURATOR_AI_SUGGESTER_MODEL`, `CURATOR_AI_SCORER_MODEL`, etc. Recommended for the suggestion engine where large watchlist+metadata prompts routinely timeout local inference.
 - `curator.env.sample` updated with Anthropic configuration guidance and model defaults for all three providers.
 
 ## [0.44.0] - 2026-04-08

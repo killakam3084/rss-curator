@@ -164,7 +164,7 @@ func NewProviderFor(subsystem string) Provider {
 			host = "https://api.anthropic.com"
 		}
 		if model == "" {
-			model = "claude-3-5-haiku-20241022"
+			model = "claude-haiku-4-5-20251001"
 		}
 		return &anthropicProvider{
 			host:        host,
@@ -503,14 +503,15 @@ func (a *anthropicProvider) Available() bool {
 		return false
 	}
 	defer resp.Body.Close()
-	// 200 = success; 400 = bad request shape but API is up; 401 = key rejected
-	// but endpoint is reachable (config issue, not a dead provider).
-	// All three count as "available" so the suggester can surface a real error
-	// message from Complete() rather than a generic "provider unavailable".
+	// 200 = success; 400 = bad request shape; 401 = bad key; 404 = unknown model.
+	// All are reachability confirmations — the real error will surface via
+	// Complete() so the job failure message is actionable in the UI.
 	switch resp.StatusCode {
-	case http.StatusOK, http.StatusBadRequest, http.StatusUnauthorized:
-		if resp.StatusCode == http.StatusUnauthorized {
-			fmt.Fprintf(os.Stderr, "[AI:anthropic] ping returned HTTP 401 — check CURATOR_AI_SUGGESTER_KEY\n")
+	case http.StatusOK, http.StatusBadRequest, http.StatusUnauthorized, http.StatusNotFound:
+		if resp.StatusCode != http.StatusOK {
+			body, _ := io.ReadAll(resp.Body)
+			fmt.Fprintf(os.Stderr, "[AI:anthropic] ping HTTP %d (provider reachable, check key/model): %s\n",
+				resp.StatusCode, strings.TrimSpace(string(body)))
 		}
 		return true
 	default:
