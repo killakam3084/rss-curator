@@ -163,7 +163,7 @@ func NewProviderFor(subsystem string) Provider {
 			host = "https://api.anthropic.com"
 		}
 		if model == "" {
-			model = "claude-haiku-3-5"
+			model = "claude-3-5-haiku-20241022"
 		}
 		return &anthropicProvider{
 			host:        host,

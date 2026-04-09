@@ -7,11 +7,11 @@ A semi-automated torrent curator for private tracker RSS feeds with human-in-the
 [![Go Report Card](https://goreportcard.com/badge/github.com/killakam3084/rss-curator)](https://goreportcard.com/report/github.com/killakam3084/rss-curator)
 [![GitHub Release](https://img.shields.io/github/v/release/killakam3084/rss-curator)](https://github.com/killakam3084/rss-curator/releases)
 [![Container Image](https://img.shields.io/badge/container-ghcr.io-blue)](https://github.com/killakam3084/rss-curator/pkgs/container/rss-curator)
-[![Go](https://img.shields.io/badge/Go-1.22-blue)](https://golang.org)
+[![Go](https://img.shields.io/badge/Go-1.26-blue)](https://golang.org)
 
 ## Features
 
-- ✅ Parse RSS feeds from private trackers
+- ✅ Parse RSS feeds from private trackers (TV + optional separate movie feed)
 - ✅ Intelligent metadata extraction (show name, season, episode, quality, codec, release group)
 - ✅ Rule-based matching (quality filters, preferred codecs, release group preferences)
 - ✅ SQLite-based staging system
@@ -21,13 +21,18 @@ A semi-automated torrent curator for private tracker RSS feeds with human-in-the
 - ✅ Docker containerization for easy deployment
 - ✅ TrueNAS compatible setup
 - ✅ Web UI dashboard (approve/reject queue, activity log, feed stream, AI score badges)
-- ✅ AI-assisted scoring and metadata enrichment (Ollama / OpenAI / disabled)
+- ✅ AI-assisted scoring and metadata enrichment — Ollama (local), OpenAI-compatible, Anthropic Claude, or disabled
+- ✅ Per-subsystem AI provider overrides — run Ollama for scoring and Anthropic only for suggestions simultaneously
+- ✅ TV/movie metadata enrichment via TVMaze (free, default), TMDB, or TVDB with local cache
 - ✅ Per-show rule configuration via `shows.json`
 - ✅ AI scorer match confidence — separate signal for rule-vs-title plausibility with low-confidence UI badge
 - ✅ Compact show-history summaries for AI scorer — token-efficient, recency-bias-free prompt context
 - ✅ Ollama structured output — JSON Schema enforcement eliminating schema hallucination
+- ✅ AI suggester — analyses accept/reject history to surface new show and movie recommendations
 - ✅ Jobs system — background task tracking with live SSE updates and dedicated Jobs page
 - ✅ Ephemeral alerts — in-browser notification ring (approve/reject/queue/staged/job_failed) with bell icon and unread badge
+- ✅ In-app authentication — optional login page with session tokens and configurable TTL
+- ✅ Settings page — manage `shows.json` rules and AI suggestions (accept/dismiss) from the Web UI
 
 ## Installation
 
@@ -134,10 +139,33 @@ export STORAGE_PATH="$HOME/.curator.db"               # Default
 export CURATOR_API_PORT=8081                          # Default
 
 # AI provider (optional — omit to disable)
-export CURATOR_AI_PROVIDER=ollama                     # ollama | openai | disabled
-export CURATOR_AI_HOST=http://localhost:11434          # Ollama default
-export CURATOR_AI_MODEL=llama3.2                      # Model name
-export CURATOR_AI_KEY=                                # API key (OpenAI-compatible)
+export CURATOR_AI_PROVIDER=ollama                     # ollama | openai | anthropic | disabled
+export CURATOR_AI_HOST=http://localhost:11434          # Ollama/OpenAI-compatible base URL
+export CURATOR_AI_MODEL=llama3.2                      # Model name (per-provider defaults apply)
+export CURATOR_AI_KEY=                                # API key (OpenAI / Anthropic)
+
+# Per-subsystem overrides (PROVIDER, KEY, and MODEL each fall back to the global value)
+export CURATOR_AI_SUGGESTER_PROVIDER=anthropic        # e.g. Anthropic for suggestions only
+export CURATOR_AI_SUGGESTER_KEY=sk-ant-...            # subsystem-specific key
+export CURATOR_AI_SUGGESTER_MODEL=claude-3-5-haiku-20241022  # subsystem-specific model
+```
+
+### Metadata provider (optional)
+
+```bash
+# Provider: tvmaze (default, free), tmdb, tvdb, or disabled
+export CURATOR_META_PROVIDER=tvmaze
+export CURATOR_META_KEY=                              # Required for tmdb / tvdb
+export CURATOR_META_TTL_HOURS=168                     # Cache TTL (default: 7 days)
+```
+
+### Authentication (optional)
+
+```bash
+export CURATOR_USERNAME=curator                       # Login page username (default: curator)
+export CURATOR_PASSWORD=your-password                 # Enables login page when set
+export CURATOR_SESSION_SECRET=change-me-long-random   # HMAC key; set for stable sessions
+export CURATOR_SESSION_TTL_HOURS=24                   # Session lifetime (default: 24h)
 ```
 
 ### Create a config script
@@ -359,12 +387,15 @@ flowchart LR
     Matcher --> Scorer["AI Scorer"]
     Scorer --> DB[("SQLite")]
     DB -->|"activity history"| Scorer
+    DB -->|"history + watchlist"| Suggester["AI Suggester"]
     DB --> API["API Server"]
     DB --> CLI["CLI"]
     API --> UI["Web UI :8081"]
     API --> QB["qBittorrent"]
     CLI --> QB
-    Enricher & Scorer -.->|"CURATOR_AI_PROVIDER"| LLM["LLM<br/>Ollama / OpenAI"]
+    Meta["Metadata<br/>TVMaze / TMDB"] -.->|"show + movie info"| Scorer & Suggester
+    Enricher & Scorer -.->|"CURATOR_AI_PROVIDER"| LLM["LLM<br/>Ollama / OpenAI / Anthropic"]
+    Suggester -.->|"CURATOR_AI_SUGGESTER_PROVIDER"| LLM
 ```
 
 Full diagrams (state machine, ER model, component map): [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md)
@@ -375,10 +406,15 @@ Full diagrams (state machine, ER model, component map): [docs/ARCHITECTURE.md](.
 - **AI Enricher** (`internal/ai`): LLM fallback to fill `ShowName`/`Season` when regex fails — silent no-op when unavailable
 - **Matcher** (`internal/matcher`): Applies show/quality/codec/group rules
 - **AI Scorer** (`internal/ai`): Scores matches 0–1 against approve/reject history — silent no-op when unavailable
+- **AI Suggester** (`internal/suggester`): Analyses accept/reject history to surface new show and movie recommendations; results accumulate until dismissed or added to `shows.json`
+- **Metadata** (`internal/metadata`): TV and movie metadata providers (TVMaze, TMDB); shared local SQLite cache with configurable TTL
 - **Storage** (`internal/storage`): SQLite staging queue + activity log + raw feed stream + jobs table
 - **Log Buffer** (`internal/logbuffer`): In-memory ring buffer for logs, jobs fan-out, and alerts fan-out via SSE
+- **Ops** (`internal/ops`): Orchestrates compound operations — feed check, rematch, rescore, rescore-backfill — used by both CLI and scheduler
+- **Settings** (`internal/settings`): Runtime-configurable app settings backed by SQLite; surfaced via the Settings page
+- **Scheduler** (`internal/scheduler`): Periodic background task runner (feed check interval)
 - **API Server** (`internal/api`): REST API + serves Web UI; jobs and alerts SSE endpoints; alert poller; started with `curator serve`
-- **Web UI** (`web/`): Vue.js dashboard for approvals, activity, stats, feed stream; top nav with jobs badge and alerts bell; `jobs.html` standalone page
+- **Web UI** (`web/`): Vue.js dashboard for approvals, activity, stats, feed stream, suggestions, and settings; top nav with jobs badge and alerts bell
 - **qBittorrent Client** (`internal/client`): Wrapper around qBittorrent Web API
 
 ## Development
@@ -393,11 +429,23 @@ rss-curator/
 │   ├── api/                   # HTTP API server, jobs/alerts SSE, alert poller
 │   ├── client/                # qBittorrent Web API client
 │   ├── feed/                  # RSS fetch + regex metadata extraction
+│   ├── jobs/                  # Job record helpers
 │   ├── logbuffer/             # In-memory ring buffer (logs, jobs, alerts)
 │   ├── matcher/               # Rule-based matching
-│   └── storage/               # Store interface + SQLite implementation
+│   ├── metadata/              # TV/movie metadata providers (TVMaze, TMDB) + cache
+│   ├── ops/                   # Compound operations (feedcheck, rematch, rescore)
+│   ├── scheduler/             # Periodic background task runner
+│   ├── settings/              # Runtime settings backed by SQLite
+│   ├── storage/               # Store interface + SQLite implementation
+│   └── suggester/             # AI suggestion engine (shows + movies)
 ├── pkg/models/types.go        # Shared value types (incl. JobRecord, AlertRecord)
-├── web/                       # Vue.js dashboard (index.html, jobs.html, app.js, style.css)
+├── web/                       # Vue.js dashboard
+│   ├── index.html             # Main queue + activity dashboard
+│   ├── jobs.html              # Standalone jobs page
+│   ├── login.html             # Authentication page
+│   ├── settings.html          # Settings + suggestions management
+│   ├── app.js / settings.js   # Page controllers
+│   └── style.css
 ├── docs/                      # Reference documentation
 ├── scripts/                   # Container entrypoint + scheduler
 ├── go.mod
@@ -433,6 +481,12 @@ GOOS=darwin GOARCH=arm64 go build -o curator-darwin-arm64 ./cmd/curator
 - [x] Ephemeral alerts — in-memory ring, SSE, bell UI, localStorage unread tracking
 - [x] Compact show-history summaries — token-efficient scorer context, eliminates recency bias
 - [x] Ollama structured output — JSON Schema enforcement, `num_ctx`/`num_predict` configurable
+- [x] Suggester engine — AI-powered show and movie recommendations derived from accept/reject history
+- [x] Movie support — separate movie RSS feed, movie suggestions, TMDB movie metadata
+- [x] Cloud LLM providers — Anthropic Claude and OpenAI alongside Ollama
+- [x] Per-subsystem AI provider overrides — mix local and cloud inference independently
+- [x] Metadata enrichment — TVMaze/TMDB providers with local SQLite cache
+- [x] In-app authentication — login page, session tokens, configurable TTL
 - [ ] YAML configuration file support
 - [ ] Webhook notifications (on approve/stage)
 - [ ] Season pack handling
@@ -440,7 +494,6 @@ GOOS=darwin GOARCH=arm64 go build -o curator-darwin-arm64 ./cmd/curator
 - [ ] Multi-tracker aggregate feed support
 - [ ] Candidate-focused retrieval — embeddings or fuzzy matching to select the most relevant history summaries for a candidate at score time
 - [ ] App-level Prometheus metrics — expose `/metrics` endpoint; track scorer latency, error rate, clamp frequency
-- [ ] **Suggester engine** — analyse accept/reject history to infer franchise/genre/creator patterns; surface suggested `shows.json` rules proactively before matching episodes appear in the feed
 
 ## Troubleshooting
 
