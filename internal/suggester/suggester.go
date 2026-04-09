@@ -26,10 +26,11 @@ var suggestOutputSchema = json.RawMessage(`{
 			"items": {
 				"type": "object",
 				"properties": {
-					"show_name": {"type": "string"},
-					"reason":    {"type": "string"},
-					"quality":   {"type": "string"},
-					"codec":     {"type": "string"}
+					"show_name":    {"type": "string"},
+					"reason":       {"type": "string"},
+					"quality":      {"type": "string"},
+					"codec":        {"type": "string"},
+					"content_type": {"type": "string"}
 				},
 				"required": ["show_name", "reason", "quality", "codec"]
 			}
@@ -38,14 +39,15 @@ var suggestOutputSchema = json.RawMessage(`{
 	"required": ["suggestions"]
 }`)
 
-const systemPrompt = `You are a TV/movie watchlist assistant recommending new shows to add.
+const systemPrompt = `You are a TV/movie watchlist assistant recommending new shows and movies to add.
 
 Given: the user's watchlist (with genre/network/cast/creator metadata), recent approvals (taste signals), and quality preferences.
 
 Rules:
-- Never suggest a show already in the watchlist.
+- Never suggest a title already in the watchlist.
 - Match genre patterns from the watchlist.
-- Pay attention to creators and lead actors — suggest shows made by the same creators or featuring the same stars where available.
+- Pay attention to creators and lead actors — suggest shows/movies made by the same creators or featuring the same stars where available.
+- Set content_type to "show" for TV series and "movie" for films.
 - Use the provided quality and codec on every suggestion.
 - Respond with raw JSON only — no explanation, no markdown.`
 
@@ -62,20 +64,22 @@ type SuggestionMeta struct {
 	Creators     []string `json:"creators,omitempty"` // show creator names (up to 2)
 }
 
-// Suggestion is a single LLM-proposed show that the user might want to add.
+// Suggestion is a single LLM-proposed title that the user might want to add.
 type Suggestion struct {
-	ShowName      string          `json:"show_name"`
-	Reason        string          `json:"reason"`
-	SuggestedRule models.ShowRule `json:"suggested_rule"`
-	Meta          *SuggestionMeta `json:"meta,omitempty"`
+	ShowName      string              `json:"show_name"`
+	Reason        string              `json:"reason"`
+	ContentType   models.ContentType  `json:"content_type"`
+	SuggestedRule models.ShowRule     `json:"suggested_rule"`
+	Meta          *SuggestionMeta     `json:"meta,omitempty"`
 }
 
 // llmSuggestion is the raw JSON shape the LLM writes per suggestion.
 type llmSuggestion struct {
-	ShowName string `json:"show_name"`
-	Reason   string `json:"reason"`
-	Quality  string `json:"quality"`
-	Codec    string `json:"codec"`
+	ShowName    string `json:"show_name"`
+	Reason      string `json:"reason"`
+	Quality     string `json:"quality"`
+	Codec       string `json:"codec"`
+	ContentType string `json:"content_type"`
 }
 
 type llmResponse struct {
@@ -177,6 +181,19 @@ func (sg *Suggester) ShowsCount() int {
 	return len(cfg.Shows)
 }
 
+// MoviesCount returns the number of movies currently in the watchlist, or 0 if
+// the matcher or its config is nil.
+func (sg *Suggester) MoviesCount() int {
+	if sg.matcher == nil {
+		return 0
+	}
+	cfg := sg.matcher.ShowsConfig()
+	if cfg == nil {
+		return 0
+	}
+	return len(cfg.Movies)
+}
+
 // Suggest calls the LLM to produce up to limit show recommendations.
 // Returns an empty slice (not an error) when the provider is unavailable,
 // the watchlist is empty, or no parseable suggestions are returned.
@@ -190,7 +207,7 @@ func (sg *Suggester) Suggest(ctx context.Context, limit int) ([]Suggestion, erro
 		return []Suggestion{}, nil
 	}
 	cfg := sg.matcher.ShowsConfig()
-	if cfg == nil || len(cfg.Shows) == 0 {
+	if cfg == nil || (len(cfg.Shows) == 0 && len(cfg.Movies) == 0) {
 		return []Suggestion{}, nil
 	}
 
@@ -198,7 +215,7 @@ func (sg *Suggester) Suggest(ctx context.Context, limit int) ([]Suggestion, erro
 	defer cancel()
 
 	// Build enriched watchlist block.
-	watchlistBlock := sg.buildWatchlistBlock(ctx, cfg.Shows)
+	watchlistBlock := sg.buildWatchlistBlock(ctx, cfg.Shows, cfg.Movies)
 
 	// Fetch recent approval history.
 	history, err := sg.store.GetActivity(60, 0, "approve")
@@ -211,8 +228,9 @@ func (sg *Suggester) Suggest(ctx context.Context, limit int) ([]Suggestion, erro
 	defaultQuality, defaultCodec, _ := sg.store.GetApprovalQualityProfile()
 
 	userPrompt := fmt.Sprintf(
-		"Current watchlist (%d shows):\n%s\nRecent approvals (taste signals):\n%s\nInferred quality preferences:\n- Quality: %s\n- Codec: %s\n\nPlease suggest up to %d shows I might want to add. Only suggest shows NOT in my current watchlist.",
+		"Current watchlist (%d shows, %d movies):\n%s\nRecent approvals (taste signals):\n%s\nInferred quality preferences:\n- Quality: %s\n- Codec: %s\n\nPlease suggest up to %d titles (shows or movies) I might want to add. Only suggest titles NOT in my current watchlist. Set content_type to \"show\" for TV series and \"movie\" for films.",
 		len(cfg.Shows),
+		len(cfg.Movies),
 		watchlistBlock,
 		historyBlock,
 		qualityStr(defaultQuality),
@@ -236,10 +254,13 @@ func (sg *Suggester) Suggest(ctx context.Context, limit int) ([]Suggestion, erro
 	// Deterministic deduplication: drop any suggestion that already exists in
 	// the watchlist. Small models regularly ignore the "never suggest existing
 	// shows" instruction regardless of prompt wording — this is a code-level
-	// guarantee that no watchlist show leaks through.
-	existing := make(map[string]bool, len(cfg.Shows))
+	// guarantee that no watchlist title leaks through.
+	existing := make(map[string]bool, len(cfg.Shows)+len(cfg.Movies))
 	for _, s := range cfg.Shows {
 		existing[normalizeName(s.Name)] = true
+	}
+	for _, m := range cfg.Movies {
+		existing[normalizeName(m.Name)] = true
 	}
 	filtered := suggestions[:0]
 	for _, s := range suggestions {
@@ -250,32 +271,35 @@ func (sg *Suggester) Suggest(ctx context.Context, limit int) ([]Suggestion, erro
 	suggestions = filtered
 
 	// Enrich each suggestion with provider metadata.
-	// Resolve() is cache-first; for new show names this triggers one provider
-	// fetch per suggestion — acceptable since this is a manual, infrequent action.
-	// Suggestions that fail to resolve are dropped entirely: a real show name
-	// will always resolve against TVMaze; hallucinated or malformed names (e.g.
-	// "Andor spin-off series, Ahsoka") won't — and we don't want them in results.
+	// Shows: drop if the provider can't resolve the name (a real show name will
+	// always resolve; hallucinated/mangled names won't).
+	// Movies: enrich when possible but never drop — TVMaze and other TV-focused
+	// providers will return nil for movie titles, which is expected.
 	if sg.metaLookup != nil {
 		validated := suggestions[:0]
 		for i := range suggestions {
-			if meta := sg.metaLookup.Resolve(ctx, suggestions[i].ShowName); meta != nil {
-				// Use the provider's canonical name so the LLM's possessive/mangled
-				// variants ("Luther's", "The Americans'") are corrected before display.
-				if meta.ShowName != "" {
-					suggestions[i].ShowName = meta.ShowName
-					suggestions[i].SuggestedRule.Name = meta.ShowName
-				}
-				suggestions[i].Meta = &SuggestionMeta{
-					ProviderURL:  meta.ProviderURL,
-					Genres:       meta.Genres,
-					Network:      meta.Network,
-					Status:       meta.Status,
-					PremiereYear: meta.PremiereYear,
-					Overview:     meta.Overview,
-					Cast:         meta.Cast,
-					Creators:     meta.Creators,
+			if suggestions[i].ContentType == models.ContentTypeMovie {
+				// Movie: best-effort enrichment, don't drop on miss.
+				if meta := sg.metaLookup.ResolveMovie(ctx, suggestions[i].ShowName); meta != nil {
+					if meta.ShowName != "" {
+						suggestions[i].ShowName = meta.ShowName
+						suggestions[i].SuggestedRule.Name = meta.ShowName
+					}
+					suggestions[i].Meta = metaToSuggestionMeta(meta)
 				}
 				validated = append(validated, suggestions[i])
+			} else {
+				// Show: drop if unresolvable (hallucination guard).
+				if meta := sg.metaLookup.Resolve(ctx, suggestions[i].ShowName); meta != nil {
+					// Use the provider's canonical name so the LLM's possessive/mangled
+					// variants ("Luther's", "The Americans'") are corrected before display.
+					if meta.ShowName != "" {
+						suggestions[i].ShowName = meta.ShowName
+						suggestions[i].SuggestedRule.Name = meta.ShowName
+					}
+					suggestions[i].Meta = metaToSuggestionMeta(meta)
+					validated = append(validated, suggestions[i])
+				}
 			}
 		}
 		suggestions = validated
@@ -284,8 +308,23 @@ func (sg *Suggester) Suggest(ctx context.Context, limit int) ([]Suggestion, erro
 	return suggestions, nil
 }
 
+// metaToSuggestionMeta converts a metadata.ShowMetadata to a SuggestionMeta.
+func metaToSuggestionMeta(meta *metadata.ShowMetadata) *SuggestionMeta {
+	return &SuggestionMeta{
+		ProviderURL:  meta.ProviderURL,
+		Genres:       meta.Genres,
+		Network:      meta.Network,
+		Status:       meta.Status,
+		PremiereYear: meta.PremiereYear,
+		Overview:     meta.Overview,
+		Cast:         meta.Cast,
+		Creators:     meta.Creators,
+	}
+}
+
 // buildWatchlistBlock creates the enriched watchlist text block for the prompt.
-func (sg *Suggester) buildWatchlistBlock(ctx context.Context, shows []models.ShowRule) string {
+// Shows are listed first, followed by a movies section when movies are present.
+func (sg *Suggester) buildWatchlistBlock(ctx context.Context, shows []models.ShowRule, movies []models.MovieRule) string {
 	var sb strings.Builder
 	for i, show := range shows {
 		sb.WriteString(fmt.Sprintf("%d. %s", i+1, show.Name))
@@ -317,6 +356,34 @@ func (sg *Suggester) buildWatchlistBlock(ctx context.Context, shows []models.Sho
 			}
 		}
 		sb.WriteString("\n")
+	}
+	// Append movies section.
+	if len(movies) > 0 {
+		sb.WriteString(fmt.Sprintf("\nMovies (%d):\n", len(movies)))
+		for i, movie := range movies {
+			sb.WriteString(fmt.Sprintf("%d. %s", i+1, movie.Name))
+			if sg.metaLookup != nil {
+				if meta := sg.metaLookup.ResolveMovie(ctx, movie.Name); meta != nil {
+					var parts []string
+					if len(meta.Genres) > 0 {
+						parts = append(parts, strings.Join(meta.Genres, "/"))
+					}
+					if meta.Network != "" {
+						parts = append(parts, meta.Network)
+					}
+					if len(meta.Creators) > 0 {
+						parts = append(parts, "dir. "+strings.Join(meta.Creators, " & "))
+					}
+					if len(meta.Cast) > 0 {
+						parts = append(parts, "starring "+strings.Join(meta.Cast, ", "))
+					}
+					if len(parts) > 0 {
+						sb.WriteString(" [" + strings.Join(parts, ", ") + "]")
+					}
+				}
+			}
+			sb.WriteString("\n")
+		}
 	}
 	return sb.String()
 }
@@ -402,9 +469,14 @@ func (sg *Suggester) parseResponse(raw, defaultQuality, defaultCodec string) ([]
 		}
 		quality := sanitizeQuality(s.Quality, defaultQuality)
 		codec := sanitizeCodec(s.Codec, defaultCodec)
+		ct := models.ContentTypeShow
+		if strings.ToLower(s.ContentType) == "movie" {
+			ct = models.ContentTypeMovie
+		}
 		out = append(out, Suggestion{
-			ShowName: s.ShowName,
-			Reason:   s.Reason,
+			ShowName:    s.ShowName,
+			Reason:      s.Reason,
+			ContentType: ct,
 			SuggestedRule: models.ShowRule{
 				Name:           s.ShowName,
 				MinQuality:     quality,
