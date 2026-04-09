@@ -8,6 +8,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.46.1] - 2026-04-09
+
+### Fixed
+- **Per-subsystem provider host bug** — when a subsystem overrides `CURATOR_AI_PROVIDER` (e.g. `CURATOR_AI_SUGGESTER_PROVIDER=anthropic`) but the global `CURATOR_AI_HOST` is set to an Ollama URL, the Ollama host was incorrectly forwarded to the cloud provider, causing `Available()` pings to hit `http://127.0.0.1:11434/v1/messages` instead of `https://api.anthropic.com`. `NewProviderFor` now skips the global `CURATOR_AI_HOST` fallback when the subsystem has its own provider override; the provider's built-in default host applies instead. A per-subsystem `CURATOR_AI_{SUBSYSTEM}_HOST` override is also now supported if an explicit host is needed.
+
 ## [0.46.0] - 2026-04-09
 
 ### Added

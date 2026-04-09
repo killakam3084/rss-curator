@@ -52,6 +52,14 @@ func NewProvider() Provider {
 //	CURATOR_AI_{SUBSYSTEM}_KEY       e.g. CURATOR_AI_SUGGESTER_KEY=sk-ant-...
 //	CURATOR_AI_KEY                   global key fallback
 //
+//	CURATOR_AI_{SUBSYSTEM}_HOST      e.g. CURATOR_AI_SUGGESTER_HOST=https://...
+//	CURATOR_AI_HOST                  global host fallback — only inherited when
+//	                                 the subsystem uses the same provider type
+//	                                 as the global default; when the subsystem
+//	                                 overrides the provider the global host is
+//	                                 skipped so an Ollama URL is never passed to
+//	                                 an Anthropic or OpenAI provider.
+//
 // Recognised subsystem names: "enricher", "scorer", "suggester".
 // Pass "" to use only the global settings.
 func NewProviderFor(subsystem string) Provider {
@@ -67,7 +75,23 @@ func NewProviderFor(subsystem string) Provider {
 		providerType = "ollama"
 	}
 
-	host := os.Getenv("CURATOR_AI_HOST")
+	// Resolve host: subsystem-specific first.
+	// The global CURATOR_AI_HOST is only inherited when no subsystem provider
+	// override is active — if the subsystem uses a different provider than the
+	// global one (e.g. suggester=anthropic, global=ollama) the global host
+	// belongs to the wrong provider and must not be forwarded.
+	host := ""
+	if subsystem != "" {
+		host = os.Getenv("CURATOR_AI_" + strings.ToUpper(subsystem) + "_HOST")
+	}
+	if host == "" {
+		// Inherit global host only when no per-subsystem provider override exists.
+		subsystemHasOwnProvider := subsystem != "" &&
+			os.Getenv("CURATOR_AI_"+strings.ToUpper(subsystem)+"_PROVIDER") != ""
+		if !subsystemHasOwnProvider {
+			host = os.Getenv("CURATOR_AI_HOST")
+		}
+	}
 
 	// Resolve API key: subsystem-specific > global.
 	key := ""
