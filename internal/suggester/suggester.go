@@ -66,11 +66,11 @@ type SuggestionMeta struct {
 
 // Suggestion is a single LLM-proposed title that the user might want to add.
 type Suggestion struct {
-	ShowName      string              `json:"show_name"`
-	Reason        string              `json:"reason"`
-	ContentType   models.ContentType  `json:"content_type"`
-	SuggestedRule models.ShowRule     `json:"suggested_rule"`
-	Meta          *SuggestionMeta     `json:"meta,omitempty"`
+	ShowName      string             `json:"show_name"`
+	Reason        string             `json:"reason"`
+	ContentType   models.ContentType `json:"content_type"`
+	SuggestedRule models.ShowRule    `json:"suggested_rule"`
+	Meta          *SuggestionMeta    `json:"meta,omitempty"`
 }
 
 // llmSuggestion is the raw JSON shape the LLM writes per suggestion.

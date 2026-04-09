@@ -8,6 +8,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.44.0] - 2026-04-08
+
+### Added
+- **Movie suggestions** — the AI suggester now recommends both TV shows and movies. Each suggestion carries a `content_type` field (`"show"` | `"movie"`); the LLM is asked to classify each result accordingly.
+- **TMDB provider** — full implementation of The Movie Database API v3 for metadata enrichment. Covers both TV (`/search/tv` + `/tv/{id}`) and movies (`/search/movie` + `/movie/{id}`). Set `CURATOR_META_PROVIDER=tmdb` and `CURATOR_META_KEY=<API Read Access Token>` to enable. Directors are mapped to the "creators" field; first production company to "network".
+- **`Lookup.ResolveMovie()`** — cache-first movie metadata resolution using a `"movie:"` key prefix so movie and TV records with identical names never collide. Uses an optional `FetchMovie` type-assertion so non-TMDB providers (TVMaze, etc.) remain untouched.
+- **`POST /api/suggestions/status`** now returns `movies_count` alongside `shows_count`, both surfaced in the suggestions panel header as "X shows · Y movies".
+- **Content-type badge** on each suggestion card: `movie` (indigo) or `show` (muted), placed next to the genre/network badges.
+- **Smart "+ add" routing** — clicking "+ add" on a movie suggestion appends it to `cfg.movies`; show suggestions go to `cfg.shows`. Both arrays are checked for duplicates before adding.
+
+### Changed
+- Metadata validation in the suggester: movie suggestions are enriched best-effort and **never dropped** on a provider miss (TVMaze returns nil for movies — expected). Show suggestions retain the existing drop-on-nil hallucination guard.
+- Suggestion watchlist prompt now includes a `Movies (N):` section with director/cast annotations when the watchlist contains movies.
+
 ## [0.43.0] - 2026-04-05
 
 ### Added
