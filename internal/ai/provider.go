@@ -40,22 +40,43 @@ func NewProvider() Provider {
 	return NewProviderFor("")
 }
 
-// NewProviderFor constructs a Provider for a named subsystem. It resolves the
-// model name by checking CURATOR_AI_{SUBSYSTEM}_MODEL first (e.g.
-// CURATOR_AI_SCORER_MODEL), then falling back to CURATOR_AI_MODEL, then the
-// provider's built-in default. All other settings (provider type, host, key)
-// are shared across subsystems.
+// NewProviderFor constructs a Provider for a named subsystem. Resolution order
+// for each setting is subsystem-specific > global > provider default:
+//
+//	CURATOR_AI_{SUBSYSTEM}_PROVIDER  e.g. CURATOR_AI_SUGGESTER_PROVIDER=anthropic
+//	CURATOR_AI_PROVIDER              global fallback (default: ollama)
+//
+//	CURATOR_AI_{SUBSYSTEM}_MODEL     e.g. CURATOR_AI_SCORER_MODEL=llama3.2
+//	CURATOR_AI_MODEL                 global model fallback
+//
+//	CURATOR_AI_{SUBSYSTEM}_KEY       e.g. CURATOR_AI_SUGGESTER_KEY=sk-ant-...
+//	CURATOR_AI_KEY                   global key fallback
 //
 // Recognised subsystem names: "enricher", "scorer", "suggester".
-// Pass "" to use only the global CURATOR_AI_MODEL fallback.
+// Pass "" to use only the global settings.
 func NewProviderFor(subsystem string) Provider {
-	providerType := os.Getenv("CURATOR_AI_PROVIDER")
+	// Resolve provider type: subsystem-specific > global > "ollama".
+	providerType := ""
+	if subsystem != "" {
+		providerType = os.Getenv("CURATOR_AI_" + strings.ToUpper(subsystem) + "_PROVIDER")
+	}
+	if providerType == "" {
+		providerType = os.Getenv("CURATOR_AI_PROVIDER")
+	}
 	if providerType == "" {
 		providerType = "ollama"
 	}
 
 	host := os.Getenv("CURATOR_AI_HOST")
-	key := os.Getenv("CURATOR_AI_KEY")
+
+	// Resolve API key: subsystem-specific > global.
+	key := ""
+	if subsystem != "" {
+		key = os.Getenv("CURATOR_AI_" + strings.ToUpper(subsystem) + "_KEY")
+	}
+	if key == "" {
+		key = os.Getenv("CURATOR_AI_KEY")
+	}
 
 	// Resolve model: subsystem-specific > global > provider default.
 	model := ""

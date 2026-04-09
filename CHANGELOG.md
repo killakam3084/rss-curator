@@ -8,6 +8,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.46.0] - 2026-04-09
+
+### Added
+- **Per-subsystem AI provider overrides** — `CURATOR_AI_{SUBSYSTEM}_PROVIDER`, `CURATOR_AI_{SUBSYSTEM}_KEY`, and `CURATOR_AI_{SUBSYSTEM}_MODEL` now each resolve subsystem-specific → global → default. Run Ollama locally for enrichment/scoring while routing the suggestion engine to Anthropic (or any other provider) with no global setting conflicts. Example: set `CURATOR_AI_SUGGESTER_PROVIDER=anthropic` and `CURATOR_AI_SUGGESTER_KEY=sk-ant-...` alongside `CURATOR_AI_PROVIDER=ollama`.
+
 ## [0.45.0] - 2026-04-09
 
 ### Added
