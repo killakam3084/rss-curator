@@ -2,6 +2,7 @@ package ops
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"time"
 
@@ -168,25 +169,26 @@ func RunRematch(ctx context.Context, opts RematchOptions, deps RematchDeps) (Rem
 		result.Updated = append(result.Updated, *refreshed)
 	}
 
-	summary := models.JobSummary{
-		ItemsFound:   len(opts.IDs),
-		ItemsMatched: result.Rematched,
-		ItemsScored:  result.Rescored,
+	summary := models.RematchSummary{
+		ItemsProcessed:     len(opts.IDs),
+		ItemsRematched:     result.Rematched,
+		ItemsNoLongerMatch: result.NoLongerMatches,
+		ItemsRescored:      result.Rescored,
 	}
 	now := time.Now()
+	summaryJSON, _ := json.Marshal(summary)
 	finalJob := models.JobRecord{
 		ID:          jobID,
 		Type:        "rematch",
 		StartedAt:   startedAt,
 		CompletedAt: &now,
-		Summary:     summary,
+		Summary:     summaryJSON,
 	}
 	if ctx.Err() != nil {
 		finalJob.Status = "cancelled"
 		_ = deps.Store.CancelJob(jobID, summary)
 	} else if lastErr != nil && len(result.Updated) == 0 {
 		finalJob.Status = "failed"
-		finalJob.Summary.ErrorMessage = lastErr.Error()
 		_ = deps.Store.FailJob(jobID, lastErr.Error())
 		if deps.LogBuffer != nil {
 			deps.LogBuffer.EmitAlertEvent(models.AlertRecord{

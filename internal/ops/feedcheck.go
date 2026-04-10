@@ -2,6 +2,7 @@ package ops
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
@@ -43,7 +44,7 @@ type FeedCheckDeps struct {
 // score with AI when available, stage new torrents, and backfill scores for
 // previously-unscored items. Job lifecycle and SSE fan-out are handled
 // internally.
-func RunFeedCheck(ctx context.Context, cfg FeedCheckConfig, deps FeedCheckDeps) (models.JobSummary, error) {
+func RunFeedCheck(ctx context.Context, cfg FeedCheckConfig, deps FeedCheckDeps) (models.FeedCheckSummary, error) {
 	log := deps.Logger
 	if log == nil {
 		log = zap.NewNop()
@@ -144,7 +145,7 @@ func RunFeedCheck(ctx context.Context, cfg FeedCheckConfig, deps FeedCheckDeps) 
 		}
 	}
 
-	summary := models.JobSummary{
+	summary := models.FeedCheckSummary{
 		ItemsFound:   totalFound,
 		ItemsMatched: totalMatched,
 		ItemsScored:  totalScored,
@@ -152,21 +153,21 @@ func RunFeedCheck(ctx context.Context, cfg FeedCheckConfig, deps FeedCheckDeps) 
 
 	if jobErr == nil {
 		completedAt := time.Now()
+		summaryJSON, _ := json.Marshal(summary)
 		finalJob := models.JobRecord{
 			ID:          jobID,
 			Type:        "feed_check",
 			StartedAt:   startedAt,
 			CompletedAt: &completedAt,
-			Summary:     summary,
+			Summary:     summaryJSON,
 		}
 		if ctx.Err() != nil {
 			// Context was cancelled — job interrupted; record partial work as cancelled.
 			finalJob.Status = "cancelled"
-			finalJob.Summary.ErrorMessage = "context cancelled"
+			summary.ErrorMessage = "context cancelled"
 			_ = deps.Store.CancelJob(jobID, summary)
 		} else if feedFailed {
 			finalJob.Status = "failed"
-			finalJob.Summary.ErrorMessage = "one or more feeds failed to parse"
 			_ = deps.Store.FailJob(jobID, "one or more feeds failed to parse")
 		} else {
 			finalJob.Status = "completed"
@@ -201,10 +202,9 @@ func RunFeedCheck(ctx context.Context, cfg FeedCheckConfig, deps FeedCheckDeps) 
 					}
 				}
 			}
-			summary.ItemsScored += backfilled
 			log.Info("rescore backfill complete", zap.Int("backfilled", backfilled))
 			if backfillJobErr == nil {
-				_ = deps.Store.CompleteJob(backfillJobID, models.JobSummary{ItemsScored: backfilled})
+				_ = deps.Store.CompleteJob(backfillJobID, models.RescoreBackfillSummary{ItemsScored: backfilled})
 			}
 		} else if backfillJobErr == nil {
 			_ = deps.Store.FailJob(backfillJobID, err.Error())

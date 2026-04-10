@@ -2,6 +2,7 @@ package ops
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"time"
 
@@ -96,21 +97,21 @@ func RunRescore(ctx context.Context, opts RescoreOptions, deps RescoreDeps) ([]m
 		updated = append(updated, r)
 	}
 
-	summary := models.JobSummary{ItemsScored: len(updated)}
+	summary := models.RescoreSummary{ItemsScored: len(updated)}
 	now := time.Now()
+	summaryJSON, _ := json.Marshal(summary)
 	finalJob := models.JobRecord{
 		ID:          jobID,
 		Type:        "rescore",
 		StartedAt:   startedAt,
 		CompletedAt: &now,
-		Summary:     summary,
+		Summary:     summaryJSON,
 	}
 	if ctx.Err() != nil {
 		finalJob.Status = "cancelled"
 		_ = deps.Store.CancelJob(jobID, summary)
 	} else if lastErr != nil && len(updated) == 0 {
 		finalJob.Status = "failed"
-		finalJob.Summary.ErrorMessage = lastErr.Error()
 		_ = deps.Store.FailJob(jobID, lastErr.Error())
 		if deps.LogBuffer != nil {
 			deps.LogBuffer.EmitAlertEvent(models.AlertRecord{

@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
@@ -269,10 +270,8 @@ func TestCompleteJob(t *testing.T) {
 	defer cleanupTestDB(store, tmpDir)
 
 	id, _ := store.CreateJob("rescore")
-	summary := models.JobSummary{
-		ItemsFound:   10,
-		ItemsMatched: 3,
-		ItemsScored:  3,
+	summary := models.RescoreSummary{
+		ItemsScored: 3,
 	}
 
 	if err := store.CompleteJob(id, summary); err != nil {
@@ -289,8 +288,12 @@ func TestCompleteJob(t *testing.T) {
 	if job.CompletedAt == nil {
 		t.Error("expected completed_at to be set")
 	}
-	if job.Summary.ItemsFound != 10 {
-		t.Errorf("expected items_found=10, got %d", job.Summary.ItemsFound)
+	var got models.RescoreSummary
+	if err := json.Unmarshal(job.Summary, &got); err != nil {
+		t.Fatalf("unmarshal summary: %v", err)
+	}
+	if got.ItemsScored != 3 {
+		t.Errorf("expected items_scored=3, got %d", got.ItemsScored)
 	}
 }
 
@@ -310,8 +313,12 @@ func TestFailJob(t *testing.T) {
 	if job.Status != "failed" {
 		t.Errorf("expected status 'failed', got %q", job.Status)
 	}
-	if job.Summary.ErrorMessage != "network timeout" {
-		t.Errorf("expected error_message 'network timeout', got %q", job.Summary.ErrorMessage)
+	var gotFail models.JobSummary
+	if err := json.Unmarshal(job.Summary, &gotFail); err != nil {
+		t.Fatalf("unmarshal summary: %v", err)
+	}
+	if gotFail.ErrorMessage != "network timeout" {
+		t.Errorf("expected error_message 'network timeout', got %q", gotFail.ErrorMessage)
 	}
 }
 
@@ -320,7 +327,7 @@ func TestCancelJob(t *testing.T) {
 	defer cleanupTestDB(store, tmpDir)
 
 	id, _ := store.CreateJob("rematch")
-	summary := models.JobSummary{ItemsFound: 100, ItemsMatched: 42, ItemsScored: 9}
+	summary := models.RematchSummary{ItemsProcessed: 100, ItemsRematched: 42, ItemsRescored: 9}
 	if err := store.CancelJob(id, summary); err != nil {
 		t.Fatalf("CancelJob: %v", err)
 	}
@@ -335,8 +342,12 @@ func TestCancelJob(t *testing.T) {
 	if job.CompletedAt == nil {
 		t.Error("expected completed_at to be set")
 	}
-	if job.Summary.ItemsMatched != 42 {
-		t.Errorf("expected items_matched=42, got %d", job.Summary.ItemsMatched)
+	var gotCancel models.RematchSummary
+	if err := json.Unmarshal(job.Summary, &gotCancel); err != nil {
+		t.Fatalf("unmarshal summary: %v", err)
+	}
+	if gotCancel.ItemsRematched != 42 {
+		t.Errorf("expected items_matched=42, got %d", gotCancel.ItemsRematched)
 	}
 }
 
@@ -349,8 +360,8 @@ func TestListJobs(t *testing.T) {
 	id2, _ := store.CreateJob("rescore")
 	id3, _ := store.CreateJob("feed_check")
 
-	_ = store.CompleteJob(id1, models.JobSummary{ItemsFound: 5})
-	_ = store.CompleteJob(id2, models.JobSummary{ItemsScored: 2})
+	_ = store.CompleteJob(id1, models.FeedCheckSummary{ItemsFound: 5})
+	_ = store.CompleteJob(id2, models.RescoreSummary{ItemsScored: 2})
 	_ = store.FailJob(id3, "timeout")
 
 	// Wait a tiny bit so timestamps don't collide
@@ -381,7 +392,7 @@ func TestListJobs(t *testing.T) {
 	}
 
 	id4, _ := store.CreateJob("rematch")
-	_ = store.CancelJob(id4, models.JobSummary{ItemsFound: 7, ItemsMatched: 3})
+	_ = store.CancelJob(id4, models.RematchSummary{ItemsProcessed: 7, ItemsRematched: 3})
 
 	cancelled, err := store.ListJobs(10, "cancelled")
 	if err != nil {

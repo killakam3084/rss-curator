@@ -2,6 +2,7 @@ package ops
 
 import (
 	"context"
+	"encoding/json"
 
 	"github.com/killakam3084/rss-curator/internal/ai"
 	"github.com/killakam3084/rss-curator/internal/logbuffer"
@@ -24,7 +25,7 @@ type RescoreBackfillDeps struct {
 // It is a no-op when the scorer is unavailable or when every item is already
 // scored, making it safe to run on a regular schedule as a persistent safety
 // net for items ingested while the AI provider was temporarily unavailable.
-func RunRescoreBackfill(ctx context.Context, deps RescoreBackfillDeps) (models.JobSummary, error) {
+func RunRescoreBackfill(ctx context.Context, deps RescoreBackfillDeps) (models.RescoreBackfillSummary, error) {
 	log := deps.Logger
 	if log == nil {
 		log = zap.NewNop()
@@ -32,7 +33,7 @@ func RunRescoreBackfill(ctx context.Context, deps RescoreBackfillDeps) (models.J
 
 	if deps.ScorerProv == nil || !deps.ScorerProv.Available() || deps.Scorer == nil {
 		log.Debug("rescore_backfill: scorer unavailable, skipping")
-		return models.JobSummary{}, nil
+		return models.RescoreBackfillSummary{}, nil
 	}
 
 	jobID, jobErr := deps.Store.CreateJob("rescore_backfill")
@@ -53,7 +54,7 @@ func RunRescoreBackfill(ctx context.Context, deps RescoreBackfillDeps) (models.J
 		if jobErr == nil {
 			_ = deps.Store.FailJob(jobID, err.Error())
 		}
-		return models.JobSummary{}, err
+		return models.RescoreBackfillSummary{}, err
 	}
 
 	history, _ := deps.Store.GetActivity(50, 0, "")
@@ -79,7 +80,7 @@ func RunRescoreBackfill(ctx context.Context, deps RescoreBackfillDeps) (models.J
 		}
 	}
 
-	summary := models.JobSummary{ItemsScored: backfilled}
+	summary := models.RescoreBackfillSummary{ItemsScored: backfilled}
 	log.Info("rescore_backfill complete", zap.Int("backfilled", backfilled))
 
 	if jobErr == nil {
@@ -89,11 +90,12 @@ func RunRescoreBackfill(ctx context.Context, deps RescoreBackfillDeps) (models.J
 			_ = deps.Store.CompleteJob(jobID, summary)
 		}
 		if deps.LogBuffer != nil {
+			summaryJSON, _ := json.Marshal(summary)
 			deps.LogBuffer.EmitJobEvent(models.JobRecord{
 				ID:      jobID,
 				Type:    "rescore_backfill",
 				Status:  "completed",
-				Summary: summary,
+				Summary: summaryJSON,
 			})
 		}
 	}

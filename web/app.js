@@ -851,7 +851,7 @@ const app = createApp({
                     if ((s.items_matched || 0) > 0) parts.push(`${s.items_matched} matched`);
                 } else if (job.type === 'rematch') {
                     if ((s.items_matched || 0) > 0) parts.push(`${s.items_matched} kept`);
-                    const dropped = (s.items_found || 0) - (s.items_matched || 0);
+                    const dropped = s.items_no_longer_match != null ? s.items_no_longer_match : (s.items_found || 0) - (s.items_matched || 0);
                     if (dropped > 0) parts.push(`${dropped} no longer`);
                 } else if ((s.items_scored || 0) > 0) {
                     parts.push(`${s.items_scored} scored`);
@@ -873,12 +873,13 @@ const app = createApp({
                 return (s.items_scored || 0) > 0 ? `${s.items_scored} scored` : 'up to date';
             }
             if (job.type === 'suggest_refresh') {
-                return 'cache refreshed';
+                const n = s.suggestions_generated;
+                return n != null ? `${n} suggestion${n === 1 ? '' : 's'} generated` : 'cache refreshed';
             }
             if (job.type === 'rematch') {
                 const parts = [];
                 const kept = s.items_matched || 0;
-                const dropped = (s.items_found || 0) - kept;
+                const dropped = s.items_no_longer_match != null ? s.items_no_longer_match : (s.items_found || 0) - kept;
                 if (kept > 0) parts.push(`${kept} kept`);
                 if (dropped > 0) parts.push(`${dropped} no longer`);
                 if ((s.items_scored || 0) > 0) parts.push(`${s.items_scored} scored`);

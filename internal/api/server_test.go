@@ -151,12 +151,13 @@ func (m *mockStorage) CreateJob(jobType string) (int, error) {
 	m.jobs[id] = &models.JobRecord{ID: id, Type: jobType, Status: "running", StartedAt: time.Now()}
 	return id, nil
 }
-func (m *mockStorage) CompleteJob(id int, summary models.JobSummary) error {
+func (m *mockStorage) CompleteJob(id int, summary any) error {
 	if j, ok := m.jobs[id]; ok {
 		now := time.Now()
 		j.Status = "completed"
 		j.CompletedAt = &now
-		j.Summary = summary
+		b, _ := json.Marshal(summary)
+		j.Summary = b
 	}
 	return nil
 }
@@ -165,16 +166,18 @@ func (m *mockStorage) FailJob(id int, errMsg string) error {
 		now := time.Now()
 		j.Status = "failed"
 		j.CompletedAt = &now
-		j.Summary = models.JobSummary{ErrorMessage: errMsg}
+		b, _ := json.Marshal(models.JobSummary{ErrorMessage: errMsg})
+		j.Summary = b
 	}
 	return nil
 }
-func (m *mockStorage) CancelJob(id int, summary models.JobSummary) error {
+func (m *mockStorage) CancelJob(id int, summary any) error {
 	if j, ok := m.jobs[id]; ok {
 		now := time.Now()
 		j.Status = "cancelled"
 		j.CompletedAt = &now
-		j.Summary = summary
+		b, _ := json.Marshal(summary)
+		j.Summary = b
 	}
 	return nil
 }

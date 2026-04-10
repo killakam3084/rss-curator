@@ -1,6 +1,9 @@
 package models
 
-import "time"
+import (
+	"encoding/json"
+	"time"
+)
 
 // ContentType identifies whether a feed item or rule is for a show or a movie.
 type ContentType string
@@ -138,13 +141,46 @@ type QBConfig struct {
 	AddPaused bool   `yaml:"add_paused"` // Add torrents in paused state
 }
 
-// JobSummary holds per-job outcome statistics, serialized as JSON into the jobs table.
+// JobSummary is used internally by FailJob / MarkStaleJobsFailed to store an
+// error message. Completed jobs use per-type summary structs (see below).
 type JobSummary struct {
+	ErrorMessage string `json:"error_message,omitempty"`
+}
+
+// FeedCheckSummary is the summary stored for "feed_check" jobs.
+type FeedCheckSummary struct {
 	ItemsFound   int    `json:"items_found"`
 	ItemsMatched int    `json:"items_matched"`
 	ItemsScored  int    `json:"items_scored"`
-	ItemsQueued  int    `json:"items_queued"`
 	ErrorMessage string `json:"error_message,omitempty"`
+}
+
+// RescoreSummary is the summary stored for "rescore" jobs.
+type RescoreSummary struct {
+	ItemsScored  int    `json:"items_scored"`
+	ErrorMessage string `json:"error_message,omitempty"`
+}
+
+// RescoreBackfillSummary is the summary stored for "rescore_backfill" jobs.
+type RescoreBackfillSummary struct {
+	ItemsScored  int    `json:"items_scored"`
+	ErrorMessage string `json:"error_message,omitempty"`
+}
+
+// RematchSummary is the summary stored for "rematch" jobs.
+// JSON field names are kept compatible with what the UI already reads.
+type RematchSummary struct {
+	ItemsProcessed     int    `json:"items_found"`           // total submitted
+	ItemsRematched     int    `json:"items_matched"`         // still match a rule
+	ItemsNoLongerMatch int    `json:"items_no_longer_match"` // transitioned to rejected
+	ItemsRescored      int    `json:"items_scored"`          // re-scored during rematch
+	ErrorMessage       string `json:"error_message,omitempty"`
+}
+
+// SuggestRefreshSummary is the summary stored for "suggest_refresh" jobs.
+type SuggestRefreshSummary struct {
+	SuggestionsGenerated int    `json:"suggestions_generated"`
+	ErrorMessage         string `json:"error_message,omitempty"`
 }
 
 // AlertRecord is an ephemeral in-memory notification emitted by the server for
@@ -170,13 +206,13 @@ type AlertRecord struct {
 
 // JobRecord represents a tracked background operation written to the jobs table.
 // Status values: "running", "completed", "failed", "cancelled".
-// Type values: "feed_check", "rescore_backfill", "rescore".
+// Type values: "feed_check", "rescore_backfill", "rescore", "rematch", "suggest_refresh".
 type JobRecord struct {
-	ID          int        `json:"id"`
-	Type        string     `json:"type"`
-	Status      string     `json:"status"`
-	Progress    string     `json:"progress,omitempty"` // human-readable mid-job status; only set on running events
-	StartedAt   time.Time  `json:"started_at"`
-	CompletedAt *time.Time `json:"completed_at,omitempty"`
-	Summary     JobSummary `json:"summary"`
+	ID          int             `json:"id"`
+	Type        string          `json:"type"`
+	Status      string          `json:"status"`
+	Progress    string          `json:"progress,omitempty"` // human-readable mid-job status; only set on running events
+	StartedAt   time.Time       `json:"started_at"`
+	CompletedAt *time.Time      `json:"completed_at,omitempty"`
+	Summary     json.RawMessage `json:"summary,omitempty"`
 }

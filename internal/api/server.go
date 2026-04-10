@@ -161,6 +161,15 @@ type RematchResponse struct {
 	Torrents        []TorrentResponse `json:"torrents"`
 }
 
+// mustMarshalJSON marshals v to json.RawMessage; returns null on error.
+func mustMarshalJSON(v any) json.RawMessage {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return json.RawMessage("null")
+	}
+	return b
+}
+
 func torrentToResponse(t models.StagedTorrent) TorrentResponse {
 	return TorrentResponse{
 		ID:                    t.ID,
@@ -1126,7 +1135,7 @@ func (s *Server) handleRescore(w http.ResponseWriter, r *http.Request) {
 						Status:      "failed",
 						StartedAt:   now,
 						CompletedAt: &failedAt,
-						Summary:     models.JobSummary{ErrorMessage: err.Error()},
+						Summary:     mustMarshalJSON(models.RescoreSummary{ErrorMessage: err.Error()}),
 					})
 				}
 				w.WriteHeader(http.StatusConflict)
@@ -1229,7 +1238,7 @@ func (s *Server) handleRematch(w http.ResponseWriter, r *http.Request) {
 						Status:      "failed",
 						StartedAt:   now,
 						CompletedAt: &failedAt,
-						Summary:     models.JobSummary{ErrorMessage: err.Error()},
+						Summary:     mustMarshalJSON(models.RematchSummary{ErrorMessage: err.Error()}),
 					})
 				}
 				w.WriteHeader(http.StatusConflict)
@@ -1583,7 +1592,7 @@ func (s *Server) handleSuggestionsRefresh(w http.ResponseWriter, r *http.Request
 
 	sg := s.suggester
 	err = s.queue.Submit("suggest_refresh", false, func(ctx context.Context) {
-		refreshErr := sg.RefreshCache(ctx)
+		generated, refreshErr := sg.RefreshCache(ctx)
 		if refreshErr != nil {
 			s.logger.Error("suggest_refresh job failed", zap.Error(refreshErr))
 			_ = s.store.FailJob(jobID, refreshErr.Error())
@@ -1592,17 +1601,19 @@ func (s *Server) handleSuggestionsRefresh(w http.ResponseWriter, r *http.Request
 				s.logBuffer.EmitJobEvent(models.JobRecord{
 					ID: jobID, Type: "suggest_refresh", Status: "failed",
 					StartedAt: now, CompletedAt: &failedAt,
-					Summary: models.JobSummary{ErrorMessage: refreshErr.Error()},
+					Summary: mustMarshalJSON(models.SuggestRefreshSummary{ErrorMessage: refreshErr.Error()}),
 				})
 			}
 			return
 		}
-		_ = s.store.CompleteJob(jobID, models.JobSummary{})
+		summary := models.SuggestRefreshSummary{SuggestionsGenerated: generated}
+		_ = s.store.CompleteJob(jobID, summary)
 		if s.logBuffer != nil {
 			completedAt := time.Now()
 			s.logBuffer.EmitJobEvent(models.JobRecord{
 				ID: jobID, Type: "suggest_refresh", Status: "completed",
 				StartedAt: now, CompletedAt: &completedAt,
+				Summary: mustMarshalJSON(summary),
 			})
 		}
 	})
@@ -1835,8 +1846,11 @@ func (s *Server) startAlertPoller() {
 			switch {
 			case j.Status == "failed":
 				msg := "Job failed: " + j.Type
-				if j.Summary.ErrorMessage != "" {
-					msg += " — " + j.Summary.ErrorMessage
+				var sum struct {
+					ErrorMessage string `json:"error_message"`
+				}
+				if json.Unmarshal(j.Summary, &sum) == nil && sum.ErrorMessage != "" {
+					msg += " — " + sum.ErrorMessage
 				}
 				s.logBuffer.EmitAlertEvent(models.AlertRecord{
 					Action:  "job_failed",
@@ -1851,8 +1865,12 @@ func (s *Server) startAlertPoller() {
 
 			case j.Status == "cancelled":
 				msg := j.Type + " cancelled"
-				if j.Summary.ItemsMatched > 0 {
-					msg += fmt.Sprintf(" (%d/%d processed)", j.Summary.ItemsMatched, j.Summary.ItemsFound)
+				var sum struct {
+					ItemsMatched int `json:"items_matched"`
+					ItemsFound   int `json:"items_found"`
+				}
+				if json.Unmarshal(j.Summary, &sum) == nil && sum.ItemsMatched > 0 {
+					msg += fmt.Sprintf(" (%d/%d processed)", sum.ItemsMatched, sum.ItemsFound)
 				}
 				s.logBuffer.EmitAlertEvent(models.AlertRecord{
 					Action:  "job_cancelled",
@@ -1865,22 +1883,31 @@ func (s *Server) startAlertPoller() {
 					}(),
 				})
 
-			case j.Status == "completed" && j.Type == "feed_check" && j.Summary.ItemsMatched > 0:
-				s.logBuffer.EmitAlertEvent(models.AlertRecord{
-					Action:  "staged",
-					Message: fmt.Sprintf("Feed check: %d new match(es) staged", j.Summary.ItemsMatched),
-					TriggeredAt: func() time.Time {
-						if j.CompletedAt != nil {
-							return *j.CompletedAt
-						}
-						return time.Now()
-					}(),
-				})
+			case j.Status == "completed" && j.Type == "feed_check":
+				var sum struct {
+					ItemsMatched int `json:"items_matched"`
+				}
+				if json.Unmarshal(j.Summary, &sum) == nil && sum.ItemsMatched > 0 {
+					s.logBuffer.EmitAlertEvent(models.AlertRecord{
+						Action:  "staged",
+						Message: fmt.Sprintf("Feed check: %d new match(es) staged", sum.ItemsMatched),
+						TriggeredAt: func() time.Time {
+							if j.CompletedAt != nil {
+								return *j.CompletedAt
+							}
+							return time.Now()
+						}(),
+					})
+				}
 
 			case j.Status == "completed" && (j.Type == "rematch" || j.Type == "rescore" || j.Type == "rescore_backfill"):
 				msg := j.Type + " completed"
-				if j.Summary.ItemsFound > 0 {
-					msg += fmt.Sprintf(" — %d/%d matched", j.Summary.ItemsMatched, j.Summary.ItemsFound)
+				var sum struct {
+					ItemsMatched int `json:"items_matched"`
+					ItemsFound   int `json:"items_found"`
+				}
+				if json.Unmarshal(j.Summary, &sum) == nil && sum.ItemsFound > 0 {
+					msg += fmt.Sprintf(" — %d/%d matched", sum.ItemsMatched, sum.ItemsFound)
 				}
 				s.logBuffer.EmitAlertEvent(models.AlertRecord{
 					Action:  "job_completed",

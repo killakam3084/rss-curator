@@ -151,16 +151,17 @@ func New(store storage.Store, provider ai.Provider, m *matcher.Matcher, lu *meta
 // store.MergeCachedSuggestions. New items are deduplicated against the current
 // pool so the pool accumulates across runs rather than resetting each time.
 // This is called by the background scheduler and the manual refresh endpoint.
-func (sg *Suggester) RefreshCache(ctx context.Context) error {
+// Returns the number of suggestions generated (before dedup/merge).
+func (sg *Suggester) RefreshCache(ctx context.Context) (int, error) {
 	suggestions, err := sg.Suggest(ctx, sg.cacheLimit)
 	if err != nil {
-		return fmt.Errorf("suggester: RefreshCache: %w", err)
+		return 0, fmt.Errorf("suggester: RefreshCache: %w", err)
 	}
 	data, err := json.Marshal(suggestions)
 	if err != nil {
-		return fmt.Errorf("suggester: RefreshCache marshal: %w", err)
+		return 0, fmt.Errorf("suggester: RefreshCache marshal: %w", err)
 	}
-	return sg.store.MergeCachedSuggestions(data, sg.cacheLimit)
+	return len(suggestions), sg.store.MergeCachedSuggestions(data, sg.cacheLimit)
 }
 
 // Available reports whether the underlying AI provider is reachable.

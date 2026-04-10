@@ -43,9 +43,9 @@ type Store interface {
 	UpdateAfterRematch(id int, item models.FeedItem, matchReason, status string) error
 	// Jobs
 	CreateJob(jobType string) (int, error)
-	CompleteJob(id int, summary models.JobSummary) error
+	CompleteJob(id int, summary any) error
 	FailJob(id int, errMsg string) error
-	CancelJob(id int, summary models.JobSummary) error
+	CancelJob(id int, summary any) error
 	ListJobs(limit int, statusFilter string) ([]models.JobRecord, error)
 	GetJob(id int) (*models.JobRecord, error)
 	// MarkStaleJobsFailed marks any job still in "running" status as "failed".
@@ -597,7 +597,7 @@ func (s *Storage) CreateJob(jobType string) (int, error) {
 }
 
 // CompleteJob marks a job as completed with summary statistics.
-func (s *Storage) CompleteJob(id int, summary models.JobSummary) error {
+func (s *Storage) CompleteJob(id int, summary any) error {
 	summaryJSON, err := json.Marshal(summary)
 	if err != nil {
 		return err
@@ -642,7 +642,7 @@ func (s *Storage) MarkStaleJobsFailed(reason string) (int64, error) {
 }
 
 // CancelJob marks a job as cancelled with partial summary statistics.
-func (s *Storage) CancelJob(id int, summary models.JobSummary) error {
+func (s *Storage) CancelJob(id int, summary any) error {
 	summaryJSON, err := json.Marshal(summary)
 	if err != nil {
 		return err

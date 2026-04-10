@@ -8,6 +8,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.47.0] - 2026-04-09
+
+### Added
+- **Per-type job summaries** — each job type now stores and reports its own meaningful fields instead of the feed-centric `JobSummary` shape that returned zeros for non-feed jobs:
+  - `feed_check`: `items_found`, `items_matched`, `items_scored`
+  - `rescore` / `rescore_backfill`: `items_scored`
+  - `rematch`: `items_found` (total processed), `items_matched` (kept), `items_no_longer_match` (transitioned to rejected), `items_scored`
+  - `suggest_refresh`: `suggestions_generated`
+- **`suggest_refresh` job summary in UI** — now shows "X suggestions generated" instead of the generic "cache refreshed".
+- **`RematchSummary.items_no_longer_match`** — explicit count of items that transitioned to rejected during a rematch, surfaced in the UI job summary line.
+
+### Changed
+- `Store.CompleteJob` and `Store.CancelJob` now accept `any` (marshalled to JSON internally), so per-type summary structs can be passed without changing the storage interface per new job type.
+- `JobRecord.Summary` is now `json.RawMessage` in the API response — clients receive the full typed summary for each job type.
+- `RefreshCache()` in the suggester now returns `(int, error)` where the int is the count of suggestions generated.
+
 ## [0.46.6] - 2026-04-09
 
 ### Added

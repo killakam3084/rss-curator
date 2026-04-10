@@ -793,11 +793,12 @@ func cmdServe(cfg models.Config, store *storage.Storage, buf *logbuffer.Buffer, 
 			if err != nil {
 				return
 			}
-			if err := sg.RefreshCache(ctx); err != nil {
+			generated, err := sg.RefreshCache(ctx)
+			if err != nil {
 				_ = store.FailJob(jobID, err.Error())
 				return
 			}
-			_ = store.CompleteJob(jobID, models.JobSummary{})
+			_ = store.CompleteJob(jobID, models.SuggestRefreshSummary{SuggestionsGenerated: generated})
 		},
 	})
 
