@@ -8,6 +8,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.46.6] - 2026-04-09
+
+### Added
+- **`CURATOR_AI_MAX_TOKENS` / `CURATOR_AI_{SUBSYSTEM}_MAX_TOKENS`** — configurable output token cap for Anthropic and OpenAI providers. Anthropic default is 4096 (raised from 2048); OpenAI defaults to the API's own limit. Set `CURATOR_AI_SUGGESTER_MAX_TOKENS=8192` if the suggester truncates with 25 items. Global `CURATOR_AI_MAX_TOKENS` applies to all cloud providers when no subsystem override is set.
+
+### Fixed
+- **Truncated suggester response now logs an actionable hint** — "unexpected end of JSON input" errors now include "(response appears truncated — increase max_tokens or reduce CURATOR_AI_SUGGESTER_CACHE_LIMIT)" when the raw response doesn't end with `]` or `}`.
+
 ## [0.46.5] - 2026-04-09
 
 ### Fixed

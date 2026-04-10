@@ -250,7 +250,15 @@ func (sg *Suggester) Suggest(ctx context.Context, limit int) ([]Suggestion, erro
 	if parseErr != nil {
 		// LLM returned unparseable output — treat as empty, not a hard error.
 		// The raw response is included so operators can diagnose prompt issues.
-		fmt.Printf("[Suggester] parse error (%v); raw response: %q\n", parseErr, raw)
+		hint := ""
+		trimmed := strings.TrimSpace(raw)
+		if len(trimmed) > 0 {
+			last := trimmed[len(trimmed)-1]
+			if last != ']' && last != '}' {
+				hint = " (response appears truncated — increase max_tokens or reduce CURATOR_AI_SUGGESTER_CACHE_LIMIT)"
+			}
+		}
+		fmt.Printf("[Suggester] parse error (%v)%s; raw response: %q\n", parseErr, hint, raw)
 		return []Suggestion{}, nil
 	}
 

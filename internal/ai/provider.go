@@ -166,12 +166,32 @@ func NewProviderFor(subsystem string) Provider {
 		if model == "" {
 			model = "claude-haiku-4-5-20251001"
 		}
+		// max_tokens: output token cap for cloud providers (anthropic, openai).
+		// Anthropic default 4096; OpenAI sends 0 (omitempty → API chooses).
+		// Override per-subsystem or globally via CURATOR_AI_{SUBSYSTEM}_MAX_TOKENS
+		// or CURATOR_AI_MAX_TOKENS.
+		maxTokens := 4096
+		if subsystem != "" {
+			if v := os.Getenv("CURATOR_AI_" + strings.ToUpper(subsystem) + "_MAX_TOKENS"); v != "" {
+				if n, err := strconv.Atoi(v); err == nil && n > 0 {
+					maxTokens = n
+				}
+			}
+		}
+		if maxTokens == 4096 {
+			if v := os.Getenv("CURATOR_AI_MAX_TOKENS"); v != "" {
+				if n, err := strconv.Atoi(v); err == nil && n > 0 {
+					maxTokens = n
+				}
+			}
+		}
 		return &anthropicProvider{
 			host:        host,
 			model:       model,
 			key:         key,
 			client:      &http.Client{},
 			temperature: temperature,
+			maxTokens:   maxTokens,
 		}
 	case "openai":
 		if host == "" {
@@ -180,12 +200,28 @@ func NewProviderFor(subsystem string) Provider {
 		if model == "" {
 			model = "gpt-4o-mini"
 		}
+		maxTokens := 0 // 0 → omitempty → API default
+		if subsystem != "" {
+			if v := os.Getenv("CURATOR_AI_" + strings.ToUpper(subsystem) + "_MAX_TOKENS"); v != "" {
+				if n, err := strconv.Atoi(v); err == nil && n > 0 {
+					maxTokens = n
+				}
+			}
+		}
+		if maxTokens == 0 {
+			if v := os.Getenv("CURATOR_AI_MAX_TOKENS"); v != "" {
+				if n, err := strconv.Atoi(v); err == nil && n > 0 {
+					maxTokens = n
+				}
+			}
+		}
 		return &openAIProvider{
 			host:        host,
 			model:       model,
 			key:         key,
 			client:      &http.Client{},
 			temperature: temperature,
+			maxTokens:   maxTokens,
 		}
 	case "disabled":
 		return &noopProvider{}
@@ -320,12 +356,14 @@ type openAIProvider struct {
 	key         string
 	client      *http.Client
 	temperature float64
+	maxTokens   int
 }
 
 type openAIRequest struct {
 	Model       string          `json:"model"`
 	Messages    []openAIMessage `json:"messages"`
 	Temperature float64         `json:"temperature"`
+	MaxTokens   int             `json:"max_tokens,omitempty"`
 }
 
 type openAIMessage struct {
@@ -350,6 +388,7 @@ func (o *openAIProvider) Complete(ctx context.Context, system, user string) (str
 			{Role: "user", Content: user},
 		},
 		Temperature: o.temperature,
+		MaxTokens:   o.maxTokens,
 	})
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, o.host+"/v1/chat/completions", bytes.NewReader(body))
@@ -408,6 +447,7 @@ type anthropicProvider struct {
 	key         string
 	client      *http.Client
 	temperature float64
+	maxTokens   int
 }
 
 // anthropicRequest matches the Anthropic Messages API v1 request shape.
@@ -441,7 +481,7 @@ const anthropicAPIVersion = "2023-06-01"
 func (a *anthropicProvider) Complete(ctx context.Context, system, user string) (string, error) {
 	body, _ := json.Marshal(anthropicRequest{
 		Model:       a.model,
-		MaxTokens:   2048,
+		MaxTokens:   a.maxTokens,
 		Temperature: a.temperature,
 		System:      system,
 		Messages: []anthropicMessage{
