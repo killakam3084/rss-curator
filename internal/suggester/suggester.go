@@ -330,6 +330,20 @@ func (sg *Suggester) Suggest(ctx context.Context, limit int) ([]Suggestion, erro
 		}
 		suggestions = validated
 		fmt.Printf("[Suggester] after metadata validation: %d suggestion(s) remain\n", len(suggestions))
+
+		// Second dedup pass: metadata enrichment may have canonicalised LLM names
+		// to exact watchlist names that the pre-enrichment pass missed. Re-run the
+		// same watchlist check so renamed titles never reach the cache.
+		postFiltered := suggestions[:0]
+		for _, s := range suggestions {
+			if !existing[normalizeName(s.ShowName)] {
+				postFiltered = append(postFiltered, s)
+			} else {
+				fmt.Printf("[Suggester] dedup (post-meta): dropping %q — canonical name matches watchlist\n", s.ShowName)
+			}
+		}
+		suggestions = postFiltered
+		fmt.Printf("[Suggester] after post-metadata dedup: %d suggestion(s) remain\n", len(suggestions))
 	}
 
 	return suggestions, nil
