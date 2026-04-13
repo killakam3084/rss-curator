@@ -1522,6 +1522,7 @@ func (s *Server) handleSuggestions(w http.ResponseWriter, r *http.Request) {
 	if suggestions == nil {
 		suggestions = []suggester.Suggestion{}
 	}
+	s.logger.Info("handleSuggestions: cache read", zap.Int("count", len(suggestions)), zap.Bool("generated_at_set", !generatedAt.IsZero()))
 
 	// Re-filter against the current watchlist in case shows or movies were added
 	// after the last refresh — cheap in-memory pass, no LLM involved.
@@ -1538,9 +1539,12 @@ func (s *Server) handleSuggestions(w http.ResponseWriter, r *http.Request) {
 			for _, sg := range suggestions {
 				if !existing[strings.ToLower(sg.ShowName)] {
 					filtered = append(filtered, sg)
+				} else {
+					s.logger.Info("handleSuggestions: live dedup drop", zap.String("show_name", sg.ShowName))
 				}
 			}
 			suggestions = filtered
+			s.logger.Info("handleSuggestions: after live watchlist dedup", zap.Int("count", len(suggestions)))
 		}
 	}
 

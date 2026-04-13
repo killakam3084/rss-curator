@@ -246,6 +246,11 @@ func (sg *Suggester) Suggest(ctx context.Context, limit int) ([]Suggestion, erro
 	if err != nil {
 		return nil, fmt.Errorf("suggester: LLM call failed: %w", err)
 	}
+	preview := raw
+	if len(preview) > 500 {
+		preview = preview[:500] + "...[truncated]"
+	}
+	fmt.Printf("[Suggester] LLM response: %d bytes; preview: %s\n", len(raw), preview)
 
 	suggestions, parseErr := sg.parseResponse(raw, defaultQuality, defaultCodec)
 	if parseErr != nil {
@@ -262,6 +267,7 @@ func (sg *Suggester) Suggest(ctx context.Context, limit int) ([]Suggestion, erro
 		fmt.Printf("[Suggester] parse error (%v)%s; raw response: %q\n", parseErr, hint, raw)
 		return []Suggestion{}, nil
 	}
+	fmt.Printf("[Suggester] parsed %d suggestion(s) from LLM\n", len(suggestions))
 
 	// Deterministic deduplication: drop any suggestion that already exists in
 	// the watchlist. Small models regularly ignore the "never suggest existing
@@ -278,9 +284,12 @@ func (sg *Suggester) Suggest(ctx context.Context, limit int) ([]Suggestion, erro
 	for _, s := range suggestions {
 		if !existing[normalizeName(s.ShowName)] {
 			filtered = append(filtered, s)
+		} else {
+			fmt.Printf("[Suggester] dedup: dropping %q — already in watchlist\n", s.ShowName)
 		}
 	}
 	suggestions = filtered
+	fmt.Printf("[Suggester] after watchlist dedup: %d suggestion(s) remain\n", len(suggestions))
 
 	// Enrich each suggestion with provider metadata.
 	// Shows: drop if the provider can't resolve the name (a real show name will
@@ -306,15 +315,21 @@ func (sg *Suggester) Suggest(ctx context.Context, limit int) ([]Suggestion, erro
 					// Use the provider's canonical name so the LLM's possessive/mangled
 					// variants ("Luther's", "The Americans'") are corrected before display.
 					if meta.ShowName != "" {
+						if meta.ShowName != suggestions[i].ShowName {
+							fmt.Printf("[Suggester] metadata: canonicalised %q → %q\n", suggestions[i].ShowName, meta.ShowName)
+						}
 						suggestions[i].ShowName = meta.ShowName
 						suggestions[i].SuggestedRule.Name = meta.ShowName
 					}
 					suggestions[i].Meta = metaToSuggestionMeta(meta)
 					validated = append(validated, suggestions[i])
+				} else {
+					fmt.Printf("[Suggester] metadata: dropping %q — unresolvable (hallucination guard)\n", suggestions[i].ShowName)
 				}
 			}
 		}
 		suggestions = validated
+		fmt.Printf("[Suggester] after metadata validation: %d suggestion(s) remain\n", len(suggestions))
 	}
 
 	return suggestions, nil
