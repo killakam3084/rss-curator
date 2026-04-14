@@ -22,6 +22,21 @@ type WindowStats struct {
 	Pending  int `json:"pending"`  // current staged_torrents with status='pending'
 }
 
+// SuggestionRow is one persistent suggestion record in the suggestions table.
+// It mirrors the shape of suggester.Suggestion but lives in the storage layer
+// to avoid an import cycle.
+type SuggestionRow struct {
+	ID          int             `json:"id"`
+	ShowName    string          `json:"show_name"`
+	ContentType string          `json:"content_type"`
+	Reason      string          `json:"reason"`
+	RuleJSON    json.RawMessage `json:"rule,omitempty"`
+	MetaJSON    json.RawMessage `json:"meta,omitempty"`
+	Status      string          `json:"status"` // active | dismissed
+	GeneratedAt time.Time       `json:"generated_at"`
+	DismissedAt *time.Time      `json:"dismissed_at,omitempty"`
+}
+
 // Store defines the interface for storage operations
 type Store interface {
 	Get(id int) (*models.StagedTorrent, error)
@@ -60,22 +75,27 @@ type Store interface {
 	// torrents exist yet.
 	GetApprovalQualityProfile() (quality, codec string, err error)
 
-	// GetCachedSuggestions returns the raw JSON blob and generation timestamp
-	// from the last successful suggest_refresh run. Returns nil data and a zero
-	// time when the cache is cold (no row yet).
-	GetCachedSuggestions() (data json.RawMessage, generatedAt time.Time, err error)
-	// SetCachedSuggestions stores a fresh JSON blob from a suggest_refresh run,
-	// replacing any previously cached data (single-row upsert).
-	SetCachedSuggestions(data json.RawMessage) error
-	// MergeCachedSuggestions appends new suggestions to the existing pool,
-	// deduplicating by normalized show name (existing items win). The combined
-	// slice is trimmed to cap entries before being persisted. generated_at is
-	// updated only when new items are actually added.
-	MergeCachedSuggestions(newData json.RawMessage, cap int) error
-	// DeleteCachedSuggestion removes a single suggestion from the cached pool
-	// by show name (case-insensitive, alphanumeric normalisation). The
-	// generated_at timestamp is preserved.
-	DeleteCachedSuggestion(showName string) error
+	// Suggestion row operations — replaces the old single-blob cache.
+	// Each suggestion is a persistent row; status controls visibility.
+	//
+	// UpsertSuggestions inserts new suggestions (deduplicating by show_name
+	// COLLATE NOCASE) and ignores rows that already exist in any status.
+	// Existing dismissed rows are intentionally preserved so refreshes cannot
+	// un-dismiss a previously dismissed suggestion.
+	UpsertSuggestions(suggestions []SuggestionRow) error
+	// ListSuggestions returns all active (status='active') suggestions ordered
+	// by generated_at DESC.
+	ListSuggestions() ([]SuggestionRow, error)
+	// DismissSuggestion transitions a suggestion to status='dismissed'.
+	// No-op when show_name is not found.
+	DismissSuggestion(showName string) error
+	// PruneSuggestions removes active suggestions whose show_name matches any
+	// entry in the provided watchlist set (case-insensitive). Called during
+	// suggest_refresh to evict stale entries added before a show joined the
+	// watchlist. Returns the number of rows deleted.
+	PruneSuggestions(watchlistNames []string) (int64, error)
+	// SuggestionCount returns the number of active suggestions.
+	SuggestionCount() (int, error)
 }
 
 // Storage handles persistent storage of staged torrents
@@ -195,6 +215,23 @@ func (s *Storage) migrate() error {
 		// column defaulted to 'show' even for movies. Rows whose match_reason begins
 		// with 'matches movie:' are authoritative movie matches.
 		`UPDATE staged_torrents SET content_type = 'movie' WHERE match_reason LIKE 'matches movie:%' AND content_type != 'movie'`,
+		// Migration 11: persistent suggestions table — replaces single-blob
+		// suggestion_cache. Each suggestion is a row with an explicit status so
+		// dismissed entries survive across refreshes and watchlist dedup is done
+		// at INSERT time via UNIQUE(show_name COLLATE NOCASE).
+		`CREATE TABLE IF NOT EXISTS suggestions (
+			id           INTEGER PRIMARY KEY AUTOINCREMENT,
+			show_name    TEXT NOT NULL,
+			content_type TEXT NOT NULL DEFAULT 'show',
+			reason       TEXT NOT NULL DEFAULT '',
+			rule_json    TEXT NOT NULL DEFAULT '{}',
+			meta_json    TEXT NOT NULL DEFAULT '{}',
+			status       TEXT NOT NULL DEFAULT 'active',
+			generated_at DATETIME NOT NULL,
+			dismissed_at DATETIME,
+			UNIQUE(show_name)
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_suggestions_status ON suggestions(status)`,
 	}
 
 	for _, migration := range migrations {
@@ -783,168 +820,111 @@ func (s *Storage) GetApprovalQualityProfile() (quality, codec string, err error)
 	return quality, codec, nil
 }
 
-// GetCachedSuggestions returns the raw suggestion JSON and its generation
-// timestamp. Returns nil + zero time (no error) when the cache is cold.
-func (s *Storage) GetCachedSuggestions() (json.RawMessage, time.Time, error) {
-	var raw string
-	var generatedAt time.Time
-	err := s.db.QueryRow(`SELECT suggestions_json, generated_at FROM suggestion_cache WHERE id = 1`).Scan(&raw, &generatedAt)
-	if err == sql.ErrNoRows {
-		return nil, time.Time{}, nil
-	}
+// UpsertSuggestions inserts new suggestion rows, ignoring conflicts on
+// show_name so existing rows (including dismissed ones) are never overwritten.
+func (s *Storage) UpsertSuggestions(suggestions []SuggestionRow) error {
+	tx, err := s.db.Begin()
 	if err != nil {
-		return nil, time.Time{}, err
+		return fmt.Errorf("UpsertSuggestions: begin tx: %w", err)
 	}
-	return json.RawMessage(raw), generatedAt, nil
+	defer tx.Rollback()
+
+	stmt, err := tx.Prepare(`
+		INSERT OR IGNORE INTO suggestions
+			(show_name, content_type, reason, rule_json, meta_json, status, generated_at)
+		VALUES (?, ?, ?, ?, ?, 'active', ?)
+	`)
+	if err != nil {
+		return fmt.Errorf("UpsertSuggestions: prepare: %w", err)
+	}
+	defer stmt.Close()
+
+	for _, sg := range suggestions {
+		ruleJSON := sg.RuleJSON
+		if ruleJSON == nil {
+			ruleJSON = json.RawMessage("{}")
+		}
+		metaJSON := sg.MetaJSON
+		if metaJSON == nil {
+			metaJSON = json.RawMessage("{}")
+		}
+		if _, err := stmt.Exec(sg.ShowName, sg.ContentType, sg.Reason, string(ruleJSON), string(metaJSON), sg.GeneratedAt); err != nil {
+			return fmt.Errorf("UpsertSuggestions: insert %q: %w", sg.ShowName, err)
+		}
+	}
+	return tx.Commit()
 }
 
-// SetCachedSuggestions upserts the suggestion JSON blob with the current
-// timestamp. Uses INSERT OR REPLACE so only one row ever exists.
-func (s *Storage) SetCachedSuggestions(data json.RawMessage) error {
+// ListSuggestions returns all active suggestions ordered by generated_at DESC.
+func (s *Storage) ListSuggestions() ([]SuggestionRow, error) {
+	rows, err := s.db.Query(`
+		SELECT id, show_name, content_type, reason, rule_json, meta_json, status, generated_at, dismissed_at
+		FROM suggestions
+		WHERE status = 'active'
+		ORDER BY generated_at DESC
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var result []SuggestionRow
+	for rows.Next() {
+		var sg SuggestionRow
+		var ruleJSON, metaJSON string
+		var dismissedAt sql.NullTime
+		if err := rows.Scan(&sg.ID, &sg.ShowName, &sg.ContentType, &sg.Reason, &ruleJSON, &metaJSON, &sg.Status, &sg.GeneratedAt, &dismissedAt); err != nil {
+			return nil, err
+		}
+		sg.RuleJSON = json.RawMessage(ruleJSON)
+		sg.MetaJSON = json.RawMessage(metaJSON)
+		if dismissedAt.Valid {
+			t := dismissedAt.Time
+			sg.DismissedAt = &t
+		}
+		result = append(result, sg)
+	}
+	return result, rows.Err()
+}
+
+// DismissSuggestion marks a suggestion as dismissed by show name (case-insensitive).
+func (s *Storage) DismissSuggestion(showName string) error {
+	now := time.Now().UTC()
 	_, err := s.db.Exec(
-		`INSERT OR REPLACE INTO suggestion_cache (id, suggestions_json, generated_at) VALUES (1, ?, ?)`,
-		string(data), time.Now().UTC(),
+		`UPDATE suggestions SET status='dismissed', dismissed_at=? WHERE show_name=? COLLATE NOCASE`,
+		now, showName,
 	)
 	return err
 }
 
-// normalizeSuggestName returns a lowercase alphanumeric-only key used to
-// deduplicate suggestion show names in the cache (mirrors suggester.normalizeName).
-func normalizeSuggestName(s string) string {
-	var b strings.Builder
-	for _, r := range strings.ToLower(s) {
-		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') {
-			b.WriteRune(r)
-		}
+// PruneSuggestions removes active suggestions whose show_name appears in the
+// provided watchlist set (case-insensitive). Returns the number of rows deleted.
+func (s *Storage) PruneSuggestions(watchlistNames []string) (int64, error) {
+	if len(watchlistNames) == 0 {
+		return 0, nil
 	}
-	return b.String()
+	// Build placeholders: DELETE WHERE show_name IN (?, ?, ...)
+	placeholders := strings.Repeat("?,", len(watchlistNames))
+	placeholders = placeholders[:len(placeholders)-1]
+	args := make([]any, len(watchlistNames))
+	for i, n := range watchlistNames {
+		args[i] = n
+	}
+	res, err := s.db.Exec(
+		`DELETE FROM suggestions WHERE status='active' AND lower(show_name) IN (`+strings.Repeat("?,", len(watchlistNames)-1)+`?)`,
+		args...,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return res.RowsAffected()
 }
 
-// MergeCachedSuggestions appends newData items to the existing suggestion pool,
-// deduplicating by normalized show name (existing items win their position).
-// The combined slice is trimmed to cap entries. generated_at is updated to now
-// only when at least one new item was actually appended.
-func (s *Storage) MergeCachedSuggestions(newData json.RawMessage, cap int) error {
-	// Read the current cache (nil = cold cache, use empty slice).
-	existingRaw, generatedAt, err := s.GetCachedSuggestions()
-	if err != nil {
-		return fmt.Errorf("MergeCachedSuggestions: read: %w", err)
-	}
-
-	// We operate on raw JSON objects to avoid an import cycle with the
-	// suggester package. Each item must have a "show_name" string field.
-	type minItem struct {
-		ShowName string `json:"show_name"`
-	}
-
-	var existing []json.RawMessage
-	if existingRaw != nil {
-		if err := json.Unmarshal(existingRaw, &existing); err != nil {
-			// Corrupt cache — start fresh.
-			existing = nil
-		}
-	}
-
-	var incoming []json.RawMessage
-	if err := json.Unmarshal(newData, &incoming); err != nil {
-		return fmt.Errorf("MergeCachedSuggestions: unmarshal new: %w", err)
-	}
-
-	// Build a set of normalized names already in the existing pool.
-	seen := make(map[string]bool, len(existing))
-	for _, raw := range existing {
-		var item minItem
-		if json.Unmarshal(raw, &item) == nil && item.ShowName != "" {
-			seen[normalizeSuggestName(item.ShowName)] = true
-		}
-	}
-
-	// Append new items not yet seen.
-	added := 0
-	for _, raw := range incoming {
-		var item minItem
-		if json.Unmarshal(raw, &item) != nil || item.ShowName == "" {
-			continue
-		}
-		key := normalizeSuggestName(item.ShowName)
-		if seen[key] {
-			continue
-		}
-		seen[key] = true
-		existing = append(existing, raw)
-		added++
-	}
-
-	// Enforce cap (oldest/existing items are kept; newest overflow trimmed).
-	if cap > 0 && len(existing) > cap {
-		existing = existing[:cap]
-	}
-
-	merged, err := json.Marshal(existing)
-	if err != nil {
-		return fmt.Errorf("MergeCachedSuggestions: marshal: %w", err)
-	}
-
-	// Only bump generated_at when we actually added something new.
-	newGeneratedAt := generatedAt
-	if added > 0 || generatedAt.IsZero() {
-		newGeneratedAt = time.Now().UTC()
-	}
-
-	_, err = s.db.Exec(
-		`INSERT OR REPLACE INTO suggestion_cache (id, suggestions_json, generated_at) VALUES (1, ?, ?)`,
-		string(merged), newGeneratedAt,
-	)
-	return err
-}
-
-// DeleteCachedSuggestion removes the suggestion with the given show name from
-// the cached pool (case-insensitive, alphanumeric normalisation). The
-// generated_at timestamp is preserved.
-func (s *Storage) DeleteCachedSuggestion(showName string) error {
-	existingRaw, generatedAt, err := s.GetCachedSuggestions()
-	if err != nil {
-		return fmt.Errorf("DeleteCachedSuggestion: read: %w", err)
-	}
-	if existingRaw == nil {
-		return nil // nothing to delete
-	}
-
-	type minItem struct {
-		ShowName string `json:"show_name"`
-	}
-
-	var items []json.RawMessage
-	if err := json.Unmarshal(existingRaw, &items); err != nil {
-		return fmt.Errorf("DeleteCachedSuggestion: unmarshal: %w", err)
-	}
-
-	target := normalizeSuggestName(showName)
-	filtered := items[:0]
-	for _, raw := range items {
-		var item minItem
-		if json.Unmarshal(raw, &item) == nil && normalizeSuggestName(item.ShowName) == target {
-			continue // drop this entry
-		}
-		filtered = append(filtered, raw)
-	}
-
-	if len(filtered) == len(items) {
-		return nil // nothing matched — no write needed
-	}
-
-	updated, err := json.Marshal(filtered)
-	if err != nil {
-		return fmt.Errorf("DeleteCachedSuggestion: marshal: %w", err)
-	}
-
-	// Preserve the existing generated_at — the cache content aged from the
-	// last refresh, not from this dismissal.
-	_, err = s.db.Exec(
-		`INSERT OR REPLACE INTO suggestion_cache (id, suggestions_json, generated_at) VALUES (1, ?, ?)`,
-		string(updated), generatedAt,
-	)
-	return err
+// SuggestionCount returns the number of active suggestions.
+func (s *Storage) SuggestionCount() (int, error) {
+	var n int
+	err := s.db.QueryRow(`SELECT COUNT(*) FROM suggestions WHERE status='active'`).Scan(&n)
+	return n, err
 }
 
 // GetWindowStats returns activity counts for a rolling window of the given hours,
