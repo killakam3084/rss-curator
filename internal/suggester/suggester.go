@@ -146,22 +146,63 @@ func New(store storage.Store, provider ai.Provider, m *matcher.Matcher, lu *meta
 	}
 }
 
-// RefreshCache runs Suggest with the configured cache limit, marshals the
-// results, and merges them into the existing suggestion pool via
-// store.MergeCachedSuggestions. New items are deduplicated against the current
-// pool so the pool accumulates across runs rather than resetting each time.
-// This is called by the background scheduler and the manual refresh endpoint.
-// Returns the number of suggestions generated (before dedup/merge).
+// RefreshCache runs Suggest with the configured cache limit, upserts each
+// result as a persistent row via store.UpsertSuggestions, then prunes any
+// active suggestion whose show_name now appears in the watchlist. Returns the
+// number of new suggestions submitted for upsert (before dedup at the DB level).
 func (sg *Suggester) RefreshCache(ctx context.Context) (int, error) {
 	suggestions, err := sg.Suggest(ctx, sg.cacheLimit)
 	if err != nil {
 		return 0, fmt.Errorf("suggester: RefreshCache: %w", err)
 	}
-	data, err := json.Marshal(suggestions)
-	if err != nil {
-		return 0, fmt.Errorf("suggester: RefreshCache marshal: %w", err)
+
+	now := time.Now().UTC()
+	rows := make([]storage.SuggestionRow, 0, len(suggestions))
+	for _, s := range suggestions {
+		ruleJSON, err := json.Marshal(s.SuggestedRule)
+		if err != nil {
+			return 0, fmt.Errorf("suggester: RefreshCache marshal rule: %w", err)
+		}
+		var metaJSON json.RawMessage
+		if s.Meta != nil {
+			metaJSON, err = json.Marshal(s.Meta)
+			if err != nil {
+				return 0, fmt.Errorf("suggester: RefreshCache marshal meta: %w", err)
+			}
+		}
+		rows = append(rows, storage.SuggestionRow{
+			ShowName:    s.ShowName,
+			ContentType: string(s.ContentType),
+			Reason:      s.Reason,
+			RuleJSON:    ruleJSON,
+			MetaJSON:    metaJSON,
+			GeneratedAt: now,
+		})
 	}
-	return len(suggestions), sg.store.MergeCachedSuggestions(data, sg.cacheLimit)
+
+	if err := sg.store.UpsertSuggestions(rows); err != nil {
+		return 0, fmt.Errorf("suggester: RefreshCache upsert: %w", err)
+	}
+
+	// Prune active suggestions that have since joined the watchlist.
+	if sg.matcher != nil {
+		if cfg := sg.matcher.ShowsConfig(); cfg != nil {
+			names := make([]string, 0, len(cfg.Shows)+len(cfg.Movies))
+			for _, show := range cfg.Shows {
+				names = append(names, strings.ToLower(show.Name))
+			}
+			for _, movie := range cfg.Movies {
+				names = append(names, strings.ToLower(movie.Name))
+			}
+			if pruned, err := sg.store.PruneSuggestions(names); err != nil {
+				fmt.Printf("[Suggester] RefreshCache: prune error: %v\n", err)
+			} else if pruned > 0 {
+				fmt.Printf("[Suggester] RefreshCache: pruned %d suggestion(s) now in watchlist\n", pruned)
+			}
+		}
+	}
+
+	return len(suggestions), nil
 }
 
 // Available reports whether the underlying AI provider is reachable.
