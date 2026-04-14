@@ -822,10 +822,10 @@ func cmdServe(cfg models.Config, store *storage.Storage, buf *logbuffer.Buffer, 
 
 	sched.Start()
 
-	// Cold-cache fill: if suggestions cache is empty and provider is available,
+	// Cold-cache fill: if suggestions table is empty and provider is available,
 	// trigger an immediate background refresh so the UI has results on first open.
 	if suggestProvider.Available() {
-		if raw, _, _ := store.GetCachedSuggestions(); raw == nil {
+		if n, _ := store.SuggestionCount(); n == 0 {
 			sched.RunNow("suggest_refresh")
 		}
 	}

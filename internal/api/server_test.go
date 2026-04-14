@@ -191,13 +191,12 @@ func (m *mockStorage) SetSetting(key, value string) error               { return
 func (m *mockStorage) GetAllSettings() (map[string]string, error) {
 	return map[string]string{}, nil
 }
-func (m *mockStorage) GetApprovalQualityProfile() (string, string, error) { return "", "", nil }
-func (m *mockStorage) GetCachedSuggestions() (json.RawMessage, time.Time, error) {
-	return nil, time.Time{}, nil
-}
-func (m *mockStorage) SetCachedSuggestions(data json.RawMessage) error               { return nil }
-func (m *mockStorage) MergeCachedSuggestions(newData json.RawMessage, cap int) error { return nil }
-func (m *mockStorage) DeleteCachedSuggestion(showName string) error                  { return nil }
+func (m *mockStorage) GetApprovalQualityProfile() (string, string, error)          { return "", "", nil }
+func (m *mockStorage) UpsertSuggestions(suggestions []storage.SuggestionRow) error { return nil }
+func (m *mockStorage) ListSuggestions() ([]storage.SuggestionRow, error)           { return nil, nil }
+func (m *mockStorage) DismissSuggestion(showName string) error                     { return nil }
+func (m *mockStorage) PruneSuggestions(watchlistNames []string) (int64, error)     { return 0, nil }
+func (m *mockStorage) SuggestionCount() (int, error)                               { return 0, nil }
 
 // setupTestServer creates a test server instance
 func setupTestServer(t *testing.T) (*Server, *mockStorage) {

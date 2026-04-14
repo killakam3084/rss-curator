@@ -192,18 +192,16 @@ func torrentToResponse(t models.StagedTorrent) TorrentResponse {
 
 // SuggestionsResponse is the shape returned by GET /api/suggestions.
 type SuggestionsResponse struct {
-	Suggestions []suggester.Suggestion `json:"suggestions"`
-	GeneratedAt *time.Time             `json:"generated_at,omitempty"`
-	Status      string                 `json:"status"`
+	Suggestions []storage.SuggestionRow `json:"suggestions"`
+	Status      string                  `json:"status"`
 }
 
 // SuggestionsStatusResponse is the shape returned by GET /api/suggestions/status.
 type SuggestionsStatusResponse struct {
-	Available     bool       `json:"available"`
-	ShowsCount    int        `json:"shows_count"`
-	MoviesCount   int        `json:"movies_count"`
-	CachedCount   int        `json:"cached_count"`
-	LastRefreshed *time.Time `json:"last_refreshed,omitempty"`
+	Available   bool `json:"available"`
+	ShowsCount  int  `json:"shows_count"`
+	MoviesCount int  `json:"movies_count"`
+	ActiveCount int  `json:"active_count"`
 }
 
 type SchedulerRunResponse struct {
@@ -1477,26 +1475,16 @@ func (s *Server) handleSuggestionsStatus(w http.ResponseWriter, r *http.Request)
 		showsCount = s.suggester.ShowsCount()
 		moviesCount = s.suggester.MoviesCount()
 	}
-	resp := SuggestionsStatusResponse{
+	activeCount, _ := s.store.SuggestionCount()
+	json.NewEncoder(w).Encode(SuggestionsStatusResponse{
 		Available:   available,
 		ShowsCount:  showsCount,
 		MoviesCount: moviesCount,
-	}
-	// Attach cache stats when available.
-	if raw, generatedAt, err := s.store.GetCachedSuggestions(); err == nil && raw != nil {
-		var cached []suggester.Suggestion
-		if json.Unmarshal(raw, &cached) == nil {
-			resp.CachedCount = len(cached)
-		}
-		t := generatedAt
-		resp.LastRefreshed = &t
-	}
-	json.NewEncoder(w).Encode(resp)
+		ActiveCount: activeCount,
+	})
 }
 
-// handleSuggestions returns cached watchlist recommendations. GET /api/suggestions.
-// Applies a live watchlist dedup pass so shows added since the last refresh
-// are silently excluded from results.
+// handleSuggestions returns persistent active suggestions. GET /api/suggestions.
 func (s *Server) handleSuggestions(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
@@ -1504,59 +1492,18 @@ func (s *Server) handleSuggestions(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", "application/json")
 
-	raw, generatedAt, err := s.store.GetCachedSuggestions()
+	suggestions, err := s.store.ListSuggestions()
 	if err != nil {
-		s.logger.Error("handleSuggestions: cache read failed", zap.Error(err))
+		s.logger.Error("handleSuggestions: list failed", zap.Error(err))
 		w.WriteHeader(http.StatusInternalServerError)
-		json.NewEncoder(w).Encode(SuggestionsResponse{Suggestions: []suggester.Suggestion{}, Status: "error"})
+		json.NewEncoder(w).Encode(SuggestionsResponse{Suggestions: []storage.SuggestionRow{}, Status: "error"})
 		return
 	}
-
-	var suggestions []suggester.Suggestion
-	if raw != nil {
-		if err := json.Unmarshal(raw, &suggestions); err != nil {
-			s.logger.Warn("handleSuggestions: corrupt cache, returning empty", zap.Error(err))
-			suggestions = nil
-		}
-	}
 	if suggestions == nil {
-		suggestions = []suggester.Suggestion{}
+		suggestions = []storage.SuggestionRow{}
 	}
-	s.logger.Info("handleSuggestions: cache read", zap.Int("count", len(suggestions)), zap.Bool("generated_at_set", !generatedAt.IsZero()))
-
-	// Re-filter against the current watchlist in case shows or movies were added
-	// after the last refresh — cheap in-memory pass, no LLM involved.
-	if s.matcher != nil {
-		if cfg := s.matcher.ShowsConfig(); cfg != nil {
-			existing := make(map[string]bool, len(cfg.Shows)+len(cfg.Movies))
-			for _, show := range cfg.Shows {
-				existing[strings.ToLower(show.Name)] = true
-			}
-			for _, movie := range cfg.Movies {
-				existing[strings.ToLower(movie.Name)] = true
-			}
-			filtered := suggestions[:0]
-			for _, sg := range suggestions {
-				if !existing[strings.ToLower(sg.ShowName)] {
-					filtered = append(filtered, sg)
-				} else {
-					s.logger.Info("handleSuggestions: live dedup drop", zap.String("show_name", sg.ShowName))
-				}
-			}
-			suggestions = filtered
-			s.logger.Info("handleSuggestions: after live watchlist dedup", zap.Int("count", len(suggestions)))
-		}
-	}
-
-	resp := SuggestionsResponse{
-		Suggestions: suggestions,
-		Status:      "ok",
-	}
-	if !generatedAt.IsZero() {
-		t := generatedAt
-		resp.GeneratedAt = &t
-	}
-	json.NewEncoder(w).Encode(resp)
+	s.logger.Info("handleSuggestions: listed", zap.Int("count", len(suggestions)))
+	json.NewEncoder(w).Encode(SuggestionsResponse{Suggestions: suggestions, Status: "ok"})
 }
 
 // handleSuggestionsRefresh submits a background suggestion refresh job to the
@@ -1634,7 +1581,7 @@ func (s *Server) handleSuggestionsRefresh(w http.ResponseWriter, r *http.Request
 	json.NewEncoder(w).Encode(JobAcceptedResponse{JobID: jobID, Status: "queued"})
 }
 
-// handleSuggestionsDismiss removes a single suggestion from the DB cache.
+// handleSuggestionsDismiss marks a single suggestion as dismissed.
 // POST /api/suggestions/dismiss — body: {"show_name": "..."}.
 func (s *Server) handleSuggestionsDismiss(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
@@ -1651,8 +1598,8 @@ func (s *Server) handleSuggestionsDismiss(w http.ResponseWriter, r *http.Request
 		json.NewEncoder(w).Encode(ErrorResponse{Error: "show_name is required"})
 		return
 	}
-	if err := s.store.DeleteCachedSuggestion(req.ShowName); err != nil {
-		s.logger.Error("handleSuggestionsDismiss: delete failed", zap.Error(err))
+	if err := s.store.DismissSuggestion(req.ShowName); err != nil {
+		s.logger.Error("handleSuggestionsDismiss: failed", zap.Error(err))
 		w.WriteHeader(http.StatusInternalServerError)
 		json.NewEncoder(w).Encode(ErrorResponse{Error: err.Error()})
 		return
