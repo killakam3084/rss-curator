@@ -1,31 +1,32 @@
-# Suggestions — GET /api/suggestions/status probe + POST /api/suggestions.
+# Suggestions — GET /api/suggestions/status probe + GET /api/suggestions.
 
-# GET status — always returns 200 with available bool and shows_count int.
+# GET status — always returns 200 with available bool, shows_count, and active_count.
 GET {{base}}/api/suggestions/status
 
 HTTP 200
 [Asserts]
 header "Content-Type" contains "application/json"
-jsonpath "$.available"    isBoolean
-jsonpath "$.shows_count"  isInteger
+jsonpath "$.available"     isBoolean
+jsonpath "$.shows_count"   isInteger
+jsonpath "$.movies_count"  isInteger
+jsonpath "$.active_count"  isInteger
 
 
-# POST — when AI is unavailable the service returns 503.
-# When AI is available and shows are configured it returns 200 with suggestions.
+# GET — returns 200 with a (possibly empty) suggestions array.
+# Each element has the persistent row shape written by store.UpsertSuggestions.
 # We can only assert the response shape here since CI has no live LLM.
-POST {{base}}/api/suggestions
-Content-Type: application/json
-```json
-{"limit": 3}
-```
+GET {{base}}/api/suggestions
 
+HTTP 200
 [Asserts]
 header "Content-Type" contains "application/json"
 jsonpath "$.status"       isString
 jsonpath "$.suggestions"  isCollection
 
 
-# POST — wrong method guard (GET not allowed).
-GET {{base}}/api/suggestions
+# POST — wrong method guard (only GET is allowed).
+POST {{base}}/api/suggestions
+Content-Type: application/json
+{}
 
 HTTP 405

@@ -8,6 +8,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.48.0] - 2026-04-14
+
+### Added
+- **Persistent suggestions table** — each suggestion is now a permanent row
+  (`status: active | dismissed`) rather than an entry in a single JSON blob.
+  Dismissed suggestions survive across refreshes; they cannot be re-suggested
+  because `INSERT OR IGNORE` on the `UNIQUE(show_name)` constraint silently
+  skips them.
+- **`PruneSuggestions`** — called after every `RefreshCache` to evict `active`
+  rows whose `show_name` now appears in the watchlist. Pruning is durable; the
+  blob model re-accumulated stale entries on every restart.
+
+### Changed
+- `GET /api/suggestions` response: `suggestions[]` elements are now typed
+  objects with `id`, `show_name`, `content_type`, `reason`, `rule`, `meta`,
+  `status`, and `generated_at` fields.
+- `GET /api/suggestions/status` replaces `cached_count` / `last_refreshed`
+  with `active_count` and adds `movies_count`.
+- `POST /api/suggestions/dismiss` sets `status='dismissed'` (persistent) rather
+  than deleting from a blob.
+- Cold-start refresh check in `main.go` uses `SuggestionCount() == 0` instead
+  of a nil blob check.
+
+### Fixed
+- **Suggestions always returning empty** — root cause was TVMaze canonicalising
+  LLM-returned names to exact watchlist spellings *after* the pre-enrichment
+  dedup pass. All suggestions then matched the live watchlist re-filter on every
+  GET and were dropped. The row model eliminates the re-filter entirely;
+  watchlist pruning is explicit and durable via `PruneSuggestions`.
+
 ## [0.47.0] - 2026-04-09
 
 ### Added
