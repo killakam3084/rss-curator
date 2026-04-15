@@ -332,7 +332,7 @@ const settingsApp = createApp({
                 suggestAvailable.value   = data.available ?? false;
                 suggestShowsCount.value  = data.shows_count  ?? null;
                 suggestMoviesCount.value = data.movies_count ?? 0;
-                if (data.last_refreshed) suggestGeneratedAt.value = data.last_refreshed;
+                // active_count is the new field; last_refreshed no longer exists.
             } catch (e) {
                 suggestAvailable.value = false;
             }
@@ -346,7 +346,8 @@ const settingsApp = createApp({
                 const data = await res.json();
                 if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
                 suggestions.value = data.suggestions || [];
-                if (data.generated_at) suggestGeneratedAt.value = data.generated_at;
+                // Derive generated_at from the most-recent row (rows are ordered DESC).
+                if (suggestions.value.length > 0) suggestGeneratedAt.value = suggestions.value[0].generated_at;
             } catch (err) {
                 suggestError.value = `could not load suggestions: ${err.message}`;
                 console.error('loadCachedSuggestions:', err);
@@ -456,18 +457,23 @@ const settingsApp = createApp({
             const isMovie = suggestion.content_type === 'movie';
             if (!Array.isArray(cfg.shows))  cfg.shows  = [];
             if (!Array.isArray(cfg.movies)) cfg.movies = [];
+            // Strip any null / empty-name entries left by prior bugs.
+            cfg.shows  = cfg.shows.filter(s  => s && s.name);
+            cfg.movies = cfg.movies.filter(m => m && m.name);
             // Check for duplicates in both arrays.
-            const alreadyInShows  = cfg.shows.some(s  => s.name.toLowerCase() === suggestion.show_name.toLowerCase());
-            const alreadyInMovies = cfg.movies.some(m => m.name.toLowerCase() === suggestion.show_name.toLowerCase());
+            const lcName = suggestion.show_name.toLowerCase();
+            const alreadyInShows  = cfg.shows.some(s  => s.name.toLowerCase() === lcName);
+            const alreadyInMovies = cfg.movies.some(m => m.name.toLowerCase() === lcName);
             if (alreadyInShows || alreadyInMovies) {
                 showToast(`"${suggestion.show_name}" is already in the watchlist`, 'error');
                 return;
             }
+            // suggestion.rule is the stored ShowRule/MovieRule object (from rule_json).
             if (isMovie) {
-                cfg.movies.push(suggestion.suggested_rule);
+                cfg.movies.push(suggestion.rule);
                 cfg.movies.sort((a, b) => a.name.localeCompare(b.name));
             } else {
-                cfg.shows.push(suggestion.suggested_rule);
+                cfg.shows.push(suggestion.rule);
                 cfg.shows.sort((a, b) => a.name.localeCompare(b.name));
             }
             showsCM.setValue(JSON.stringify(cfg, null, 2));
