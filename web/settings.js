@@ -24,13 +24,17 @@ const settingsApp = createApp({
         let   showsCM     = null;      // CodeMirror instance (created lazily)
 
         // ── Suggestions state ─────────────────────────────────────────
-        const suggestAvailable   = ref(false);        const suggestShowsCount  = ref(null);   // from /api/suggestions/status
-        const suggestMoviesCount = ref(0);        const suggestions        = ref([]);
+        const suggestAvailable   = ref(false);
+        const suggestShowsCount  = ref(null);   // from /api/suggestions/status
+        const suggestMoviesCount = ref(0);
+        const suggestions        = ref([]);
         const suggestsLoading    = ref(false);
         const suggestError       = ref('');
         const suggestGeneratedAt = ref(null);   // ISO string from cache
-        const suggestRefreshing  = ref(false);  // true while polling refresh job        const suggestActiveCount = ref(0);      // current active row count
-        const suggestActiveLimit = ref(0);      // cap configured on server (CURATOR_SUGGESTIONS_LIMIT)        const feedCheckRunning   = ref(false);  // true while polling on-demand feed-check job
+        const suggestRefreshing  = ref(false);  // true while polling refresh job
+        const suggestActiveCount = ref(0);      // current active row count
+        const suggestActiveLimit = ref(0);      // cap configured on server (CURATOR_SUGGESTIONS_LIMIT)
+        const feedCheckRunning   = ref(false);  // true while polling on-demand feed-check job
 
         // Flat form state mirroring AppSettings JSON shape
         const form = reactive({
