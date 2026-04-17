@@ -483,8 +483,14 @@ const settingsApp = createApp({
             }
             showsCM.setValue(JSON.stringify(cfg, null, 2));
             showsCM.refresh();
-            // Remove from suggestions list so the row disappears after add.
+            // Remove from suggestions list so the row disappears immediately,
+            // then persist via dismiss so it stays gone on the next fetch.
             suggestions.value = suggestions.value.filter(s => s.show_name !== suggestion.show_name);
+            fetch('/api/suggestions/dismiss', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ show_name: suggestion.show_name }),
+            }).catch(err => console.error('addSuggestion: dismiss failed', err));
             showToast(`added "${suggestion.show_name}" to ${isMovie ? 'movies' : 'shows'} — remember to save`, 'success');
         }
 
