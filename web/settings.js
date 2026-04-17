@@ -29,8 +29,8 @@ const settingsApp = createApp({
         const suggestsLoading    = ref(false);
         const suggestError       = ref('');
         const suggestGeneratedAt = ref(null);   // ISO string from cache
-        const suggestRefreshing  = ref(false);  // true while polling refresh job
-        const feedCheckRunning   = ref(false);  // true while polling on-demand feed-check job
+        const suggestRefreshing  = ref(false);  // true while polling refresh job        const suggestActiveCount = ref(0);      // current active row count
+        const suggestActiveLimit = ref(0);      // cap configured on server (CURATOR_SUGGESTIONS_LIMIT)        const feedCheckRunning   = ref(false);  // true while polling on-demand feed-check job
 
         // Flat form state mirroring AppSettings JSON shape
         const form = reactive({
@@ -332,7 +332,8 @@ const settingsApp = createApp({
                 suggestAvailable.value   = data.available ?? false;
                 suggestShowsCount.value  = data.shows_count  ?? null;
                 suggestMoviesCount.value = data.movies_count ?? 0;
-                // active_count is the new field; last_refreshed no longer exists.
+                suggestActiveCount.value = data.active_count ?? 0;
+                suggestActiveLimit.value = data.active_limit ?? 0;
             } catch (e) {
                 suggestAvailable.value = false;
             }
@@ -543,6 +544,8 @@ const settingsApp = createApp({
             suggestAvailable,
             suggestShowsCount,
             suggestMoviesCount,
+            suggestActiveCount,
+            suggestActiveLimit,
             suggestions,
             suggestsLoading,
             suggestError,

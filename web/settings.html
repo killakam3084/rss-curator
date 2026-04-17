@@ -329,6 +329,10 @@
                                 <span v-if="suggestShowsCount !== null" class="text-xs font-mono fg-dim">
                                     {{ suggestShowsCount }} show{{ suggestShowsCount !== 1 ? 's' : '' }}<template v-if="suggestMoviesCount > 0">&nbsp;&middot;&nbsp;{{ suggestMoviesCount }} movie{{ suggestMoviesCount !== 1 ? 's' : '' }}</template>
                                 </span>
+                                <span v-if="suggestActiveLimit > 0" class="text-xs font-mono"
+                                    :class="suggestActiveCount >= suggestActiveLimit ? 'text-yellow-500' : 'fg-dim'">
+                                    {{ suggestActiveCount }}/{{ suggestActiveLimit }} active
+                                </span>
                             </div>
                             <template v-if="suggestAvailable">
                                 <button
@@ -353,6 +357,12 @@
 
                         <!-- Error -->
                         <div v-if="suggestError" class="text-xs font-mono text-yellow-500">{{ suggestError }}</div>
+
+                        <!-- Cap-reached hint -->
+                        <div v-if="!suggestsLoading && !suggestRefreshing && suggestActiveLimit > 0 && suggestActiveCount >= suggestActiveLimit && !suggestError"
+                            class="text-xs font-mono fg-muted italic">
+                            Cap reached &mdash; add or dismiss suggestions to unlock the next batch.
+                        </div>
 
                         <!-- Cold-cache placeholder -->
                         <div v-if="!suggestsLoading && !suggestRefreshing && suggestions.length === 0 && !suggestError && suggestAvailable && !suggestGeneratedAt"

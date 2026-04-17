@@ -8,6 +8,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.49.0] - 2026-04-16
+
+### Added
+- **Active suggestion cap** (`CURATOR_SUGGESTIONS_LIMIT`, default 25) — `RefreshCache`
+  now skips the LLM call when the active row count is already at the cap. Uses
+  top-off semantics: when partially full it requests only as many suggestions as
+  needed to fill to the limit, rather than always requesting the full `cacheLimit`.
+  The `GET /api/suggestions/status` response now includes `active_limit` so the
+  UI can surface the cap to the user.
+- **Temporal dismissal** (`CURATOR_SUGGESTIONS_DISMISS_DAYS`, default 90) —
+  dismissed suggestions now store a `dismissed_until` timestamp. `RefreshCache`
+  calls `ReactivateExpiredDismissals()` at the start of every run, flipping
+  expired rows back to `active` so things you weren't interested in six months
+  ago can surface again. Set to `0` for permanent dismissals (legacy behaviour).
+- **`GET /api/suggestions/status`** returns `active_limit` alongside `active_count`.
+- **UI cap badge** — settings page AI suggestions panel now shows `N/limit active`;
+  turns amber and displays a "Cap reached" hint when the limit is met.
+
+### Changed
+- `DismissSuggestion` internal signature extended to accept an expiry time;
+  `dismissed_until = NULL` for rows dismissed before v0.49.0 (permanent, unchanged).
+- `SuggestionRow` JSON now includes `dismissed_until` when set.
+
 ## [0.48.0] - 2026-04-14
 
 ### Added
