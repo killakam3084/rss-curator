@@ -334,6 +334,7 @@ const app = createApp({
                 });
                 if (response.ok) {
                     showToast('Queued for download!', 'success');
+                    selectedIds.value.delete(torrentId);
                     closeReviewModal();
                     await fetchAllTorrents();
                     await fetchActivities();
