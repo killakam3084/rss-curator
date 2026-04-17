@@ -95,12 +95,13 @@ type llmResponse struct {
 //   - Recent approval history (recency/depth signals)
 //   - Inferred quality/codec defaults from historical approvals
 type Suggester struct {
-	store      storage.Store
-	provider   ai.Provider
-	matcher    *matcher.Matcher
-	metaLookup *metadata.Lookup
-	timeoutSec int
-	cacheLimit int // how many suggestions to generate in background refresh
+	store       storage.Store
+	provider    ai.Provider
+	matcher     *matcher.Matcher
+	metaLookup  *metadata.Lookup
+	timeoutSec  int
+	cacheLimit  int // max suggestions to request from LLM per refresh
+	activeLimit int // max active suggestions to hold in DB at once
 }
 
 // New creates a Suggester. All fields are required; nil values are tolerated
@@ -136,13 +137,24 @@ func New(store storage.Store, provider ai.Provider, m *matcher.Matcher, lu *meta
 		}
 	}
 
+	// activeLimit: CURATOR_SUGGESTIONS_LIMIT (default 25).
+	// RefreshCache will not request new suggestions from the LLM when the DB
+	// already holds this many active rows. Dismissed rows do not count.
+	activeLimit := 25
+	if v := os.Getenv("CURATOR_SUGGESTIONS_LIMIT"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			activeLimit = n
+		}
+	}
+
 	return &Suggester{
-		store:      store,
-		provider:   provider,
-		matcher:    m,
-		metaLookup: lu,
-		timeoutSec: timeout,
-		cacheLimit: cacheLimit,
+		store:       store,
+		provider:    provider,
+		matcher:     m,
+		metaLookup:  lu,
+		timeoutSec:  timeout,
+		cacheLimit:  cacheLimit,
+		activeLimit: activeLimit,
 	}
 }
 
@@ -150,8 +162,35 @@ func New(store storage.Store, provider ai.Provider, m *matcher.Matcher, lu *meta
 // result as a persistent row via store.UpsertSuggestions, then prunes any
 // active suggestion whose show_name now appears in the watchlist. Returns the
 // number of new suggestions submitted for upsert (before dedup at the DB level).
+//
+// Before querying the LLM, RefreshCache:
+//  1. Reactivates any dismissed suggestions whose dismissed_until is now past.
+//  2. Checks the current active count against activeLimit; skips the LLM call
+//     when the cap is already met (top-off semantics).
 func (sg *Suggester) RefreshCache(ctx context.Context) (int, error) {
-	suggestions, err := sg.Suggest(ctx, sg.cacheLimit)
+	// Step 1: reactivate any temporally-dismissed suggestions that have expired.
+	if reactivated, err := sg.store.ReactivateExpiredDismissals(); err != nil {
+		fmt.Printf("[Suggester] RefreshCache: reactivate error: %v\n", err)
+	} else if reactivated > 0 {
+		fmt.Printf("[Suggester] RefreshCache: reactivated %d expired dismissal(s)\n", reactivated)
+	}
+
+	// Step 2: cap check — top off to activeLimit rather than always requesting cacheLimit.
+	current, err := sg.store.SuggestionCount()
+	if err != nil {
+		return 0, fmt.Errorf("suggester: RefreshCache count: %w", err)
+	}
+	remaining := sg.activeLimit - current
+	if remaining <= 0 {
+		fmt.Printf("[Suggester] RefreshCache: active cap reached (%d/%d), skipping LLM call\n", current, sg.activeLimit)
+		return 0, nil
+	}
+	limit := sg.cacheLimit
+	if remaining < limit {
+		limit = remaining
+	}
+
+	suggestions, err := sg.Suggest(ctx, limit)
 	if err != nil {
 		return 0, fmt.Errorf("suggester: RefreshCache: %w", err)
 	}
@@ -204,6 +243,9 @@ func (sg *Suggester) RefreshCache(ctx context.Context) (int, error) {
 
 	return len(suggestions), nil
 }
+
+// ActiveLimit returns the maximum number of active suggestions stored at once.
+func (sg *Suggester) ActiveLimit() int { return sg.activeLimit }
 
 // Available reports whether the underlying AI provider is reachable.
 func (sg *Suggester) Available() bool {

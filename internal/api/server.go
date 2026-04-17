@@ -60,6 +60,7 @@ type Server struct {
 	settingsMgr      *settings.Manager    // may be nil
 	showsPath        string               // path to shows.json on disk; defaults to "shows.json"
 	suggester        *suggester.Suggester // may be nil if AI is disabled
+	dismissDays      int                  // days until a dismissed suggestion becomes eligible again (0 = permanent)
 	feedCheckCfg     ops.FeedCheckConfig
 	feedCheckDeps    ops.FeedCheckDeps
 	httpSrv          *http.Server
@@ -202,6 +203,7 @@ type SuggestionsStatusResponse struct {
 	ShowsCount  int  `json:"shows_count"`
 	MoviesCount int  `json:"movies_count"`
 	ActiveCount int  `json:"active_count"`
+	ActiveLimit int  `json:"active_limit"`
 }
 
 type SchedulerRunResponse struct {
@@ -278,7 +280,21 @@ func NewServer(store storage.Store, client *client.Client, port int, buf *logbuf
 		sessionTTL:       auth.SessionTTL,
 		jobCancels:       make(map[int]*jobCancelState),
 		progressInterval: 5, // default: emit every 5 items
+		dismissDays:      dismissDays(),
 	}
+}
+
+// dismissDays reads CURATOR_SUGGESTIONS_DISMISS_DAYS (default 90).
+func dismissDays() int {
+	const def = 90
+	v := os.Getenv("CURATOR_SUGGESTIONS_DISMISS_DAYS")
+	if v == "" {
+		return def
+	}
+	if n, err := strconv.Atoi(v); err == nil && n > 0 {
+		return n
+	}
+	return def
 }
 
 // WithScheduler attaches a Scheduler to the server, enabling the
@@ -1476,11 +1492,16 @@ func (s *Server) handleSuggestionsStatus(w http.ResponseWriter, r *http.Request)
 		moviesCount = s.suggester.MoviesCount()
 	}
 	activeCount, _ := s.store.SuggestionCount()
+	activeLimit := 0
+	if s.suggester != nil {
+		activeLimit = s.suggester.ActiveLimit()
+	}
 	json.NewEncoder(w).Encode(SuggestionsStatusResponse{
 		Available:   available,
 		ShowsCount:  showsCount,
 		MoviesCount: moviesCount,
 		ActiveCount: activeCount,
+		ActiveLimit: activeLimit,
 	})
 }
 
@@ -1598,7 +1619,11 @@ func (s *Server) handleSuggestionsDismiss(w http.ResponseWriter, r *http.Request
 		json.NewEncoder(w).Encode(ErrorResponse{Error: "show_name is required"})
 		return
 	}
-	if err := s.store.DismissSuggestion(req.ShowName); err != nil {
+	var until time.Time
+	if s.dismissDays > 0 {
+		until = time.Now().UTC().Add(time.Duration(s.dismissDays) * 24 * time.Hour)
+	}
+	if err := s.store.DismissSuggestion(req.ShowName, until); err != nil {
 		s.logger.Error("handleSuggestionsDismiss: failed", zap.Error(err))
 		w.WriteHeader(http.StatusInternalServerError)
 		json.NewEncoder(w).Encode(ErrorResponse{Error: err.Error()})

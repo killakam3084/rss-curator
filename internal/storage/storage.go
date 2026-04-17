@@ -26,15 +26,16 @@ type WindowStats struct {
 // It mirrors the shape of suggester.Suggestion but lives in the storage layer
 // to avoid an import cycle.
 type SuggestionRow struct {
-	ID          int             `json:"id"`
-	ShowName    string          `json:"show_name"`
-	ContentType string          `json:"content_type"`
-	Reason      string          `json:"reason"`
-	RuleJSON    json.RawMessage `json:"rule,omitempty"`
-	MetaJSON    json.RawMessage `json:"meta,omitempty"`
-	Status      string          `json:"status"` // active | dismissed
-	GeneratedAt time.Time       `json:"generated_at"`
-	DismissedAt *time.Time      `json:"dismissed_at,omitempty"`
+	ID             int             `json:"id"`
+	ShowName       string          `json:"show_name"`
+	ContentType    string          `json:"content_type"`
+	Reason         string          `json:"reason"`
+	RuleJSON       json.RawMessage `json:"rule,omitempty"`
+	MetaJSON       json.RawMessage `json:"meta,omitempty"`
+	Status         string          `json:"status"` // active | dismissed
+	GeneratedAt    time.Time       `json:"generated_at"`
+	DismissedAt    *time.Time      `json:"dismissed_at,omitempty"`
+	DismissedUntil *time.Time      `json:"dismissed_until,omitempty"`
 }
 
 // Store defines the interface for storage operations
@@ -86,9 +87,13 @@ type Store interface {
 	// ListSuggestions returns all active (status='active') suggestions ordered
 	// by generated_at DESC.
 	ListSuggestions() ([]SuggestionRow, error)
-	// DismissSuggestion transitions a suggestion to status='dismissed'.
+	// DismissSuggestion transitions a suggestion to status='dismissed' with an
+	// optional reactivation time. Pass a zero time.Time for a permanent dismiss.
 	// No-op when show_name is not found.
-	DismissSuggestion(showName string) error
+	DismissSuggestion(showName string, until time.Time) error
+	// ReactivateExpiredDismissals flips dismissed suggestions back to active
+	// when their dismissed_until timestamp is in the past. Returns the count.
+	ReactivateExpiredDismissals() (int64, error)
 	// PruneSuggestions removes active suggestions whose show_name matches any
 	// entry in the provided watchlist set (case-insensitive). Called during
 	// suggest_refresh to evict stale entries added before a show joined the
@@ -232,6 +237,10 @@ func (s *Storage) migrate() error {
 			UNIQUE(show_name)
 		)`,
 		`CREATE INDEX IF NOT EXISTS idx_suggestions_status ON suggestions(status)`,
+		// Migration 12: temporal dismissal — dismissed_until allows a dismissed
+		// suggestion to become active again after a configurable period. NULL means
+		// the dismissal is permanent (backward-compatible with v0.48.x rows).
+		`ALTER TABLE suggestions ADD COLUMN dismissed_until DATETIME`,
 	}
 
 	for _, migration := range migrations {
@@ -858,7 +867,7 @@ func (s *Storage) UpsertSuggestions(suggestions []SuggestionRow) error {
 // ListSuggestions returns all active suggestions ordered by generated_at DESC.
 func (s *Storage) ListSuggestions() ([]SuggestionRow, error) {
 	rows, err := s.db.Query(`
-		SELECT id, show_name, content_type, reason, rule_json, meta_json, status, generated_at, dismissed_at
+		SELECT id, show_name, content_type, reason, rule_json, meta_json, status, generated_at, dismissed_at, dismissed_until
 		FROM suggestions
 		WHERE status = 'active'
 		ORDER BY generated_at DESC
@@ -872,8 +881,8 @@ func (s *Storage) ListSuggestions() ([]SuggestionRow, error) {
 	for rows.Next() {
 		var sg SuggestionRow
 		var ruleJSON, metaJSON string
-		var dismissedAt sql.NullTime
-		if err := rows.Scan(&sg.ID, &sg.ShowName, &sg.ContentType, &sg.Reason, &ruleJSON, &metaJSON, &sg.Status, &sg.GeneratedAt, &dismissedAt); err != nil {
+		var dismissedAt, dismissedUntil sql.NullTime
+		if err := rows.Scan(&sg.ID, &sg.ShowName, &sg.ContentType, &sg.Reason, &ruleJSON, &metaJSON, &sg.Status, &sg.GeneratedAt, &dismissedAt, &dismissedUntil); err != nil {
 			return nil, err
 		}
 		sg.RuleJSON = json.RawMessage(ruleJSON)
@@ -882,19 +891,47 @@ func (s *Storage) ListSuggestions() ([]SuggestionRow, error) {
 			t := dismissedAt.Time
 			sg.DismissedAt = &t
 		}
+		if dismissedUntil.Valid {
+			t := dismissedUntil.Time
+			sg.DismissedUntil = &t
+		}
 		result = append(result, sg)
 	}
 	return result, rows.Err()
 }
 
 // DismissSuggestion marks a suggestion as dismissed by show name (case-insensitive).
-func (s *Storage) DismissSuggestion(showName string) error {
+// When until is non-zero it is stored as dismissed_until so the suggestion can
+// be reactivated automatically by ReactivateExpiredDismissals. A zero until
+// means the dismissal is permanent (dismissed_until = NULL).
+func (s *Storage) DismissSuggestion(showName string, until time.Time) error {
 	now := time.Now().UTC()
+	var untilArg any
+	if !until.IsZero() {
+		untilArg = until.UTC()
+	}
 	_, err := s.db.Exec(
-		`UPDATE suggestions SET status='dismissed', dismissed_at=? WHERE show_name=? COLLATE NOCASE`,
-		now, showName,
+		`UPDATE suggestions SET status='dismissed', dismissed_at=?, dismissed_until=? WHERE show_name=? COLLATE NOCASE`,
+		now, untilArg, showName,
 	)
 	return err
+}
+
+// ReactivateExpiredDismissals flips dismissed suggestions whose dismissed_until
+// is in the past back to active so they can appear in future refreshes.
+func (s *Storage) ReactivateExpiredDismissals() (int64, error) {
+	res, err := s.db.Exec(
+		`UPDATE suggestions
+		 SET status='active', dismissed_at=NULL, dismissed_until=NULL
+		 WHERE status='dismissed'
+		   AND dismissed_until IS NOT NULL
+		   AND dismissed_until < ?`,
+		time.Now().UTC(),
+	)
+	if err != nil {
+		return 0, err
+	}
+	return res.RowsAffected()
 }
 
 // PruneSuggestions removes active suggestions whose show_name appears in the
