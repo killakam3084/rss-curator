@@ -8,6 +8,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/killakam3084/rss-curator/internal/metadata"
@@ -59,6 +60,7 @@ type Scorer struct {
 	lookup      *metadata.Lookup // optional; nil disables metadata enrichment
 	historySize int              // number of activity entries to sample into the prompt context
 	timeoutSecs int              // per-request LLM timeout; read from CURATOR_AI_TIMEOUT_SECS
+	concurrency int              // max parallel LLM calls; read from CURATOR_AI_SCORER_CONCURRENCY
 	logger      *zap.Logger      // may be nil; set via SetLogger after construction
 }
 
@@ -103,7 +105,13 @@ func NewScorer(p Provider, lookup *metadata.Lookup) *Scorer {
 			timeout = n
 		}
 	}
-	s := &Scorer{provider: p, lookup: lookup, historySize: size, timeoutSecs: timeout}
+	concurrency := 3
+	if v := os.Getenv("CURATOR_AI_SCORER_CONCURRENCY"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			concurrency = n
+		}
+	}
+	s := &Scorer{provider: p, lookup: lookup, historySize: size, timeoutSecs: timeout, concurrency: concurrency}
 	s.configureFormat()
 	return s
 }
@@ -129,12 +137,21 @@ func (s *Scorer) ScoreAll(staged []models.StagedTorrent, history []models.Activi
 	if !s.provider.Available() {
 		return staged
 	}
+	sem := make(chan struct{}, s.concurrency)
+	var wg sync.WaitGroup
 	for i := range staged {
-		t := &staged[i]
-		candidateShow := extractMatchedRule(t.MatchReason)
-		histCtx := buildHistoryContext(history, s.historySize, candidateShow)
-		t.AIScore, t.AIReason, t.MatchConfidence, t.MatchConfidenceReason = s.scoreOne(t, histCtx)
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			sem <- struct{}{}
+			defer func() { <-sem }()
+			t := &staged[i]
+			candidateShow := extractMatchedRule(t.MatchReason)
+			histCtx := buildHistoryContext(history, s.historySize, candidateShow)
+			t.AIScore, t.AIReason, t.MatchConfidence, t.MatchConfidenceReason = s.scoreOne(t, histCtx)
+		}(i)
 	}
+	wg.Wait()
 	return staged
 }
 

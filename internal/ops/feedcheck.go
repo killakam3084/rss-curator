@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/killakam3084/rss-curator/internal/ai"
@@ -88,47 +89,79 @@ func RunFeedCheck(ctx context.Context, cfg FeedCheckConfig, deps FeedCheckDeps) 
 	)
 	now := time.Now()
 
+	// Fetch and match all feeds in parallel; expensive network I/O and RSS
+	// parsing run concurrently while SQLite writes remain serial below.
+	type feedResult struct {
+		rawItems []models.RawFeedItem
+		matches  []models.StagedTorrent
+		failed   bool
+	}
+	var (
+		feedResultsMu sync.Mutex
+		feedResults   []feedResult
+		feedWg        sync.WaitGroup
+	)
 	for _, fc := range cfg.Feeds {
 		if ctx.Err() != nil {
 			break
 		}
-		log.Info("fetching feed", zap.String("url", fc.URL), zap.String("type", string(fc.ContentType)))
+		fc := fc
+		feedWg.Add(1)
+		go func() {
+			defer feedWg.Done()
+			res := feedResult{}
+			log.Info("fetching feed", zap.String("url", fc.URL), zap.String("type", string(fc.ContentType)))
+			items, err := parser.Parse(fc.URL, fc.ContentType)
+			if err != nil {
+				log.Error("failed to parse feed", zap.String("url", fc.URL), zap.Error(err))
+				res.failed = true
+				feedResultsMu.Lock()
+				feedResults = append(feedResults, res)
+				feedResultsMu.Unlock()
+				return
+			}
+			for _, item := range items {
+				res.rawItems = append(res.rawItems, models.RawFeedItem{
+					FeedItem:  item,
+					PulledAt:  now,
+					ExpiresAt: now.Add(cfg.RawTTL),
+				})
+			}
+			res.matches = cfg.Matcher.MatchAll(items)
+			log.Info("matched items", zap.String("url", fc.URL), zap.Int("count", len(res.matches)))
+			feedResultsMu.Lock()
+			feedResults = append(feedResults, res)
+			feedResultsMu.Unlock()
+		}()
+	}
+	feedWg.Wait()
 
-		items, err := parser.Parse(fc.URL, fc.ContentType)
-		if err != nil {
-			log.Error("failed to parse feed", zap.String("url", fc.URL), zap.Error(err))
+	// Collect feed results serially: write raw items to storage and merge matches.
+	for _, res := range feedResults {
+		if res.failed {
 			feedFailed = true
 			continue
 		}
-
-		for _, item := range items {
-			raw := models.RawFeedItem{
-				FeedItem:  item,
-				PulledAt:  now,
-				ExpiresAt: now.Add(cfg.RawTTL),
-			}
+		for _, raw := range res.rawItems {
 			if err := deps.Store.AddRawFeedItem(raw); err != nil {
 				log.Warn("failed to store raw feed item", zap.Error(err))
 			} else {
 				totalFound++
 			}
 		}
-
-		matches := cfg.Matcher.MatchAll(items)
-		log.Info("matched items", zap.String("url", fc.URL), zap.Int("count", len(matches)))
-
-		if deps.ScorerProv != nil && deps.ScorerProv.Available() && deps.Scorer != nil {
-			history, _ := deps.Store.GetActivity(50, 0, "")
-			matches = deps.Scorer.ScoreAll(matches, history)
-			totalScored += len(matches)
-		}
-
-		allMatches = append(allMatches, matches...)
+		allMatches = append(allMatches, res.matches...)
 	}
 
 	// Deduplicate across all feeds: for the same show+season+episode keep the
 	// single best variant (by quality tier, then codec/group preference).
 	allMatches = deduplicateByEpisode(allMatches)
+
+	// Score the deduplicated match set in one concurrent batch.
+	if deps.ScorerProv != nil && deps.ScorerProv.Available() && deps.Scorer != nil {
+		history, _ := deps.Store.GetActivity(50, 0, "")
+		allMatches = deps.Scorer.ScoreAll(allMatches, history)
+		totalScored = len(allMatches)
+	}
 	log.Info("staging after dedup", zap.Int("count", len(allMatches)))
 
 	for _, match := range allMatches {
@@ -191,13 +224,16 @@ func RunFeedCheck(ctx context.Context, cfg FeedCheckConfig, deps FeedCheckDeps) 
 		if err == nil {
 			history, _ := deps.Store.GetActivity(50, 0, "")
 			backfilled := 0
+			var unscored []models.StagedTorrent
 			for _, t := range all {
-				if t.AIScored {
-					continue
+				if !t.AIScored {
+					unscored = append(unscored, t)
 				}
-				scored := deps.Scorer.ScoreAll([]models.StagedTorrent{t}, history)
-				if len(scored) > 0 {
-					if err := deps.Store.UpdateAIScore(t.ID, scored[0].AIScore, scored[0].AIReason, scored[0].MatchConfidence, scored[0].MatchConfidenceReason); err == nil {
+			}
+			if len(unscored) > 0 {
+				scored := deps.Scorer.ScoreAll(unscored, history)
+				for _, s := range scored {
+					if err := deps.Store.UpdateAIScore(s.ID, s.AIScore, s.AIReason, s.MatchConfidence, s.MatchConfidenceReason); err == nil {
 						backfilled++
 					}
 				}

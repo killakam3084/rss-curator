@@ -8,6 +8,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.50.0] - 2026-04-17
+
+### Added
+- **Concurrent AI scoring** (`CURATOR_AI_SCORER_CONCURRENCY`, default 3) — `ScoreAll`
+  now dispatches goroutines with a semaphore-bounded pool so N items are scored in
+  ~⌈N/concurrency⌉ × latency instead of N × latency. Raise to 6-8 for cloud
+  providers; keep at 1-3 for local Ollama to avoid GPU contention.
+- **Batch backfill** — the rescore-backfill step now collects all unscored rows into
+  a single `ScoreAll` call instead of issuing one singleton call per row, making
+  full use of the new concurrency pool.
+
+### Changed
+- **Parallel feed fetching** — feed URLs are now fetched and parsed concurrently
+  (one goroutine per feed); SQLite raw-item writes remain serial. Scoring is applied
+  once to the full deduplicated match set rather than per-feed, reducing redundant
+  LLM calls on items that would be deduped away.
+- **Precompiled regexps** (`internal/feed/parser.go`) — six `regexp.MustCompile`
+  patterns that were recompiled on every `extractMetadata` call are now compiled
+  once at package init, eliminating repeated allocations on high-volume feeds.
+
 ## [0.49.0] - 2026-04-16
 
 ### Added

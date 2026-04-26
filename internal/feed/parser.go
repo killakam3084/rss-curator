@@ -14,6 +14,19 @@ import (
 	"github.com/killakam3084/rss-curator/pkg/models"
 )
 
+// Package-level compiled regexps — compiled once at package init.
+var (
+	sizeRe            = regexp.MustCompile(`([\d.]+)\s*(GB|MB|KB)`)
+	qualityRe         = regexp.MustCompile(`(?i)\b(2160p|1080p|720p|480p|4K)\b`)
+	codecRe           = regexp.MustCompile(`(?i)\b(x264|x265|H[\s\.]?264|H[\s\.]?265|HEVC)\b`)
+	sourceRe          = regexp.MustCompile(`(?i)\b(WEB-DL|BluRay|HDTV|WEBRip|BDRip|DVDRip|AMZN|NF|DSNP|HMAX|ATVP)\b`)
+	groupRe           = regexp.MustCompile(`-([A-Za-z0-9]+)(?:\[.*\])?$`)
+	yearRe            = regexp.MustCompile(`(?:^|[\s.])\(?((19|20)\d{2})\)?(?:[\s.]|$)`)
+	movieQualityRe    = regexp.MustCompile(`(?i)\b(2160p|1080p|720p|4K)\b.*`)
+	seasonEpisodeRe   = regexp.MustCompile(`^(.+?)[\s.]+[Ss](\d+)(?:[Ee](\d+))?`)
+	resolutionTrailRe = regexp.MustCompile(`\d{4}p.*`)
+)
+
 // Parser handles RSS feed parsing
 type Parser struct {
 	client   *http.Client
@@ -140,8 +153,7 @@ func (p *Parser) Parse(feedURL string, contentType models.ContentType) ([]models
 // parseSize extracts size from description like "1.44 GB; TV/Web-DL"
 func parseSize(description string) int64 {
 	// Match patterns like "1.44 GB", "500 MB", "21 GB"
-	re := regexp.MustCompile(`([\d.]+)\s*(GB|MB|KB)`)
-	matches := re.FindStringSubmatch(description)
+	matches := sizeRe.FindStringSubmatch(description)
 
 	if len(matches) != 3 {
 		return 0
@@ -203,13 +215,11 @@ func extractMetadata(item *models.FeedItem) {
 	title := item.Title
 
 	// Extract quality (2160p, 1080p, 720p, 480p, 4K)
-	qualityRe := regexp.MustCompile(`(?i)\b(2160p|1080p|720p|480p|4K)\b`)
 	if matches := qualityRe.FindStringSubmatch(title); len(matches) > 0 {
 		item.Quality = strings.ToUpper(matches[1])
 	}
 
 	// Extract codec (x264, x265, H264/H.264/H 264, H265/H.265/H 265, HEVC)
-	codecRe := regexp.MustCompile(`(?i)\b(x264|x265|H[\s\.]?264|H[\s\.]?265|HEVC)\b`)
 	if matches := codecRe.FindStringSubmatch(title); len(matches) > 0 {
 		codec := strings.ToUpper(matches[1])
 		// Normalize codec names
@@ -223,13 +233,11 @@ func extractMetadata(item *models.FeedItem) {
 	}
 
 	// Extract source (WEB-DL, BluRay, HDTV, WEBRip, etc.)
-	sourceRe := regexp.MustCompile(`(?i)\b(WEB-DL|BluRay|HDTV|WEBRip|BDRip|DVDRip|AMZN|NF|DSNP|HMAX|ATVP)\b`)
 	if matches := sourceRe.FindStringSubmatch(title); len(matches) > 0 {
 		item.Source = matches[1]
 	}
 
 	// Extract release group (text after last dash or in brackets)
-	groupRe := regexp.MustCompile(`-([A-Za-z0-9]+)(?:\[.*\])?$`)
 	if matches := groupRe.FindStringSubmatch(title); len(matches) > 1 {
 		item.ReleaseGroup = matches[1]
 	}
@@ -239,7 +247,6 @@ func extractMetadata(item *models.FeedItem) {
 		// Movie title formats:
 		//   "Transfusion 2023 1080p ..." (bare year)
 		//   "Junk Films (2007) 1080p ..." (parenthesised year)
-		yearRe := regexp.MustCompile(`(?:^|[\s.])\(?((19|20)\d{2})\)?(?:[\s.]|$)`)
 		if m := yearRe.FindStringSubmatchIndex(title); m != nil {
 			yearStr := title[m[2]:m[3]]
 			if yr, err := strconv.Atoi(yearStr); err == nil {
@@ -255,7 +262,7 @@ func extractMetadata(item *models.FeedItem) {
 			item.ShowName = movieNameCleaned
 		} else {
 			// Fallback: strip after resolution token
-			movName := regexp.MustCompile(`(?i)\b(2160p|1080p|720p|4K)\b.*`).ReplaceAllString(title, "")
+			movName := movieQualityRe.ReplaceAllString(title, "")
 			movName = strings.ReplaceAll(movName, ".", " ")
 			item.ShowName = strings.TrimSpace(movName)
 		}
@@ -264,7 +271,6 @@ func extractMetadata(item *models.FeedItem) {
 
 	// Show: extract show name, season, episode
 	// Pattern: Show.Name.S01E02 or Show.Name.S01 or Show Name S01E02
-	seasonEpisodeRe := regexp.MustCompile(`^(.+?)[\s.]+[Ss](\d+)(?:[Ee](\d+))?`)
 	if matches := seasonEpisodeRe.FindStringSubmatch(title); len(matches) >= 3 {
 		// Show name is everything before S01E02
 		showName := matches[1]
@@ -287,7 +293,7 @@ func extractMetadata(item *models.FeedItem) {
 		// If no season/episode pattern, just use the title as show name
 		// Clean up common separators
 		showName := title
-		showName = regexp.MustCompile(`\d{4}p.*`).ReplaceAllString(showName, "")
+		showName = resolutionTrailRe.ReplaceAllString(showName, "")
 		showName = strings.ReplaceAll(showName, ".", " ")
 		showName = strings.TrimSpace(showName)
 		item.ShowName = showName
