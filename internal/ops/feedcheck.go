@@ -76,9 +76,9 @@ func RunFeedCheck(ctx context.Context, cfg FeedCheckConfig, deps FeedCheckDeps) 
 	}
 
 	parser := feed.NewParser()
-	if deps.Enricher != nil {
-		parser = parser.WithEnricher(deps.Enricher)
-	}
+	// NOTE: enricher is NOT wired into the parser here — enrichment is applied
+	// post-match on the small deduplicated result set rather than on every raw
+	// feed item (which would issue O(total_items) LLM calls regardless of match).
 
 	var (
 		totalFound   int
@@ -155,6 +155,15 @@ func RunFeedCheck(ctx context.Context, cfg FeedCheckConfig, deps FeedCheckDeps) 
 	// Deduplicate across all feeds: for the same show+season+episode keep the
 	// single best variant (by quality tier, then codec/group preference).
 	allMatches = deduplicateByEpisode(allMatches)
+
+	// Enrich only the deduplicated match set — O(matched) LLM calls instead of
+	// O(total_found). Regex already populated ShowName for matching; enrichment
+	// fills in Codec/Source/ReleaseGroup for staged items only.
+	if deps.Enricher != nil {
+		for i := range allMatches {
+			deps.Enricher.Enrich(&allMatches[i].FeedItem)
+		}
+	}
 
 	// Score the deduplicated match set in one concurrent batch.
 	if deps.ScorerProv != nil && deps.ScorerProv.Available() && deps.Scorer != nil {
