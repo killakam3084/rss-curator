@@ -8,6 +8,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.50.1] - 2026-04-27
+
+### Fixed
+- **Critical performance regression** — the AI enricher was wired directly into
+  the feed parser, issuing one LLM call per raw feed item for any item with a
+  missing metadata field (Codec, Source, ReleaseGroup — common for many feeds).
+  With 200 items this produced ~200 enrichment calls × ~2.5s = ~500s per run,
+  completely masking the v0.50.0 concurrency improvements. The enricher is now
+  applied post-match on the deduplicated result set only, reducing enrichment
+  cost from O(items_found) to O(items_matched). Observed runtime: 500s → <20s.
+
 ## [0.50.0] - 2026-04-17
 
 ### Added
