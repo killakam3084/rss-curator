@@ -8,6 +8,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.51.0] - 2026-05-01
+
+### Added
+- **`preferred_hdr` field** — `ShowRule`, `MovieRule`, and `DefaultRules` now accept
+  a `preferred_hdr []string` field (e.g. `["dv", "hdr10plus"]`). Matching HDR formats
+  are appended to the match reason (e.g. `hdr: dv+hdr10plus`) as a soft signal;
+  items without a matching HDR format are never rejected.
+- **HDR detection in the feed parser** — `FeedItem.HDR []string` is populated from
+  torrent titles via a normalizing regex. Recognised tokens: `dv`, `hdr10plus`,
+  `hdr10`, `hlg`, `hdr`. Titles carrying multiple formats simultaneously (e.g.
+  `DV HDR10`) produce multi-element slices that are sorted and deduplicated.
+- **`watchlist_enrich` scheduled job** — runs every 6 hours (configurable via
+  `CURATOR_WATCHLIST_ENRICH_INTERVAL_HOURS`) and backfills empty `preferred_codec`,
+  `preferred_groups`, and `preferred_hdr` fields in `shows.json` from the most
+  recent 500 approvals. Populated fields are never overwritten.
+- **"Enrich watchlist now" button** in Settings → Scheduler triggers an on-demand
+  `watchlist_enrich` run via the existing `POST /api/scheduler/run/{taskType}`
+  endpoint.
+
 ## [0.50.1] - 2026-04-27
 
 ### Fixed
