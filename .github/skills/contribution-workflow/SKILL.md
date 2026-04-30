@@ -40,6 +40,7 @@ Phase 6: docs + CHANGELOG   — user-facing summary + release tag
 
 3. **Run local quality gates before each commit**
    - Format: `gofmt -w .`
+     - **Do not manually align struct field names or tags with extra spaces.** `gofmt` does not produce aligned padding and the CI tollgate (`test -z "$(gofmt -l .)"`) will fail if hand-aligned whitespace is present. Always let `gofmt -w` be the sole authority on spacing.
    - Lint/static checks: `go vet ./...`
    - Unit tests: `go test ./... -v`
    - Build verification: `go build -o curator ./cmd/curator`
