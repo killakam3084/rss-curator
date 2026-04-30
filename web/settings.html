@@ -182,6 +182,24 @@
                         </button>
                     </div>
 
+                    <div class="flex items-center justify-between gap-4 py-2 border-b border-subtle">
+                        <div>
+                            <div class="text-sm font-mono fg-base">enrich watchlist from history</div>
+                            <div class="text-xs fg-muted font-mono mt-0.5">backfill empty rule fields from approval history</div>
+                        </div>
+                        <button
+                            @click="runWatchlistEnrich"
+                            :disabled="watchlistEnrichRunning"
+                            class="flex items-center gap-2 px-3 py-1.5 rounded border border-base fg-soft hover:fg-base hover:border-accent font-mono text-xs transition-colors disabled:opacity-50 disabled:cursor-wait"
+                        >
+                            <svg v-if="watchlistEnrichRunning" class="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
+                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+                                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/>
+                            </svg>
+                            {{ watchlistEnrichRunning ? 'triggered…' : 'enrich watchlist now' }}
+                        </button>
+                    </div>
+
                     <curator-btn @click="save('scheduler')" :disabled="saving" :loading="saving" loading-text="saving…">save scheduler</curator-btn>
                 </section>
 

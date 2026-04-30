@@ -820,6 +820,26 @@ func cmdServe(cfg models.Config, store *storage.Storage, buf *logbuffer.Buffer, 
 		},
 	})
 
+	// watchlist_enrich — backfill empty rule fields from approval history.
+	watchlistEnrichInterval := 6 * time.Hour
+	if v := os.Getenv("CURATOR_WATCHLIST_ENRICH_INTERVAL_HOURS"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			watchlistEnrichInterval = time.Duration(n) * time.Hour
+		}
+	}
+	sched.Register(&scheduler.Task{
+		Type:     "watchlist_enrich",
+		Interval: watchlistEnrichInterval,
+		Enabled:  true,
+		Fn: func(ctx context.Context) {
+			ops.RunWatchlistEnrich(ctx, ops.WatchlistEnrichDeps{
+				Store:     store,
+				Matcher:   m,
+				ShowsPath: resolveShowsPath(),
+			})
+		},
+	})
+
 	sched.Start()
 
 	// Cold-cache fill: if suggestions table is empty and provider is available,
