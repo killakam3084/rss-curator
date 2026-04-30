@@ -38,6 +38,7 @@ type FeedItem struct {
 	Codec        string      `json:"codec"`
 	Source       string      `json:"source"`
 	ReleaseGroup string      `json:"release_group"`
+	HDR          []string    `json:"hdr,omitempty"`
 }
 
 // StagedTorrent represents a torrent waiting for approval
@@ -83,6 +84,7 @@ type ShowRule struct {
 	MinQuality      string   `json:"min_quality,omitempty"`
 	PreferredCodec  string   `json:"preferred_codec,omitempty"`
 	PreferredGroups []string `json:"preferred_groups,omitempty"`
+	PreferredHDR    []string `json:"preferred_hdr,omitempty"`
 	ExcludeGroups   []string `json:"exclude_groups,omitempty"`
 }
 
@@ -92,6 +94,7 @@ type MovieRule struct {
 	MinQuality      string   `json:"min_quality,omitempty"`
 	PreferredCodec  string   `json:"preferred_codec,omitempty"`
 	PreferredGroups []string `json:"preferred_groups,omitempty"`
+	PreferredHDR    []string `json:"preferred_hdr,omitempty"`
 	ExcludeGroups   []string `json:"exclude_groups,omitempty"`
 }
 
@@ -100,6 +103,7 @@ type DefaultRules struct {
 	MinQuality      string   `json:"min_quality"`
 	PreferredCodec  string   `json:"preferred_codec"`
 	PreferredGroups []string `json:"preferred_groups"`
+	PreferredHDR    []string `json:"preferred_hdr,omitempty"`
 	ExcludeGroups   []string `json:"exclude_groups"`
 }
 
@@ -181,6 +185,13 @@ type RematchSummary struct {
 type SuggestRefreshSummary struct {
 	SuggestionsGenerated int    `json:"suggestions_generated"`
 	ErrorMessage         string `json:"error_message,omitempty"`
+}
+
+// WatchlistEnrichSummary is the summary stored for "watchlist_enrich" jobs.
+type WatchlistEnrichSummary struct {
+	ShowsUpdated  int    `json:"shows_updated"`
+	MoviesUpdated int    `json:"movies_updated"`
+	ErrorMessage  string `json:"error_message,omitempty"`
 }
 
 // AlertRecord is an ephemeral in-memory notification emitted by the server for
