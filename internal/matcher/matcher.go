@@ -117,6 +117,10 @@ func (m *Matcher) matchShow(item models.FeedItem) (bool, string) {
 	if len(excludeGroups) == 0 {
 		excludeGroups = defaultRules.ExcludeGroups
 	}
+	preferredHDR := showRule.PreferredHDR
+	if len(preferredHDR) == 0 {
+		preferredHDR = defaultRules.PreferredHDR
+	}
 
 	if !meetsQuality(item.Quality, minQuality) {
 		return false, fmt.Sprintf("quality %s below minimum %s", item.Quality, minQuality)
@@ -125,6 +129,9 @@ func (m *Matcher) matchShow(item models.FeedItem) (bool, string) {
 
 	if preferredCodec != "" && strings.EqualFold(item.Codec, preferredCodec) {
 		reasons = append(reasons, fmt.Sprintf("preferred codec: %s", item.Codec))
+	}
+	if len(item.HDR) > 0 && isPreferredHDR(item.HDR, preferredHDR) {
+		reasons = append(reasons, fmt.Sprintf("hdr: %s", strings.Join(matchedHDR(item.HDR, preferredHDR), "+")))
 	}
 	if isExcludedGroup(item.ReleaseGroup, excludeGroups) {
 		return false, fmt.Sprintf("release group %s is excluded", item.ReleaseGroup)
@@ -180,6 +187,10 @@ func (m *Matcher) matchMovie(item models.FeedItem) (bool, string) {
 	if len(excludeGroups) == 0 {
 		excludeGroups = defaultRules.ExcludeGroups
 	}
+	preferredHDR := movieRule.PreferredHDR
+	if len(preferredHDR) == 0 {
+		preferredHDR = defaultRules.PreferredHDR
+	}
 
 	if !meetsQuality(item.Quality, minQuality) {
 		return false, fmt.Sprintf("quality %s below minimum %s", item.Quality, minQuality)
@@ -188,6 +199,9 @@ func (m *Matcher) matchMovie(item models.FeedItem) (bool, string) {
 
 	if preferredCodec != "" && strings.EqualFold(item.Codec, preferredCodec) {
 		reasons = append(reasons, fmt.Sprintf("preferred codec: %s", item.Codec))
+	}
+	if len(item.HDR) > 0 && isPreferredHDR(item.HDR, preferredHDR) {
+		reasons = append(reasons, fmt.Sprintf("hdr: %s", strings.Join(matchedHDR(item.HDR, preferredHDR), "+")))
 	}
 	if isExcludedGroup(item.ReleaseGroup, excludeGroups) {
 		return false, fmt.Sprintf("release group %s is excluded", item.ReleaseGroup)
@@ -317,6 +331,38 @@ func isPreferredGroup(group string, preferredGroups []string) bool {
 		}
 	}
 	return false
+}
+
+// isPreferredHDR returns true if any value in itemHDR appears in preferred
+// (case-insensitive). Both slices use canonical lowercase values from the
+// parser so EqualFold is redundant but kept for safety.
+func isPreferredHDR(itemHDR []string, preferred []string) bool {
+	if len(preferred) == 0 {
+		return false
+	}
+	for _, h := range itemHDR {
+		for _, p := range preferred {
+			if strings.EqualFold(h, p) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// matchedHDR returns the subset of itemHDR values that appear in preferred,
+// preserving the order they appear in itemHDR.
+func matchedHDR(itemHDR []string, preferred []string) []string {
+	var out []string
+	for _, h := range itemHDR {
+		for _, p := range preferred {
+			if strings.EqualFold(h, p) {
+				out = append(out, h)
+				break
+			}
+		}
+	}
+	return out
 }
 
 // MatchAll filters a list of feed items and returns matches

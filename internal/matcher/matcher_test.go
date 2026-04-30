@@ -449,3 +449,100 @@ func contains(s, sub string) bool {
 			return false
 		}())
 }
+
+func TestHDRSoftSignalAppended(t *testing.T) {
+	cfg := &models.ShowsConfig{
+		Shows: []models.ShowRule{{
+			Name:         "Daredevil Born Again",
+			PreferredHDR: []string{"dv"},
+		}},
+		Defaults: models.DefaultRules{MinQuality: "1080P"},
+	}
+	m := NewMatcher(cfg, nil)
+	ok, reason := m.Match(models.FeedItem{
+		ContentType: models.ContentTypeShow,
+		ShowName:    "Daredevil Born Again",
+		Quality:     "2160P",
+		HDR:         []string{"dv", "hdr"},
+	})
+	if !ok {
+		t.Fatalf("expected match, got false: %s", reason)
+	}
+	if !contains(reason, "hdr: dv") {
+		t.Errorf("expected reason to contain 'hdr: dv', got: %q", reason)
+	}
+}
+
+func TestHDRSoftSignalNoRejection(t *testing.T) {
+	cfg := &models.ShowsConfig{
+		Shows: []models.ShowRule{{
+			Name:         "The Boys",
+			PreferredHDR: []string{"dv"},
+		}},
+		Defaults: models.DefaultRules{MinQuality: "1080P"},
+	}
+	m := NewMatcher(cfg, nil)
+	// Item has no HDR — should still match, just no hdr reason
+	ok, reason := m.Match(models.FeedItem{
+		ContentType: models.ContentTypeShow,
+		ShowName:    "The Boys",
+		Quality:     "1080P",
+		HDR:         nil,
+	})
+	if !ok {
+		t.Fatalf("expected match even without HDR, got false: %s", reason)
+	}
+	if contains(reason, "hdr:") {
+		t.Errorf("expected no hdr reason when item has no HDR, got: %q", reason)
+	}
+}
+
+func TestHDRSoftSignalFallsBackToDefaults(t *testing.T) {
+	cfg := &models.ShowsConfig{
+		Shows: []models.ShowRule{{
+			Name: "The Pitt",
+			// no per-show PreferredHDR
+		}},
+		Defaults: models.DefaultRules{
+			MinQuality:   "1080P",
+			PreferredHDR: []string{"dv"},
+		},
+	}
+	m := NewMatcher(cfg, nil)
+	ok, reason := m.Match(models.FeedItem{
+		ContentType: models.ContentTypeShow,
+		ShowName:    "The Pitt",
+		Quality:     "2160P",
+		HDR:         []string{"dv", "hdr"},
+	})
+	if !ok {
+		t.Fatalf("expected match, got false: %s", reason)
+	}
+	if !contains(reason, "hdr: dv") {
+		t.Errorf("expected reason to contain 'hdr: dv' from defaults, got: %q", reason)
+	}
+}
+
+func TestHDRSoftSignalMovieMatch(t *testing.T) {
+	cfg := &models.ShowsConfig{
+		Movies: []models.MovieRule{{
+			Name:         "Oppenheimer",
+			PreferredHDR: []string{"dv"},
+		}},
+		Defaults: models.DefaultRules{MinQuality: "1080P"},
+	}
+	m := NewMatcher(cfg, nil)
+	ok, reason := m.Match(models.FeedItem{
+		ContentType: models.ContentTypeMovie,
+		ShowName:    "Oppenheimer",
+		ReleaseYear: 2023,
+		Quality:     "2160P",
+		HDR:         []string{"dv", "hdr"},
+	})
+	if !ok {
+		t.Fatalf("expected match, got false: %s", reason)
+	}
+	if !contains(reason, "hdr: dv") {
+		t.Errorf("expected reason to contain 'hdr: dv', got: %q", reason)
+	}
+}
