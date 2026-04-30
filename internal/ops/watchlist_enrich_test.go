@@ -8,9 +8,9 @@ import (
 
 func TestEnrichNameFromMatchReason(t *testing.T) {
 	cases := []struct {
-		reason  string
-		wantN   string
-		wantCT  models.ContentType
+		reason string
+		wantN  string
+		wantCT models.ContentType
 	}{
 		{"matches show: Dark, quality: 1080P, preferred codec: x265", "Dark", models.ContentTypeShow},
 		{"matches show: Daredevil Born Again, quality: 2160P", "Daredevil Born Again", models.ContentTypeShow},
