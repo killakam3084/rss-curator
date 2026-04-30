@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -25,6 +26,7 @@ var (
 	movieQualityRe    = regexp.MustCompile(`(?i)\b(2160p|1080p|720p|4K)\b.*`)
 	seasonEpisodeRe   = regexp.MustCompile(`^(.+?)[\s.]+[Ss](\d+)(?:[Ee](\d+))?`)
 	resolutionTrailRe = regexp.MustCompile(`\d{4}p.*`)
+	hdrRe             = regexp.MustCompile(`(?i)\b(DoVi|Dolby[\s.]?Vision|HDR10\+|HDR10Plus|HDR10|HDR|HLG|DV)\b`)
 )
 
 // Parser handles RSS feed parsing
@@ -191,6 +193,7 @@ func ParseTitleMetadata(item *models.FeedItem) {
 	item.Codec = ""
 	item.Source = ""
 	item.ReleaseGroup = ""
+	item.HDR = nil
 
 	extractMetadata(item)
 }
@@ -206,6 +209,7 @@ func ParseParserMetadata(item *models.FeedItem) {
 	item.Codec = ""
 	item.Source = ""
 	item.ReleaseGroup = ""
+	item.HDR = nil
 
 	extractMetadata(item)
 }
@@ -240,6 +244,21 @@ func extractMetadata(item *models.FeedItem) {
 	// Extract release group (text after last dash or in brackets)
 	if matches := groupRe.FindStringSubmatch(title); len(matches) > 1 {
 		item.ReleaseGroup = matches[1]
+	}
+
+	// Extract HDR formats — all matches, deduplicated and sorted for determinism.
+	if hdrMatches := hdrRe.FindAllStringSubmatch(title, -1); len(hdrMatches) > 0 {
+		seen := make(map[string]bool)
+		var hdrs []string
+		for _, m := range hdrMatches {
+			canonical := normalizeHDRToken(m[1])
+			if !seen[canonical] {
+				seen[canonical] = true
+				hdrs = append(hdrs, canonical)
+			}
+		}
+		sort.Strings(hdrs)
+		item.HDR = hdrs
 	}
 
 	// Extract show name, season, episode (shows) or movie name + year (movies)
@@ -297,5 +316,22 @@ func extractMetadata(item *models.FeedItem) {
 		showName = strings.ReplaceAll(showName, ".", " ")
 		showName = strings.TrimSpace(showName)
 		item.ShowName = showName
+	}
+}
+
+// normalizeHDRToken maps a raw regex-matched HDR token to its canonical value.
+func normalizeHDRToken(s string) string {
+	lower := strings.ToLower(s)
+	switch {
+	case lower == "dv" || strings.HasPrefix(lower, "dovi") || strings.HasPrefix(lower, "dolby"):
+		return "dv"
+	case lower == "hdr10+" || lower == "hdr10plus":
+		return "hdr10plus"
+	case lower == "hdr10":
+		return "hdr10"
+	case lower == "hlg":
+		return "hlg"
+	default:
+		return "hdr"
 	}
 }

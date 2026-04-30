@@ -329,3 +329,76 @@ func TestParseTitleMetadata_Movie(t *testing.T) {
 		})
 	}
 }
+
+func TestParseTitleMetadata_HDR(t *testing.T) {
+	cases := []struct {
+		name    string
+		title   string
+		wantHDR []string
+	}{
+		{
+			name:    "DV only",
+			title:   "Wednesday S02 2160p NF WEB-DL DDP5 1 Atmos DV H 265-BLOOM",
+			wantHDR: []string{"dv"},
+		},
+		{
+			name:    "DoVi only",
+			title:   "The Testaments S01E06 Stadium 2160p DSNP WEB-DL DD 5 1 DoVi H 265-playWEB",
+			wantHDR: []string{"dv"},
+		},
+		{
+			name:    "DV and HDR co-present",
+			title:   "The Boys S05E05 One-Shots 2160p AMZN WEB-DL DDP5 1 Atmos DV HDR H 265-FLUX",
+			wantHDR: []string{"dv", "hdr"},
+		},
+		{
+			name:    "HDR10Plus and DV co-present",
+			title:   "Daredevil Born Again S02E07 2160p HDR10Plus DV WEBRip DDP5 1 Atmos x265 HEVC-PSA",
+			wantHDR: []string{"dv", "hdr10plus"},
+		},
+		{
+			name:    "HDR only",
+			title:   "Daredevil Born Again S02E07 The Hateful Darkness 2160p DSNP WEB-DL HDR H265-playWEB",
+			wantHDR: []string{"hdr"},
+		},
+		{
+			name:    "no HDR tokens",
+			title:   "Dark S03 1080p NF WEB-DL DDP5 1 HEVC-Saon",
+			wantHDR: nil,
+		},
+		{
+			name:    "HDR10Plus and DV co-present variant",
+			title:   "The Boys S05E05 One-Shots 2160p AMZN WEB-DL DDP5 1 Atmos DV HDR10Plus H 265-Kitsune",
+			wantHDR: []string{"dv", "hdr10plus"},
+		},
+		{
+			name:    "reset clears prior HDR",
+			title:   "Dark S03 1080p NF WEB-DL DDP5 1 HEVC-Saon",
+			wantHDR: nil,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			item := &models.FeedItem{
+				Title:       tc.title,
+				ContentType: models.ContentTypeShow,
+				HDR:         []string{"stale"},
+			}
+			ParseTitleMetadata(item)
+
+			if len(tc.wantHDR) == 0 && len(item.HDR) == 0 {
+				return
+			}
+			if len(item.HDR) != len(tc.wantHDR) {
+				t.Errorf("HDR = %v, want %v", item.HDR, tc.wantHDR)
+				return
+			}
+			for i := range tc.wantHDR {
+				if item.HDR[i] != tc.wantHDR[i] {
+					t.Errorf("HDR[%d] = %q, want %q", i, item.HDR[i], tc.wantHDR[i])
+				}
+			}
+		})
+	}
+}
