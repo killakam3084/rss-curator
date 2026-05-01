@@ -316,16 +316,14 @@ const settingsApp = createApp({
                     const from = { line: i, ch: matchIdx };
                     const to   = { line: i, ch: matchIdx + query.length };
                     cm.scrollIntoView({ line: i, ch: matchIdx }, 80);
-                    // Select the matched text — user must click to enter insert mode.
                     doc.setSelection(from, to, { scroll: false });
-                    // Focus the editor so the selection is visible, but without
-                    // triggering insert mode (selection keeps the cursor's head
-                    // at `to` which is fine — it won't delete anything until the
-                    // user explicitly starts typing).
-                    cm.focus();
                     return;
                 }
             }, 300);
+        }
+
+        function focusWatchlistEditor() {
+            if (showsCM) showsCM.focus();
         }
 
         function formatShows() {
@@ -624,6 +622,7 @@ const settingsApp = createApp({
             showsError,
             watchlistFilter,
             onWatchlistFilter,
+            focusWatchlistEditor,
             ensureShowsEditor,
             saveShows,
             formatShows,

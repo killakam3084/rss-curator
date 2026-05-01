@@ -341,6 +341,7 @@
                         <input
                             v-model="watchlistFilter"
                             @input="onWatchlistFilter"
+                            @keydown.enter="focusWatchlistEditor"
                             type="text"
                             placeholder="jump to show or movie…"
                             class="flex-1 bg-raised border border-base rounded px-3 py-2 font-mono text-sm fg-base focus:outline-none focus:border-accent transition-colors"
