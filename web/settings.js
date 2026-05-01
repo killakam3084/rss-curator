@@ -287,27 +287,45 @@ const settingsApp = createApp({
             }
         }
 
+        let _watchlistFilterTimer = null;
+
         function onWatchlistFilter() {
-            if (!showsCM) return;
+            clearTimeout(_watchlistFilterTimer);
             const query = watchlistFilter.value.trim();
             if (!query) {
-                showsCM.execCommand('clearSearch');
+                // Immediate clear — no debounce needed.
+                if (showsCM) showsCM.execCommand('clearSearch');
                 return;
             }
-            // Scroll to the first line whose "name" value contains the query.
-            const cm = showsCM;
-            const doc = cm.getDoc();
-            const lineCount = doc.lineCount();
-            const lcQuery = query.toLowerCase();
-            for (let i = 0; i < lineCount; i++) {
-                const line = doc.getLine(i);
-                if (line && line.toLowerCase().includes('"name"') && line.toLowerCase().includes(lcQuery)) {
-                    cm.scrollIntoView({ line: i, ch: 0 }, 80);
-                    cm.setCursor({ line: i, ch: 0 });
+            // Require at least 3 characters before jumping, debounced 300ms.
+            if (query.length < 3) return;
+            _watchlistFilterTimer = setTimeout(() => {
+                if (!showsCM) return;
+                const cm = showsCM;
+                const doc = cm.getDoc();
+                const lineCount = doc.lineCount();
+                const lcQuery = query.toLowerCase();
+                for (let i = 0; i < lineCount; i++) {
+                    const line = doc.getLine(i);
+                    if (!line) continue;
+                    const lcLine = line.toLowerCase();
+                    if (!lcLine.includes('"name"') || !lcLine.includes(lcQuery)) continue;
+                    // Find the start/end of the matched name value within the line
+                    // so we can select it rather than drop a bare cursor.
+                    const matchIdx = lcLine.indexOf(lcQuery);
+                    const from = { line: i, ch: matchIdx };
+                    const to   = { line: i, ch: matchIdx + query.length };
+                    cm.scrollIntoView({ line: i, ch: matchIdx }, 80);
+                    // Select the matched text — user must click to enter insert mode.
+                    doc.setSelection(from, to, { scroll: false });
+                    // Focus the editor so the selection is visible, but without
+                    // triggering insert mode (selection keeps the cursor's head
+                    // at `to` which is fine — it won't delete anything until the
+                    // user explicitly starts typing).
                     cm.focus();
                     return;
                 }
-            }
+            }, 300);
         }
 
         function formatShows() {
@@ -577,6 +595,7 @@ const settingsApp = createApp({
                 pendingShowsValue = showsCM.getValue();
                 showsCM = null;
                 watchlistFilter.value = '';
+                clearTimeout(_watchlistFilterTimer);
             }
             if (newSection === 'watchlist') {
                 ensureShowsEditor();
