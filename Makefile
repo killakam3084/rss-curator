@@ -77,9 +77,9 @@ dev-up:
 		echo "Copy local.env.sample to local.env and configure it"; \
 		exit 1; \
 	fi
-	@if [ ! -f shows.json ]; then \
-		cp shows.json.sample shows.json; \
-		echo "info: copied shows.json.sample → shows.json"; \
+	@if [ ! -f shows.json ] && [ ! -f watchlist.json ]; then \
+		cp watchlist.json.sample watchlist.json; \
+		echo "info: copied watchlist.json.sample → watchlist.json"; \
 	fi
 	@mkdir -p data logs
 	$(CTR) compose -f compose.dev.yml up -d

@@ -418,30 +418,35 @@ func loadConfig() (models.Config, error) {
 		}
 	}
 
-	// Try to load shows.json
+	// Try to load watchlist.json (falls back to shows.json for existing installs)
 	showsConfig, err := loadShowsConfig()
 	if err == nil {
 		cfg.ShowsConfig = showsConfig
 	} else {
-		fmt.Printf("[Config] shows.json not loaded (%v); using environment variable rules fallback\n", err)
+		fmt.Printf("[Config] watchlist.json not loaded (%v); using environment variable rules fallback\n", err)
 	}
 
 	return cfg, nil
 }
 
 func loadShowsConfig() (*models.ShowsConfig, error) {
-	// Try current directory first
+	// Primary path is watchlist.json; shows.json is a silent fallback for
+	// existing installs that have not yet renamed their config file.
 	paths := []string{
+		"watchlist.json",
 		"shows.json",
+		filepath.Join(os.Getenv("HOME"), ".curator-watchlist.json"),
 		filepath.Join(os.Getenv("HOME"), ".curator-shows.json"),
 	}
 
 	var data []byte
+	var loadedPath string
 	var err error
 
 	for _, path := range paths {
 		data, err = os.ReadFile(path)
 		if err == nil {
+			loadedPath = path
 			break
 		}
 	}
@@ -450,21 +455,27 @@ func loadShowsConfig() (*models.ShowsConfig, error) {
 		return nil, err
 	}
 
+	if loadedPath == "shows.json" || loadedPath == filepath.Join(os.Getenv("HOME"), ".curator-shows.json") {
+		fmt.Printf("[Config] loaded legacy %s — consider renaming to watchlist.json\n", loadedPath)
+	}
+
 	var config models.ShowsConfig
 	if err := json.Unmarshal(data, &config); err != nil {
-		return nil, fmt.Errorf("failed to parse shows.json: %w", err)
+		return nil, fmt.Errorf("failed to parse watchlist.json: %w", err)
 	}
 
 	return &config, nil
 }
 
 // resolveShowsPath returns the path that should be used as the authoritative
-// write target for shows.json. It mirrors the load priority order used by
-// loadShowsConfig: if a file already exists at one of the known locations,
-// that path is returned. Otherwise "shows.json" (cwd) is the default.
+// write target for watchlist.json. It mirrors the load priority order used by
+// loadShowsConfig: watchlist.json is preferred; existing shows.json installs
+// are resolved transparently until the file is renamed.
 func resolveShowsPath() string {
 	candidates := []string{
+		"watchlist.json",
 		"shows.json",
+		filepath.Join(os.Getenv("HOME"), ".curator-watchlist.json"),
 		filepath.Join(os.Getenv("HOME"), ".curator-shows.json"),
 	}
 	for _, p := range candidates {
@@ -472,7 +483,7 @@ func resolveShowsPath() string {
 			return p
 		}
 	}
-	return "shows.json"
+	return "watchlist.json"
 }
 
 func getEnv(key, defaultValue string) string {

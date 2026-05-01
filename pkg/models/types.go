@@ -107,7 +107,7 @@ type DefaultRules struct {
 	ExcludeGroups   []string `json:"exclude_groups"`
 }
 
-// ShowsConfig represents the shows.json structure
+// ShowsConfig represents the watchlist.json structure
 type ShowsConfig struct {
 	Shows    []ShowRule   `json:"shows"`
 	Movies   []MovieRule  `json:"movies"`

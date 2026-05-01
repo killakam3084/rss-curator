@@ -58,7 +58,7 @@ type Server struct {
 	jobCancels       map[int]*jobCancelState
 	progressInterval int
 	settingsMgr      *settings.Manager    // may be nil
-	showsPath        string               // path to shows.json on disk; defaults to "shows.json"
+	showsPath        string               // path to watchlist.json on disk; defaults to "watchlist.json"
 	suggester        *suggester.Suggester // may be nil if AI is disabled
 	dismissDays      int                  // days until a dismissed suggestion becomes eligible again (0 = permanent)
 	feedCheckCfg     ops.FeedCheckConfig
@@ -333,8 +333,8 @@ func (s *Server) WithFeedCheck(cfg ops.FeedCheckConfig, deps ops.FeedCheckDeps) 
 	return s
 }
 
-// WithShowsPath sets the filesystem path that GET/PUT /api/shows reads and
-// writes. If not called the server defaults to "shows.json" (current working
+// WithShowsPath sets the filesystem path that GET/PUT /api/watchlist reads and
+// writes. If not called the server defaults to "watchlist.json" (current working
 // directory — the same location the binary looks for it at startup).
 func (s *Server) WithShowsPath(path string) *Server {
 	if path != "" {
@@ -380,7 +380,15 @@ func (s *Server) Start() error {
 	mux.HandleFunc("/api/alerts/stream", s.handleAlertsStream)
 	mux.HandleFunc("/api/alerts", s.handleAlerts)
 	mux.HandleFunc("/api/settings", s.handleSettings)
-	mux.HandleFunc("/api/shows", s.handleShows)
+	mux.HandleFunc("/api/watchlist", s.handleWatchlist)
+	// Deprecated: /api/shows redirects to /api/watchlist for backward compatibility.
+	mux.HandleFunc("/api/shows", func(w http.ResponseWriter, r *http.Request) {
+		target := "/api/watchlist"
+		if r.URL.RawQuery != "" {
+			target += "?" + r.URL.RawQuery
+		}
+		http.Redirect(w, r, target, http.StatusMovedPermanently)
+	})
 	mux.HandleFunc("/api/scheduler/run/", s.handleSchedulerRun)
 	mux.HandleFunc("/api/scheduler/tasks", s.handleSchedulerTasks)
 	mux.HandleFunc("/api/metrics", s.handleMetrics)
@@ -2038,22 +2046,22 @@ func (s *Server) handleSchedulerRun(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(SchedulerRunResponse{Status: "accepted", Type: taskType})
 }
 
-type ShowsResponse struct {
+type WatchlistResponse struct {
 	models.ShowsConfig
 	ShowsCount  int `json:"shows_count"`
 	MoviesCount int `json:"movies_count"`
 }
 
-// handleShows serves GET /api/shows and PUT /api/shows.
+// handleWatchlist serves GET /api/watchlist and PUT /api/watchlist.
 //
 // GET  — returns the current in-memory ShowsConfig (or a blank template when no
 //
-//	shows.json has been loaded).
+//	watchlist.json has been loaded).
 //
 // PUT  — accepts a full ShowsConfig JSON body, validates it, writes it to disk
 //
 //	at s.showsPath, and hot-reloads the matcher without restart.
-func (s *Server) handleShows(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleWatchlist(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
 	switch r.Method {
@@ -2070,7 +2078,7 @@ func (s *Server) handleShows(w http.ResponseWriter, r *http.Request) {
 		if cfg.Movies == nil {
 			cfg.Movies = []models.MovieRule{}
 		}
-		json.NewEncoder(w).Encode(ShowsResponse{
+		json.NewEncoder(w).Encode(WatchlistResponse{
 			ShowsConfig: *cfg,
 			ShowsCount:  len(cfg.Shows),
 			MoviesCount: len(cfg.Movies),
@@ -2100,19 +2108,19 @@ func (s *Server) handleShows(w http.ResponseWriter, r *http.Request) {
 		}
 		writePath := s.showsPath
 		if writePath == "" {
-			writePath = "shows.json"
+			writePath = "watchlist.json"
 		}
 		if err := os.WriteFile(writePath, out, 0o644); err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
-			json.NewEncoder(w).Encode(ErrorResponse{Error: "failed to write shows.json: " + err.Error()})
+			json.NewEncoder(w).Encode(ErrorResponse{Error: "failed to write watchlist.json: " + err.Error()})
 			return
 		}
 
 		// Hot-reload the matcher.
 		s.matcher.SetShowsConfig(&cfg)
-		s.logger.Info("shows.json reloaded", zap.Int("shows", len(cfg.Shows)), zap.Int("movies", len(cfg.Movies)))
+		s.logger.Info("watchlist.json reloaded", zap.Int("shows", len(cfg.Shows)), zap.Int("movies", len(cfg.Movies)))
 
-		json.NewEncoder(w).Encode(ShowsResponse{
+		json.NewEncoder(w).Encode(WatchlistResponse{
 			ShowsConfig: cfg,
 			ShowsCount:  len(cfg.Shows),
 			MoviesCount: len(cfg.Movies),

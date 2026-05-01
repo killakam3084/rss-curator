@@ -1,7 +1,7 @@
-# Shows — GET returns current config (or empty template), PUT saves and hot-reloads.
+# Watchlist — GET returns current config (or empty template), PUT saves and hot-reloads.
 
-# GET — shape check; works whether or not a shows.json exists on disk.
-GET {{base}}/api/shows
+# GET — shape check; works whether or not a watchlist.json exists on disk.
+GET {{base}}/api/watchlist
 
 HTTP 200
 [Asserts]
@@ -13,7 +13,7 @@ jsonpath "$.movies_count" isInteger
 
 
 # PUT — a config with both shows and movies; verify round-trip shape.
-PUT {{base}}/api/shows
+PUT {{base}}/api/watchlist
 Content-Type: application/json
 ```json
 {
@@ -44,7 +44,7 @@ jsonpath "$.movies[0].name" == "Test Movie"
 
 
 # PUT — invalid JSON → 400 Bad Request.
-PUT {{base}}/api/shows
+PUT {{base}}/api/watchlist
 Content-Type: application/json
 ```
 { not valid json
@@ -56,7 +56,7 @@ jsonpath "$.error" isString
 
 
 # PUT — wrong method guard (PATCH not allowed).
-PATCH {{base}}/api/shows
+PATCH {{base}}/api/watchlist
 Content-Type: application/json
 ```json
 {}
@@ -65,3 +65,11 @@ Content-Type: application/json
 HTTP 405
 [Asserts]
 jsonpath "$.error" isString
+
+
+# Backward-compat: /api/shows redirects to /api/watchlist (301).
+GET {{base}}/api/shows
+
+HTTP 301
+[Asserts]
+header "Location" contains "/api/watchlist"
