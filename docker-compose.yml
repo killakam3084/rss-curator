@@ -24,7 +24,7 @@ services:
       - QBITTORRENT_CATEGORY=${QBITTORRENT_CATEGORY:-curator}
       - STORAGE_PATH=${STORAGE_PATH:-/app/data/curator.db}
       
-      # Matching configuration (legacy, if not using shows.json)
+      # Matching configuration (legacy, if not using watchlist.json)
       - SHOW_NAMES=${SHOW_NAMES}
       - MIN_QUALITY=${MIN_QUALITY:-1080p}
       - PREFERRED_CODEC=${PREFERRED_CODEC:-x265}
@@ -41,7 +41,11 @@ services:
     # Volumes for persistent storage and configuration
     volumes:
       - curator-data:/app/data
-      - ${PWD}/shows.json:/app/shows.json:ro
+      # Watchlist config — rename shows.json → watchlist.json and update this mount.
+      # Both filenames are accepted; shows.json triggers a deprecation log at startup.
+      - ${PWD}/watchlist.json:/app/watchlist.json:ro
+      # Legacy fallback: uncomment if you haven't renamed yet.
+      # - ${PWD}/shows.json:/app/shows.json:ro
       - ${PWD}/logs:/app/logs
     
     # Restart policy - keeps both scheduler and API running

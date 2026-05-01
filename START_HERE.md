@@ -96,7 +96,7 @@ scp -r rss-curator user@truenas:/mnt/cell_block_d/apps/
 ## ⚡ Features
 
 - **Smart Parsing**: Extracts show name, season, episode, quality, codec, release group
-- **Rule-Based Filtering**: Match by show names, quality, codec, release groups; `shows.json` for per-show config
+- **Rule-Based Filtering**: Match by show names, quality, codec, release groups; `watchlist.json` for per-show config
 - **AI Scoring**: Optional LLM-based approval probability (Ollama/OpenAI), learns from approve/reject history
 - **Human-in-the-Loop**: Review and approve via CLI or Web UI before downloading
 - **qBittorrent Integration**: Seamless torrent addition on approval

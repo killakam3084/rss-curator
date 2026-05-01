@@ -24,7 +24,7 @@ A semi-automated torrent curator for private tracker RSS feeds with human-in-the
 - ✅ AI-assisted scoring and metadata enrichment — Ollama (local), OpenAI-compatible, Anthropic Claude, or disabled
 - ✅ Per-subsystem AI provider overrides — run Ollama for scoring and Anthropic only for suggestions simultaneously
 - ✅ TV/movie metadata enrichment via TVMaze (free, default), TMDB, or TVDB with local cache
-- ✅ Per-show rule configuration via `shows.json`
+- ✅ Per-show rule configuration via `watchlist.json`
 - ✅ AI scorer match confidence — separate signal for rule-vs-title plausibility with low-confidence UI badge
 - ✅ Compact show-history summaries for AI scorer — token-efficient, recency-bias-free prompt context
 - ✅ Ollama structured output — JSON Schema enforcement eliminating schema hallucination
@@ -32,7 +32,7 @@ A semi-automated torrent curator for private tracker RSS feeds with human-in-the
 - ✅ Jobs system — background task tracking with live SSE updates and dedicated Jobs page
 - ✅ Ephemeral alerts — in-browser notification ring (approve/reject/queue/staged/job_failed) with bell icon and unread badge
 - ✅ In-app authentication — optional login page with session tokens and configurable TTL
-- ✅ Settings page — manage `shows.json` rules and AI suggestions (accept/dismiss) from the Web UI
+- ✅ Settings page — manage `watchlist.json` rules and AI suggestions (accept/dismiss) from the Web UI
 
 ## Installation
 
@@ -406,7 +406,7 @@ Full diagrams (state machine, ER model, component map): [docs/ARCHITECTURE.md](.
 - **AI Enricher** (`internal/ai`): LLM fallback to fill `ShowName`/`Season` when regex fails — silent no-op when unavailable
 - **Matcher** (`internal/matcher`): Applies show/quality/codec/group rules
 - **AI Scorer** (`internal/ai`): Scores matches 0–1 against approve/reject history — silent no-op when unavailable
-- **AI Suggester** (`internal/suggester`): Analyses accept/reject history to surface new show and movie recommendations; results accumulate until dismissed or added to `shows.json`
+- **AI Suggester** (`internal/suggester`): Analyses accept/reject history to surface new show and movie recommendations; results accumulate until dismissed or added to `watchlist.json`
 - **Metadata** (`internal/metadata`): TV and movie metadata providers (TVMaze, TMDB); shared local SQLite cache with configurable TTL
 - **Storage** (`internal/storage`): SQLite staging queue + activity log + raw feed stream + jobs table
 - **Log Buffer** (`internal/logbuffer`): In-memory ring buffer for logs, jobs fan-out, and alerts fan-out via SSE

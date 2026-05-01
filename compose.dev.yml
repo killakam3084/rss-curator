@@ -11,7 +11,7 @@
 #
 # Prerequisites:
 #   1. Copy local.env.sample → local.env and fill in your values
-#   2. Ensure shows.json exists (copy shows.json.sample)
+#   2. Ensure watchlist.json exists (copy watchlist.json.sample, or rename your existing shows.json)
 
 services:
   curator:
@@ -39,8 +39,10 @@ services:
       - ./data:/app/data
       # Log output to host for easy tailing
       - ./logs:/app/logs
-      # shows.json live-reload (no rebuild needed when you edit show rules)
-      - ./shows.json:/app/shows.json:ro
+      # watchlist.json live-reload (rename from shows.json; both are accepted)
+      - ./watchlist.json:/app/watchlist.json:ro
+      # Legacy fallback: uncomment if you haven't renamed yet.
+      # - ./shows.json:/app/shows.json:ro
       # Web assets mounted from host — edit HTML/CSS/JS without rebuilding the image
       - ./web:/app/web:ro
 

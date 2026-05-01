@@ -8,6 +8,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.52.0] - 2026-04-30
+
+### Added
+- **`suggestions` settings section** — AI suggestions are now a dedicated nav
+  entry in Settings, separated from the watchlist editor so both views have
+  space to breathe and neither requires scrolling past the other.
+- **Jump-to filter in the watchlist editor** — a search input above the
+  CodeMirror editor scrolls to the first entry whose `"name"` matches the
+  query; cleared automatically on section leave.
+
+### Changed
+- **`shows.json` renamed to `watchlist.json`** — the config file now reflects
+  that it holds both shows _and_ movies. `shows.json` is still loaded
+  transparently as a backward-compatible fallback and logs a deprecation nudge
+  at startup; no manual migration is required for existing installs. Simply
+  rename the file when convenient.
+- **API route `/api/shows` → `/api/watchlist`** — the settings UI now calls
+  `/api/watchlist`. The old `/api/shows` route is kept as a `301 Moved
+  Permanently` redirect for any external scripts or bookmarks.
+- **`shows.json.sample` renamed to `watchlist.json.sample`**.
+- **Makefile `make dev`** bootstraps `watchlist.json` from
+  `watchlist.json.sample` if neither watchlist file exists.
+- **Watchlist editor viewport** expanded from a fixed `440px` to
+  `calc(100vh - 280px)` so the editor fills the window on any screen size.
+- **`+ add` suggestion button** labelled `+ add to watchlist` for clarity;
+  clicking it from the suggestions section navigates to the watchlist section
+  before injecting the entry.
+- Docker volume mounts in `docker-compose.yml` and `compose.dev.yml` updated
+  to `watchlist.json`; legacy `shows.json` mount lines kept as commented
+  fallback instructions.
+
 ## [0.51.0] - 2026-05-01
 
 ### Added
