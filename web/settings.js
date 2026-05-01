@@ -5,11 +5,12 @@ const settingsApp = createApp({
 
         // ── State ────────────────────────────────────────────────────
         const sections = [
-            { id: 'scheduler', label: 'scheduler' },
-            { id: 'alerts',    label: 'alerts'    },
-            { id: 'match',     label: 'match'     },
-            { id: 'auth',      label: 'auth'      },
-            { id: 'shows',     label: 'shows'     },
+            { id: 'scheduler',   label: 'scheduler'   },
+            { id: 'alerts',      label: 'alerts'      },
+            { id: 'match',       label: 'match'       },
+            { id: 'auth',        label: 'auth'        },
+            { id: 'watchlist',   label: 'watchlist'   },
+            { id: 'suggestions', label: 'suggestions' },
         ];
         const activeSection = ref('scheduler');
         const loading = ref(true);
@@ -17,11 +18,12 @@ const settingsApp = createApp({
         const saving = ref(false);
 
         // ── Shows editor state ────────────────────────────────────────
-        const showsSaving = ref(false);
-        const showsCount  = ref(null); // null until first load
-        const moviesCount = ref(null); // null until first load
-        const showsError  = ref('');
-        let   showsCM     = null;      // CodeMirror instance (created lazily)
+        const showsSaving     = ref(false);
+        const showsCount      = ref(null); // null until first load
+        const moviesCount     = ref(null); // null until first load
+        const showsError      = ref('');
+        const watchlistFilter = ref('');
+        let   showsCM         = null;      // CodeMirror instance (created lazily)
 
         // ── Suggestions state ─────────────────────────────────────────
         const suggestAvailable   = ref(false);
@@ -201,7 +203,7 @@ const settingsApp = createApp({
                     },
                 });
                 // Fix height to fill container div
-                showsCM.setSize('100%', '440px');
+                showsCM.setSize('100%', 'calc(100vh - 280px)');
             } else {
                 showsCM.setValue(value || '');
                 showsCM.refresh();
@@ -211,7 +213,7 @@ const settingsApp = createApp({
         async function loadShows() {
             showsError.value = '';
             try {
-                const res  = await fetch('/api/shows');
+                const res  = await fetch('/api/watchlist');
                 if (!res.ok) throw new Error(`HTTP ${res.status}`);
                 const data = await res.json();
                 // data.shows_count and data.movies_count exist; strip before pretty-printing
@@ -228,7 +230,7 @@ const settingsApp = createApp({
                     pendingShowsValue = pretty;
                 }
             } catch (err) {
-                showsError.value = `failed to load shows.json: ${err.message}`;
+                showsError.value = `failed to load watchlist.json: ${err.message}`;
                 console.error('loadShows:', err);
             }
         }
@@ -256,7 +258,7 @@ const settingsApp = createApp({
             }
             showsSaving.value = true;
             try {
-                const res = await fetch('/api/shows', {
+                const res = await fetch('/api/watchlist', {
                     method: 'PUT',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(cfg),
@@ -275,13 +277,36 @@ const settingsApp = createApp({
                     const ml = moviesCount.value;
                     const parts = [`${sl} show${sl !== 1 ? 's' : ''}`];
                     if (ml > 0) parts.push(`${ml} movie${ml !== 1 ? 's' : ''}`);
-                    showToast(`shows.json saved (${parts.join(', ')})`, 'success');
+                    showToast(`watchlist saved (${parts.join(', ')})`, 'success');
                 }
             } catch (err) {
                 showsError.value = `save failed: ${err.message}`;
                 console.error('saveShows:', err);
             } finally {
                 showsSaving.value = false;
+            }
+        }
+
+        function onWatchlistFilter() {
+            if (!showsCM) return;
+            const query = watchlistFilter.value.trim();
+            if (!query) {
+                showsCM.execCommand('clearSearch');
+                return;
+            }
+            // Scroll to the first line whose "name" value contains the query.
+            const cm = showsCM;
+            const doc = cm.getDoc();
+            const lineCount = doc.lineCount();
+            const lcQuery = query.toLowerCase();
+            for (let i = 0; i < lineCount; i++) {
+                const line = doc.getLine(i);
+                if (line && line.toLowerCase().includes('"name"') && line.toLowerCase().includes(lcQuery)) {
+                    cm.scrollIntoView({ line: i, ch: 0 }, 80);
+                    cm.setCursor({ line: i, ch: 0 });
+                    cm.focus();
+                    return;
+                }
             }
         }
 
@@ -472,6 +497,13 @@ const settingsApp = createApp({
         }
 
         function addSuggestion(suggestion) {
+            // If the user is on the suggestions section, navigate to watchlist first
+            // so the editor is initialised before we try to inject into it.
+            if (activeSection.value !== 'watchlist') {
+                activeSection.value = 'watchlist';
+                setTimeout(() => addSuggestion(suggestion), 0);
+                return;
+            }
             if (!showsCM) return;
             const raw = showsCM.getValue();
             let cfg;
@@ -541,12 +573,15 @@ const settingsApp = createApp({
         // When leaving, v-if destroys the div — null showsCM so the next visit
         // recreates it in the fresh element rather than calling into a detached node.
         watch(activeSection, (newSection, oldSection) => {
-            if (oldSection === 'shows' && showsCM) {
+            if (oldSection === 'watchlist' && showsCM) {
                 pendingShowsValue = showsCM.getValue();
                 showsCM = null;
+                watchlistFilter.value = '';
             }
-            if (newSection === 'shows') {
+            if (newSection === 'watchlist') {
                 ensureShowsEditor();
+            }
+            if (newSection === 'suggestions' || newSection === 'watchlist') {
                 loadSuggestStatus();
                 loadCachedSuggestions();
             }
@@ -568,6 +603,8 @@ const settingsApp = createApp({
             showsCount,
             moviesCount,
             showsError,
+            watchlistFilter,
+            onWatchlistFilter,
             ensureShowsEditor,
             saveShows,
             formatShows,

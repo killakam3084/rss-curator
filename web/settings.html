@@ -322,11 +322,11 @@
                     <curator-btn @click="save('auth')" :disabled="saving" :loading="saving" loading-text="saving…">save auth</curator-btn>
                 </section>
 
-                <!-- ── Shows ── -->
-                <section v-if="!loading && activeSection === 'shows'" class="space-y-6">
+                <!-- ── Watchlist ── -->
+                <section v-if="!loading && activeSection === 'watchlist'" class="space-y-6">
                     <div class="flex items-start justify-between">
                         <div>
-                            <h2 class="text-xl font-bold font-mono fg-accent mb-1">> shows.json</h2>
+                            <h2 class="text-xl font-bold font-mono fg-accent mb-1">> watchlist.json</h2>
                             <p class="text-sm fg-dim font-mono">per-show &amp; per-movie watch rules &mdash; edit, upload, or paste JSON then save</p>
                         </div>
                         <span v-if="showsCount !== null" class="text-xs font-mono fg-dim mt-1 shrink-0">
@@ -336,11 +336,73 @@
                         </span>
                     </div>
 
-                    <!-- AI Suggestions panel -->
+                    <!-- Jump-to filter -->
+                    <div class="flex items-center gap-2">
+                        <input
+                            v-model="watchlistFilter"
+                            @input="onWatchlistFilter"
+                            type="text"
+                            placeholder="jump to show or movie…"
+                            class="flex-1 bg-raised border border-base rounded px-3 py-2 font-mono text-sm fg-base focus:outline-none focus:border-accent transition-colors"
+                        />
+                        <button
+                            v-if="watchlistFilter"
+                            @click="watchlistFilter = ''; onWatchlistFilter()"
+                            class="px-2 py-2 rounded border border-base fg-muted hover:fg-base font-mono text-xs transition-colors"
+                            title="clear"
+                        >✕</button>
+                    </div>
+
+                    <!-- Editor container -->
+                    <div class="relative">
+                        <div
+                            id="shows-editor"
+                            class="border border-subtle rounded overflow-hidden"
+                            style="height: calc(100vh - 280px); min-height: 400px;"
+                        ></div>
+                        <!-- Inline validation error -->
+                        <div v-if="showsError" class="mt-2 text-xs font-mono text-red-400 flex items-start gap-2">
+                            <svg class="w-3.5 h-3.5 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/>
+                            </svg>
+                            {{ showsError }}
+                        </div>
+                    </div>
+
+                    <!-- Action row -->
+                    <div class="flex flex-wrap items-center gap-3">
+                        <!-- File upload -->
+                        <label class="cursor-pointer flex items-center gap-2 px-4 py-2 rounded border border-base fg-soft hover:fg-base hover:border-accent font-mono text-xs transition-colors">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/>
+                            </svg>
+                            upload .json
+                            <input type="file" accept=".json,application/json" class="hidden" @change="onShowsFileUpload">
+                        </label>
+
+                        <!-- Format -->
+                        <button
+                            @click="formatShows"
+                            class="px-4 py-2 rounded border border-base fg-soft hover:fg-base hover:border-accent font-mono text-xs transition-colors"
+                        >format</button>
+
+                        <div class="flex-1"></div>
+
+                        <!-- Save -->
+                        <curator-btn @click="saveShows" :disabled="showsSaving" :loading="showsSaving" loading-text="saving…">save watchlist.json</curator-btn>
+                    </div>
+                </section>
+
+                <!-- ── Suggestions ── -->
+                <section v-if="!loading && activeSection === 'suggestions'" class="space-y-6">
+                    <div>
+                        <h2 class="text-xl font-bold font-mono fg-accent mb-1">> suggestions</h2>
+                        <p class="text-sm fg-dim font-mono">AI-generated show &amp; movie recommendations based on your watchlist</p>
+                    </div>
+
                     <div class="border border-subtle rounded p-4 space-y-3">
                         <div class="flex items-center justify-between">
                             <div class="flex items-center gap-3">
-                                <span class="text-xs font-mono fg-soft uppercase tracking-wider">AI suggestions</span>
                                 <span v-if="suggestGeneratedAt" class="text-xs font-mono fg-muted italic">
                                     generated {{ new Date(suggestGeneratedAt).toLocaleString() }}
                                 </span>
@@ -358,7 +420,6 @@
                                     :disabled="suggestsLoading || suggestRefreshing"
                                     class="flex items-center gap-2 px-3 py-1.5 rounded border border-base fg-soft hover:fg-base hover:border-accent font-mono text-xs transition-colors disabled:opacity-50 disabled:cursor-wait"
                                 >
-                                    <!-- Spinner while loading or refreshing -->
                                     <svg v-if="suggestsLoading || suggestRefreshing" class="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
                                         <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
                                         <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/>
@@ -422,49 +483,10 @@
                                 <div class="shrink-0 flex items-center gap-1">
                                     <button @click="dismissSuggestion(s)" title="Dismiss suggestion"
                                         class="w-6 h-6 flex items-center justify-center rounded fg-muted hover:text-red-400 hover:bg-raised transition-colors font-mono text-sm">✕</button>
-                                    <curator-btn size="sm" @click="addSuggestion(s)">+ add</curator-btn>
+                                    <curator-btn size="sm" @click="addSuggestion(s)">+ add to watchlist</curator-btn>
                                 </div>
                             </div>
                         </div>
-                    </div>
-
-                    <!-- Editor container -->
-                    <div class="relative">
-                        <div
-                            id="shows-editor"
-                            class="border border-subtle rounded overflow-hidden"
-                            style="height: 440px;"
-                        ></div>
-                        <!-- Inline validation error -->
-                        <div v-if="showsError" class="mt-2 text-xs font-mono text-red-400 flex items-start gap-2">
-                            <svg class="w-3.5 h-3.5 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20">
-                                <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/>
-                            </svg>
-                            {{ showsError }}
-                        </div>
-                    </div>
-
-                    <!-- Action row -->
-                    <div class="flex flex-wrap items-center gap-3">
-                        <!-- File upload -->
-                        <label class="cursor-pointer flex items-center gap-2 px-4 py-2 rounded border border-base fg-soft hover:fg-base hover:border-accent font-mono text-xs transition-colors">
-                            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/>
-                            </svg>
-                            upload .json
-                            <input type="file" accept=".json,application/json" class="hidden" @change="onShowsFileUpload">
-                        </label>
-
-                        <!-- Format -->
-                        <button
-                            @click="formatShows"
-                            class="px-4 py-2 rounded border border-base fg-soft hover:fg-base hover:border-accent font-mono text-xs transition-colors"
-                        >format</button>
-
-                        <div class="flex-1"></div>
-
-                        <!-- Save -->
-                        <curator-btn @click="saveShows" :disabled="showsSaving" :loading="showsSaving" loading-text="saving…">save shows.json</curator-btn>
                     </div>
                 </section>
 
