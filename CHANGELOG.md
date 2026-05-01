@@ -8,6 +8,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.52.1] - 2026-04-30
+
+### Fixed
+- **Watchlist jump-to filter no longer steals focus** — the filter input retains
+  focus while typing; pressing Enter moves focus into the editor (matches
+  canonical find-bar UX).
+- **Jump-to filter debounced with ≥ 3 char minimum** — single/double keystrokes
+  are now inert; a 300 ms debounce prevents mid-word scroll thrash. Matched text
+  is highlighted (selection range) instead of placing a bare insert cursor.
+
+### Changed
+- Bumped `go.uber.org/zap` from 1.27.1 → 1.28.0.
+
 ## [0.52.0] - 2026-04-30
 
 ### Added
