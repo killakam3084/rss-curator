@@ -45,8 +45,10 @@ Given: the user's watchlist (with genre/network/cast/creator metadata), recent a
 
 Rules:
 - Never suggest a title already in the watchlist.
-- Match genre patterns from the watchlist.
-- Pay attention to creators and lead actors — suggest shows/movies made by the same creators or featuring the same stars where available.
+- Suggest only real, verifiable titles. Use the exact canonical release name — never append qualifiers such as "(Director's Cut)", "(Extended)", "(Year Film)", a year in parentheses, or a possessive/possessive prefix like "Fincher's".
+- Match genre and tone patterns visible in the provided watchlist metadata.
+- The creator and actor metadata provided for each watchlist entry may inform which new titles to suggest, but do NOT assert specific creators, directors, or cast members for the suggested title itself — that information is fact-checked separately and wrong claims will be rejected.
+- Every suggestion must include a non-empty reason field. Write it as 1–2 sentences connecting the suggestion to concrete patterns in the user's watchlist (genre, tone, network, pedigree). Do not fabricate facts about the suggested title.
 - Set content_type to "show" for TV series and "movie" for films.
 - Use the provided quality and codec on every suggestion.
 - Respond with raw JSON only — no explanation, no markdown.`
@@ -383,15 +385,22 @@ func (sg *Suggester) Suggest(ctx context.Context, limit int) ([]Suggestion, erro
 		validated := suggestions[:0]
 		for i := range suggestions {
 			if suggestions[i].ContentType == models.ContentTypeMovie {
-				// Movie: best-effort enrichment, don't drop on miss.
+				// Movie: apply the same hallucination guard as shows. Fabricated title
+				// variants ("(Director's Cut)", "(Extended)", "Fincher's X") reliably
+				// fail to resolve; real movie titles will be found by TMDB.
 				if meta := sg.metaLookup.ResolveMovie(ctx, suggestions[i].ShowName); meta != nil {
 					if meta.ShowName != "" {
+						if meta.ShowName != suggestions[i].ShowName {
+							fmt.Printf("[Suggester] metadata: canonicalised movie %q → %q\n", suggestions[i].ShowName, meta.ShowName)
+						}
 						suggestions[i].ShowName = meta.ShowName
 						suggestions[i].SuggestedRule.Name = meta.ShowName
 					}
 					suggestions[i].Meta = metaToSuggestionMeta(meta)
+					validated = append(validated, suggestions[i])
+				} else {
+					fmt.Printf("[Suggester] metadata: dropping movie %q — unresolvable (hallucination guard)\n", suggestions[i].ShowName)
 				}
-				validated = append(validated, suggestions[i])
 			} else {
 				// Show: drop if unresolvable (hallucination guard).
 				if meta := sg.metaLookup.Resolve(ctx, suggestions[i].ShowName); meta != nil {
@@ -604,6 +613,12 @@ func (sg *Suggester) parseResponse(raw, defaultQuality, defaultCodec string) ([]
 			name = s.Title
 		}
 		if name == "" {
+			continue
+		}
+		// Reject suggestions without a reason — empty-reason entries carry no
+		// signal and are often symptoms of a wandering/hallucinating run.
+		if strings.TrimSpace(s.Reason) == "" {
+			fmt.Printf("[Suggester] parseResponse: dropping %q — empty reason\n", name)
 			continue
 		}
 		quality := sanitizeQuality(s.Quality, defaultQuality)

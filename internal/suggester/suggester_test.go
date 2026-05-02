@@ -227,3 +227,20 @@ func TestParseResponse_SkipsBlankNames(t *testing.T) {
 		t.Errorf("expected 1 with Good Show, got %+v", out)
 	}
 }
+
+func TestParseResponse_SkipsEmptyReason(t *testing.T) {
+	sg := newMinimalSuggester()
+	// One entry has an empty reason, one has whitespace only, one is valid.
+	raw := `{"suggestions":[` +
+		`{"show_name":"No Reason Show","reason":"","content_type":"show","quality":"1080p","codec":"x265"},` +
+		`{"show_name":"Whitespace Reason","reason":"   ","content_type":"show","quality":"1080p","codec":"x265"},` +
+		`{"show_name":"Good Show","reason":"matches crime drama taste","content_type":"show","quality":"1080p","codec":"x265"}` +
+		`]}`
+	out, err := sg.parseResponse(raw, "1080p", "x265")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(out) != 1 || out[0].ShowName != "Good Show" {
+		t.Errorf("expected only Good Show, got %+v", out)
+	}
+}
