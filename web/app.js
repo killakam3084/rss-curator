@@ -60,6 +60,7 @@ const app = createApp({
         let toastCounter = 0;
 
         // Sort + pagination state
+        const scrollYOffset = ref(0);       // tracks main scroller scrollTop for back-to-top
         const sortField = ref('staged_at'); // 'title' | 'staged_at' | 'pub_date' | 'size' | 'ai_score'
         const sortDir   = ref('desc');      // 'asc' | 'desc'
         const pageSize  = ref(25);          // items per page; 0 = all
@@ -717,6 +718,15 @@ const app = createApp({
             fetchAllTorrents();
         });
 
+        // Back-to-top helpers — wired to the main scroll container via @scroll="onMainScroll".
+        function onMainScroll(e) {
+            scrollYOffset.value = e.target.scrollTop;
+        }
+        function scrollToTop() {
+            const el = document.getElementById('main-scroll-container');
+            if (el) el.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+
         // Load initial data
         onMounted(() => {
             // Apply dark mode class immediately based on initial value
@@ -1081,6 +1091,9 @@ const app = createApp({
             clearAlerts,
             dismissAlert,
             cancelJob,
+            scrollYOffset,
+            onMainScroll,
+            scrollToTop,
         };
     }
 });

@@ -214,6 +214,16 @@
         <!-- Close popover on outside-click -->
         <div v-if="jobsPopoverOpen || alertsPopoverOpen" class="fixed inset-0 z-30" @click="jobsPopoverOpen = false; alertsPopoverOpen = false"></div>
 
+        <!-- Back-to-top button — shown after scrolling 400px down -->
+        <transition name="fade">
+            <button
+                v-if="scrollYOffset > 400"
+                @click="scrollToTop"
+                class="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 px-4 py-2 rounded-full text-xs font-mono fg-soft bg-card border border-base shadow-lg shadow-black/40 hover:fg-accent hover:border-accent/40 transition-colors"
+                title="back to top"
+            >↑ top</button>
+        </transition>
+
         <!-- Toast Notifications -->
         <div class="fixed top-16 right-6 z-50 flex flex-col gap-2 w-80 pointer-events-none">
             <div
@@ -240,7 +250,7 @@
         <div class="flex min-h-screen">
             <!-- Main Content Area -->
             <div :style="{marginLeft: sidebarCollapsed ? '64px' : '320px', marginRight: logsDrawerOpen ? '600px' : '0', paddingTop: '56px'}" class="flex-1 transition-all duration-300 overflow-hidden">
-                <div class="w-full h-full overflow-y-auto px-4 py-8">
+                <div id="main-scroll-container" class="w-full h-full overflow-y-auto px-4 py-8" @scroll="onMainScroll">
             <!-- Main Content Layout -->
             <div>
                 <!-- Main Content -->
@@ -420,6 +430,27 @@
                                 class="text-xs font-mono fg-dim hover:text-red-400 transition-colors"
                             >deselect page</button>
                         </div>
+
+                        <!-- Top pagination controls (mirrors bottom; hidden on single-page views) -->
+                        <div v-if="totalPages > 1" class="flex items-center justify-between mb-3 px-1">
+                            <span class="text-xs font-mono fg-muted">
+                                {{ (currentPage - 1) * pageSize + 1 }}–{{ Math.min(currentPage * pageSize || displayedTorrents.length, displayedTorrents.length) }} of {{ displayedTorrents.length }}
+                            </span>
+                            <div class="flex items-center gap-2">
+                                <button
+                                    @click="currentPage--"
+                                    :disabled="currentPage <= 1"
+                                    class="px-3 py-1 rounded text-xs font-mono bg-raised border border-base fg-soft hover:fg-accent hover:border-accent/40 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                                >← prev</button>
+                                <span class="text-xs font-mono fg-dim">{{ currentPage }} / {{ totalPages }}</span>
+                                <button
+                                    @click="currentPage++"
+                                    :disabled="currentPage >= totalPages"
+                                    class="px-3 py-1 rounded text-xs font-mono bg-raised border border-base fg-soft hover:fg-accent hover:border-accent/40 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                                >next →</button>
+                            </div>
+                        </div>
+
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                         <torrent-card
                             v-for="torrent in pagedTorrents"
