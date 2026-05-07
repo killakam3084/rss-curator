@@ -478,6 +478,18 @@
                                         <span v-if="s.meta.premiere_year" class="text-xs fg-dim font-mono">{{ s.meta.premiere_year }}</span>
                                         <span class="px-1.5 py-0.5 rounded text-xs font-mono"
                                             :class="s.content_type === 'movie' ? 'badge-indigo' : 'bg-raised fg-muted'">{{ s.content_type === 'movie' ? 'movie' : 'show' }}</span>
+                                        <!-- TMDB community score -->
+                                        <span v-if="s.meta.vote_average > 0"
+                                            class="px-1.5 py-0.5 rounded bg-raised text-xs font-mono fg-soft"
+                                            :title="s.meta.vote_count ? s.meta.vote_count.toLocaleString() + ' votes on TMDB' : 'TMDB score'"
+                                        >★ {{ s.meta.vote_average.toFixed(1) }}</span>
+                                        <!-- IMDb deep-link -->
+                                        <a v-if="s.meta.imdb_id"
+                                            :href="'https://www.imdb.com/title/' + s.meta.imdb_id + '/'"
+                                            target="_blank" rel="noopener noreferrer"
+                                            class="px-1.5 py-0.5 rounded bg-yellow-500/10 text-yellow-400 hover:text-yellow-300 text-xs font-mono border border-yellow-500/20 transition-colors"
+                                            title="View on IMDb"
+                                        >IMDb ↗</a>
                                     </div>
                                     <div v-if="s.meta && s.meta.overview" class="mt-1 text-xs fg-soft italic leading-snug line-clamp-2">{{ s.meta.overview }}</div>
                                 </div>

@@ -15,6 +15,7 @@
 
             setup(props, { emit }) {
                 const menuOpen = ref(false);
+                const infoOpen = ref(false);
 
                 const formatSize = (bytes) => {
                     const units = ['B', 'KB', 'MB', 'GB'];
@@ -27,12 +28,14 @@
                     return `${size.toFixed(2)} ${units[unitIndex]}`;
                 };
 
+                const fmtDate = (d) => d ? new Date(d).toLocaleString() : '—';
+
                 const closeMenu = () => { menuOpen.value = false; };
 
                 onMounted(() => { document.addEventListener('click', closeMenu); });
                 onUnmounted(() => { document.removeEventListener('click', closeMenu); });
 
-                return { menuOpen, formatSize };
+                return { menuOpen, infoOpen, formatSize, fmtDate };
             },
 
             template: `
@@ -82,6 +85,10 @@
                                 title="More options"
                             >&#8942;</button>
                             <div v-if="menuOpen" class="absolute right-0 top-8 z-50 bg-raised border border-base rounded-lg shadow-xl py-1" style="min-width:168px">
+                                <button
+                                    @click="menuOpen = false; infoOpen = true"
+                                    class="w-full text-left px-4 py-2 text-sm font-mono fg-soft hover:bg-gray-700 hover:text-curator-500 transition-colors flex items-center gap-2"
+                                >&#9432; info</button>
                                 <button
                                     @click="$emit('rematch')"
                                     class="w-full text-left px-4 py-2 text-sm font-mono fg-soft hover:bg-gray-700 hover:text-curator-500 transition-colors flex items-center gap-2"
@@ -137,6 +144,72 @@
                         </div>
                     </div>
                 </div>
+
+                <!-- ── Info modal ──────────────────────────────────────────────── -->
+                <teleport to="body">
+                    <div v-if="infoOpen"
+                        class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
+                        @click.self="infoOpen = false"
+                    >
+                        <div class="bg-card border border-base rounded-xl shadow-2xl w-full max-w-lg mx-4 max-h-[85vh] flex flex-col overflow-hidden">
+                            <!-- Modal header -->
+                            <div class="flex items-start justify-between gap-3 px-5 py-4 border-b border-subtle bg-raised/60">
+                                <h3 class="text-sm font-mono fg-accent font-bold leading-snug break-words">{{ torrent.title }}</h3>
+                                <button @click="infoOpen = false" class="shrink-0 w-6 h-6 flex items-center justify-center rounded fg-muted hover:fg-base hover:bg-gray-700 transition-colors font-mono text-sm">✕</button>
+                            </div>
+                            <!-- Modal body -->
+                            <div class="overflow-y-auto px-5 py-4 space-y-2 text-xs font-mono">
+                                <!-- badges row -->
+                                <div class="flex flex-wrap gap-1.5 mb-3">
+                                    <span :class="['px-2 py-0.5 rounded border font-bold uppercase', torrent.status === 'pending' ? 'badge-blue border' : torrent.status === 'accepted' ? 'badge-accent border' : 'badge-red border']">{{ torrent.status }}</span>
+                                    <span :class="['px-2 py-0.5 rounded border', torrent.content_type === 'movie' ? 'badge-purple border' : 'badge-blue border']">{{ torrent.content_type }}</span>
+                                </div>
+                                <div class="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 items-baseline">
+                                    <span class="fg-dim">id</span>
+                                    <span class="fg-soft">{{ torrent.id }}</span>
+
+                                    <span class="fg-dim">size</span>
+                                    <span class="fg-accent font-bold">{{ formatSize(torrent.size) }}</span>
+
+                                    <span v-if="torrent.release_year" class="fg-dim">year</span>
+                                    <span v-if="torrent.release_year" class="fg-soft">{{ torrent.release_year }}</span>
+
+                                    <span class="fg-dim">published</span>
+                                    <span class="fg-soft">{{ fmtDate(torrent.pub_date) }}</span>
+
+                                    <span class="fg-dim">staged</span>
+                                    <span class="fg-soft">{{ fmtDate(torrent.staged_at) }}</span>
+
+                                    <span class="fg-dim">match</span>
+                                    <span class="fg-soft break-words">{{ torrent.match_reason || '—' }}</span>
+
+                                    <template v-if="torrent.ai_scored">
+                                        <span class="fg-dim">ai score</span>
+                                        <span class="badge-emerald border px-1.5 py-0.5 rounded w-fit font-bold">&#9889; {{ Math.round(torrent.ai_score * 100) }}%</span>
+
+                                        <span class="fg-dim">ai reason</span>
+                                        <span class="fg-soft break-words leading-relaxed">{{ torrent.ai_reason || '—' }}</span>
+                                    </template>
+
+                                    <template v-if="torrent.ai_scored && torrent.match_confidence !== undefined">
+                                        <span class="fg-dim">confidence</span>
+                                        <span :class="torrent.match_confidence < 0.5 ? 'badge-amber border px-1.5 py-0.5 rounded w-fit' : 'fg-soft'">{{ (torrent.match_confidence * 100).toFixed(0) }}%</span>
+
+                                        <template v-if="torrent.match_confidence_reason">
+                                            <span class="fg-dim">conf. reason</span>
+                                            <span class="fg-soft break-words leading-relaxed">{{ torrent.match_confidence_reason }}</span>
+                                        </template>
+                                    </template>
+
+                                    <template v-if="torrent.link">
+                                        <span class="fg-dim">link</span>
+                                        <a :href="torrent.link" target="_blank" rel="noopener noreferrer" class="text-indigo-400 hover:underline break-all">{{ torrent.link }}</a>
+                                    </template>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </teleport>
             `,
         });
     }
