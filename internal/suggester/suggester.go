@@ -62,8 +62,11 @@ type SuggestionMeta struct {
 	Status       string   `json:"status,omitempty"`
 	PremiereYear int      `json:"premiere_year,omitempty"`
 	Overview     string   `json:"overview,omitempty"`
-	Cast         []string `json:"cast,omitempty"`     // top-billed actor names (up to 5)
-	Creators     []string `json:"creators,omitempty"` // show creator names (up to 2)
+	Cast         []string `json:"cast,omitempty"`         // top-billed actor names (up to 5)
+	Creators     []string `json:"creators,omitempty"`     // show creator names (up to 2)
+	VoteAverage  float64  `json:"vote_average,omitempty"` // TMDB community score (0–10)
+	VoteCount    int      `json:"vote_count,omitempty"`   // number of community votes
+	IMDbID       string   `json:"imdb_id,omitempty"`      // e.g. "tt1234567" for deep-linking
 }
 
 // Suggestion is a single LLM-proposed title that the user might want to add.
@@ -452,6 +455,9 @@ func metaToSuggestionMeta(meta *metadata.ShowMetadata) *SuggestionMeta {
 		Overview:     meta.Overview,
 		Cast:         meta.Cast,
 		Creators:     meta.Creators,
+		VoteAverage:  meta.VoteAverage,
+		VoteCount:    meta.VoteCount,
+		IMDbID:       meta.IMDbID,
 	}
 }
 

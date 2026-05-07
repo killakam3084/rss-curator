@@ -96,7 +96,7 @@ type tmdbGenre struct {
 }
 
 func (p *tmdbProvider) fetchTVDetail(ctx context.Context, id int) (*ShowMetadata, error) {
-	detailURL := fmt.Sprintf("%s/3/tv/%d?language=en-US&append_to_response=credits", p.host, id)
+	detailURL := fmt.Sprintf("%s/3/tv/%d?language=en-US&append_to_response=credits,external_ids", p.host, id)
 
 	var detail struct {
 		ID           int         `json:"id"`
@@ -104,6 +104,8 @@ func (p *tmdbProvider) fetchTVDetail(ctx context.Context, id int) (*ShowMetadata
 		Overview     string      `json:"overview"`
 		Status       string      `json:"status"`
 		FirstAirDate string      `json:"first_air_date"` // "YYYY-MM-DD"
+		VoteAverage  float64     `json:"vote_average"`
+		VoteCount    int         `json:"vote_count"`
 		Genres       []tmdbGenre `json:"genres"`
 		Networks     []struct {
 			Name string `json:"name"`
@@ -117,6 +119,9 @@ func (p *tmdbProvider) fetchTVDetail(ctx context.Context, id int) (*ShowMetadata
 				Order int    `json:"order"`
 			} `json:"cast"`
 		} `json:"credits"`
+		ExternalIDs *struct {
+			IMDbID string `json:"imdb_id"`
+		} `json:"external_ids"`
 	}
 	if err := p.get(ctx, detailURL, &detail); err != nil {
 		return nil, fmt.Errorf("tmdb: tv detail %d: %w", id, err)
@@ -131,7 +136,12 @@ func (p *tmdbProvider) fetchTVDetail(ctx context.Context, id int) (*ShowMetadata
 		ShowName:    detail.Name,
 		Status:      detail.Status,
 		Overview:    detail.Overview,
+		VoteAverage: detail.VoteAverage,
+		VoteCount:   detail.VoteCount,
 		FetchedAt:   time.Now().UTC(),
+	}
+	if detail.ExternalIDs != nil {
+		meta.IMDbID = detail.ExternalIDs.IMDbID
 	}
 	for _, g := range detail.Genres {
 		meta.Genres = append(meta.Genres, g.Name)
@@ -166,6 +176,9 @@ func (p *tmdbProvider) fetchMovieDetail(ctx context.Context, id int) (*ShowMetad
 		Overview            string      `json:"overview"`
 		Status              string      `json:"status"`
 		ReleaseDate         string      `json:"release_date"` // "YYYY-MM-DD"
+		IMDbID              string      `json:"imdb_id"`      // native field on movie detail
+		VoteAverage         float64     `json:"vote_average"`
+		VoteCount           int         `json:"vote_count"`
 		Genres              []tmdbGenre `json:"genres"`
 		ProductionCompanies []struct {
 			Name string `json:"name"`
@@ -194,6 +207,9 @@ func (p *tmdbProvider) fetchMovieDetail(ctx context.Context, id int) (*ShowMetad
 		ShowName:    detail.Title,
 		Status:      detail.Status,
 		Overview:    detail.Overview,
+		IMDbID:      detail.IMDbID,
+		VoteAverage: detail.VoteAverage,
+		VoteCount:   detail.VoteCount,
 		FetchedAt:   time.Now().UTC(),
 	}
 	for _, g := range detail.Genres {
