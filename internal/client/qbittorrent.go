@@ -100,9 +100,7 @@ func (c *Client) AddTorrent(url string, options map[string]string) error {
 	// Single attempt - no automatic retries
 	err := c.qb.AddTorrentFromUrlCtx(ctx, url, opts)
 	if err != nil {
-		// qBittorrent 5.x returns 202 Accepted for torrents/add; the library only
-		// accepts 200/204 so it surfaces this as an error. Treat 202 as success.
-		if strings.Contains(err.Error(), "status code: 202") {
+		if isQBit202Accepted(err) {
 			fmt.Printf("[QBittorrent] Got 202 Accepted (treating as success): %s\n", url)
 			return nil
 		}
@@ -156,7 +154,7 @@ func (c *Client) RetryAddTorrent(ctx context.Context, url string, opts map[strin
 
 		fmt.Printf("[QBittorrent] Retry attempt %d: Adding torrent from URL: %s\n", attempt+1, url)
 		err := c.qb.AddTorrentFromUrlCtx(ctx, url, opts)
-		if err == nil || strings.Contains(err.Error(), "status code: 202") {
+		if err == nil || isQBit202Accepted(err) {
 			if err != nil {
 				fmt.Printf("[QBittorrent] Got 202 Accepted (treating as success) on attempt %d\n", attempt+1)
 			} else if attempt > 0 {
@@ -224,7 +222,11 @@ func (c *Client) CreateCategory(name, path string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	return c.qb.CreateCategoryCtx(ctx, name, path)
+	err := c.qb.CreateCategoryCtx(ctx, name, path)
+	if isQBit202Accepted(err) {
+		return nil
+	}
+	return err
 }
 
 // ResumeTorrent resumes/starts a paused torrent
@@ -232,7 +234,11 @@ func (c *Client) ResumeTorrent(hash string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	return c.qb.ResumeCtx(ctx, []string{hash})
+	err := c.qb.ResumeCtx(ctx, []string{hash})
+	if isQBit202Accepted(err) {
+		return nil
+	}
+	return err
 }
 
 // PauseTorrent pauses a torrent
@@ -240,7 +246,11 @@ func (c *Client) PauseTorrent(hash string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	return c.qb.PauseCtx(ctx, []string{hash})
+	err := c.qb.PauseCtx(ctx, []string{hash})
+	if isQBit202Accepted(err) {
+		return nil
+	}
+	return err
 }
 
 // TestConnection tests the connection to qBittorrent
@@ -295,4 +305,14 @@ func extractErrorDetails(err error) string {
 
 	// Return the original error message if we can't identify it
 	return fmt.Sprintf("Unknown error: %s", errStr)
+}
+
+// isQBit202Accepted returns true when the go-qbittorrent library surfaces a
+// "status code: 202" error. qBittorrent 5.x returns HTTP 202 Accepted for
+// several mutation endpoints (e.g. torrents/add, resume, pause, categories/create).
+// The library's success switch only lists 200 and 204, so these are spuriously
+// returned as errors. Until the library adds explicit 202 handling, treat them
+// as success here.
+func isQBit202Accepted(err error) bool {
+	return err != nil && strings.Contains(err.Error(), "status code: 202")
 }
