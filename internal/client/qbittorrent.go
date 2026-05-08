@@ -217,6 +217,14 @@ func (c *Client) GetCategories() (map[string]qbt.Category, error) {
 	return c.qb.GetCategoriesCtx(ctx)
 }
 
+// GetTags retrieves all tags known to qBittorrent
+func (c *Client) GetTags() ([]string, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	return c.qb.GetTagsCtx(ctx)
+}
+
 // CreateCategory creates a new category
 func (c *Client) CreateCategory(name, path string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)

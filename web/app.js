@@ -45,14 +45,18 @@ const app = createApp({
         const reviewModalOpen = ref(false);
         const reviewingTorrent = ref(null);
         const reviewForm = ref({
-            tags: '',
-            category: ''
+            tags: [],      // array of selected tag strings
+            category: '',  // single selected category string
+            newTag: '',    // draft input for adding a new tag
         });
         const bulkReviewModalOpen = ref(false);
         const bulkReviewForm = ref({
-            tags: '',
-            category: ''
+            tags: [],
+            category: '',
+            newTag: '',
         });
+        // qBittorrent categories + tags fetched from /api/qb/meta
+        const qbMeta = ref({ categories: [], tags: [] });
         const rematchModalOpen = ref(false);
         const rematchIds = ref([]);
         const rematchAutoRescore = ref(true);
@@ -254,6 +258,18 @@ const app = createApp({
             }
         };
 
+        const fetchQBMeta = async () => {
+            try {
+                const data = await fetch('/api/qb/meta').then(r => r.json());
+                qbMeta.value = {
+                    categories: (data.categories || []).slice().sort(),
+                    tags: (data.tags || []).slice().sort(),
+                };
+            } catch (_) {
+                // non-fatal: qBittorrent may be offline
+            }
+        };
+
         const closeLogsDrawer = () => { logsDrawerOpen.value = false; };
 
         const showToast = (message, type = 'info', duration = 5000) => {
@@ -298,11 +314,24 @@ const app = createApp({
 
         const openReviewModal = (torrent) => {
             reviewingTorrent.value = torrent;
-            reviewForm.value = {
-                tags: '',
-                category: ''
-            };
+            reviewForm.value = { tags: [], category: '', newTag: '' };
             reviewModalOpen.value = true;
+        };
+
+        const toggleReviewTag = (tag) => {
+            const idx = reviewForm.value.tags.indexOf(tag);
+            if (idx === -1) reviewForm.value.tags.push(tag);
+            else reviewForm.value.tags.splice(idx, 1);
+        };
+
+        const addReviewTag = () => {
+            const t = reviewForm.value.newTag.trim();
+            if (t && !reviewForm.value.tags.includes(t)) reviewForm.value.tags.push(t);
+            reviewForm.value.newTag = '';
+        };
+
+        const removeReviewTag = (tag) => {
+            reviewForm.value.tags = reviewForm.value.tags.filter(t => t !== tag);
         };
 
         const closeReviewModal = () => {
@@ -329,7 +358,7 @@ const app = createApp({
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
-                        tags: reviewForm.value.tags,
+                        tags: reviewForm.value.tags.join(', '),
                         category: reviewForm.value.category
                     })
                 });
@@ -441,52 +470,31 @@ const app = createApp({
             }
         };
 
-        const bulkQueue = async () => {
-            if (selectedIds.value.size === 0) return;
-            
-            bulkLoading.value = true;
-            try {
-                // Queue accepted torrents in bulk without custom config
-                // Uses default settings (empty tags, category)
-                const results = await Promise.all(
-                    Array.from(selectedIds.value).map(id =>
-                        fetch(`/api/torrents/${id}/queue`, {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({
-                                tags: '',
-                                category: ''
-                            })
-                        })
-                    )
-                );
-                
-                if (results.every(r => r.ok)) {
-                    showToast(`Queued ${selectedIds.value.size} torrents for download`, 'success');
-                    selectedIds.value.clear();
-                    await fetchAllTorrents();
-                    await fetchActivities();
-                } else {
-                    showToast('Some queues failed', 'error');
-                }
-            } catch (error) {
-                console.error('Error in bulk queue:', error);
-                showToast('Error queueing torrents', 'error');
-            } finally {
-                bulkLoading.value = false;
-            }
-        };
+        const bulkQueue = () => openBulkReviewModal();
 
         const openBulkReviewModal = () => {
             if (selectedIds.value.size === 0) {
                 showToast('No torrents selected', 'error');
                 return;
             }
-            bulkReviewForm.value = {
-                tags: '',
-                category: ''
-            };
+            bulkReviewForm.value = { tags: [], category: '', newTag: '' };
             bulkReviewModalOpen.value = true;
+        };
+
+        const toggleBulkTag = (tag) => {
+            const idx = bulkReviewForm.value.tags.indexOf(tag);
+            if (idx === -1) bulkReviewForm.value.tags.push(tag);
+            else bulkReviewForm.value.tags.splice(idx, 1);
+        };
+
+        const addBulkTag = () => {
+            const t = bulkReviewForm.value.newTag.trim();
+            if (t && !bulkReviewForm.value.tags.includes(t)) bulkReviewForm.value.tags.push(t);
+            bulkReviewForm.value.newTag = '';
+        };
+
+        const removeBulkTag = (tag) => {
+            bulkReviewForm.value.tags = bulkReviewForm.value.tags.filter(t => t !== tag);
         };
 
         const closeBulkReviewModal = () => {
@@ -505,7 +513,7 @@ const app = createApp({
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({
-                                tags: bulkReviewForm.value.tags,
+                                tags: bulkReviewForm.value.tags.join(', '),
                                 category: bulkReviewForm.value.category
                             })
                         })
@@ -748,6 +756,7 @@ const app = createApp({
             openJobsStream();
             fetchAlerts();
             openAlertsStream();
+            fetchQBMeta();
             // Auto-refresh every 30 seconds
             setInterval(() => {
                 fetchAllTorrents();
@@ -1029,6 +1038,8 @@ const app = createApp({
             fetchActivities,
             fetchFeedStream,
             fetchStats,
+            fetchQBMeta,
+            qbMeta,
             closeLogsDrawer,
             approveTorrent,
             rejectTorrent,
@@ -1039,11 +1050,17 @@ const app = createApp({
             reviewModalOpen,
             reviewingTorrent,
             reviewForm,
+            toggleReviewTag,
+            addReviewTag,
+            removeReviewTag,
             bulkReviewModalOpen,
             bulkReviewForm,
             openBulkReviewModal,
             closeBulkReviewModal,
             submitBulkReview,
+            toggleBulkTag,
+            addBulkTag,
+            removeBulkTag,
             rematchModalOpen,
             rematchIds,
             rematchAutoRescore,

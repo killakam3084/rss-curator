@@ -381,6 +381,7 @@ func (s *Server) Start() error {
 	mux.HandleFunc("/api/alerts", s.handleAlerts)
 	mux.HandleFunc("/api/settings", s.handleSettings)
 	mux.HandleFunc("/api/watchlist", s.handleWatchlist)
+	mux.HandleFunc("/api/qb/meta", s.handleQBMeta)
 	// Deprecated: /api/shows redirects to /api/watchlist for backward compatibility.
 	mux.HandleFunc("/api/shows", func(w http.ResponseWriter, r *http.Request) {
 		target := "/api/watchlist"
@@ -850,6 +851,37 @@ func (s *Server) handleRetryQBittorrent(w http.ResponseWriter, r *http.Request, 
 }
 
 // handleHealth returns health status
+// handleQBMeta returns available qBittorrent categories and tags for the UI.
+// GET /api/qb/meta
+func (s *Server) handleQBMeta(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	type QBMetaResponse struct {
+		Categories []string `json:"categories"`
+		Tags       []string `json:"tags"`
+	}
+	resp := QBMetaResponse{
+		Categories: []string{},
+		Tags:       []string{},
+	}
+	if s.client != nil {
+		if cats, err := s.client.GetCategories(); err == nil {
+			for name := range cats {
+				if name != "" {
+					resp.Categories = append(resp.Categories, name)
+				}
+			}
+		}
+		if tags, err := s.client.GetTags(); err == nil {
+			resp.Tags = tags
+		}
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(resp)
+}
+
 func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
