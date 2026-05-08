@@ -313,6 +313,15 @@ func extractErrorDetails(err error) string {
 // The library's success switch only lists 200 and 204, so these are spuriously
 // returned as errors. Until the library adds explicit 202 handling, treat them
 // as success here.
+//
+// TODO: remove this shim once go-qbittorrent adds 202 to its accepted-status
+// switches. Track progress at:
+//
+//	https://github.com/autobrr/go-qbittorrent/pull/110
+//
+// PR #110 (v1.15.0) added 204 support; 202 was not included. When a follow-up
+// release covers 202, bump go.mod and delete this function along with all
+// isQBit202Accepted() call sites in this file.
 func isQBit202Accepted(err error) bool {
 	return err != nil && strings.Contains(err.Error(), "status code: 202")
 }
