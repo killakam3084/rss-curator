@@ -110,7 +110,15 @@ type Storage struct {
 
 // New creates a new storage instance
 func New(dbPath string) (*Storage, error) {
-	db, err := sql.Open("sqlite3", dbPath)
+	// DSN parameters:
+	//   _journal_mode=WAL  — allows readers and one writer to proceed concurrently;
+	//                        also makes recovery from unclean shutdowns automatic
+	//                        (WAL is rolled back on the next open, no manual cleanup).
+	//   _busy_timeout=5000 — retry for up to 5 s before returning SQLITE_BUSY,
+	//                        covering brief lock contention at startup.
+	//   _foreign_keys=on   — enforce referential integrity.
+	dsn := dbPath + "?_journal_mode=WAL&_busy_timeout=5000&_foreign_keys=on"
+	db, err := sql.Open("sqlite3", dsn)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open database: %w", err)
 	}
