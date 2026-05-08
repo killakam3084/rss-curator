@@ -100,6 +100,12 @@ func (c *Client) AddTorrent(url string, options map[string]string) error {
 	// Single attempt - no automatic retries
 	err := c.qb.AddTorrentFromUrlCtx(ctx, url, opts)
 	if err != nil {
+		// qBittorrent 5.x returns 202 Accepted for torrents/add; the library only
+		// accepts 200/204 so it surfaces this as an error. Treat 202 as success.
+		if strings.Contains(err.Error(), "status code: 202") {
+			fmt.Printf("[QBittorrent] Got 202 Accepted (treating as success): %s\n", url)
+			return nil
+		}
 		fmt.Printf("[QBittorrent] Failed to add torrent: error_type=%T\n", err)
 		fmt.Printf("[QBittorrent] Error: %v\n", extractErrorDetails(err))
 		fmt.Printf("[QBittorrent] Raw error: %+v\n", err)
@@ -150,8 +156,10 @@ func (c *Client) RetryAddTorrent(ctx context.Context, url string, opts map[strin
 
 		fmt.Printf("[QBittorrent] Retry attempt %d: Adding torrent from URL: %s\n", attempt+1, url)
 		err := c.qb.AddTorrentFromUrlCtx(ctx, url, opts)
-		if err == nil {
-			if attempt > 0 {
+		if err == nil || strings.Contains(err.Error(), "status code: 202") {
+			if err != nil {
+				fmt.Printf("[QBittorrent] Got 202 Accepted (treating as success) on attempt %d\n", attempt+1)
+			} else if attempt > 0 {
 				fmt.Printf("[QBittorrent] Successfully added torrent on retry attempt %d\n", attempt)
 			}
 			return nil
