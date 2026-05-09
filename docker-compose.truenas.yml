@@ -1,0 +1,112 @@
+# TrueNAS SCALE deployment compose.
+# Secrets are injected via Infisical CLI:
+#   infisical run --projectId=<id> --env=prod -- docker compose -f docker-compose.truenas.yml up -d
+#
+# Required secrets (stored in Infisical):
+#   CURATOR_AI_SUGGESTER_KEY  — Anthropic API key
+#   CURATOR_META_KEY          — TMDB JWT bearer token
+#   CURATOR_PASSWORD          — curator web UI password
+#   CURATOR_SESSION_SECRET    — session signing secret (hex)
+#   QBITTORRENT_PASS          — qBittorrent password
+#   RSS_FEED_URL              — iptorrents RSS URL (contains tracker passkey)
+#   RSS_MOVIE_FEED_URL        — iptorrents movie RSS URL (contains tracker passkey)
+
+services:
+  ollama:
+    container_name: ollama
+    image: ollama/ollama
+    network_mode: host
+    restart: unless-stopped
+    environment:
+      OLLAMA_KEEP_ALIVE: -1
+      OLLAMA_MAX_LOADED_MODELS: 2
+      OLLAMA_NUM_PARALLEL: 2
+      OLLAMA_NUM_THREADS: 8
+    healthcheck:
+      test: [CMD, ollama, list]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    volumes:
+      - ollama-data:/root/.ollama
+
+  ollama-init:
+    image: ollama/ollama
+    network_mode: host
+    restart: "no"
+    depends_on:
+      ollama:
+        condition: service_healthy
+    environment:
+      OLLAMA_HOST: http://192.168.68.60:11434
+    entrypoint:
+      - sh
+      - -c
+      - ollama pull llama3.2:3b && ollama pull llama3.2:1b && ollama pull llama3.1:8b
+
+  rss-curator:
+    container_name: rss-curator
+    image: ghcr.io/killakam3084/rss-curator:latest
+    pull_policy: always
+    network_mode: host
+    restart: unless-stopped
+    depends_on:
+      ollama-init:
+        condition: service_completed_successfully
+    environment:
+      # --- non-secret config ---
+      CHECK_INTERVAL: 600
+      STORAGE_PATH: /app/data/curator.db
+      CURATOR_USERNAME: admin
+      CURATOR_SESSION_TTL_HOURS: 1
+      CURATOR_WATCHLIST_ENRICH_INTERVAL_HOURS: 6
+
+      # AI (ollama)
+      CURATOR_AI_PROVIDER: ollama
+      CURATOR_AI_HOST: http://192.168.68.60:11434
+      CURATOR_AI_SCORER_MODEL: llama3.2:3b
+      CURATOR_AI_ENRICHER_MODEL: llama3.2:1b
+      CURATOR_AI_MAX_TOKENS: 8192
+      CURATOR_AI_NUM_CTX: 2048
+      CURATOR_AI_NUM_PREDICT: 400
+      CURATOR_AI_TIMEOUT_SECS: 60
+      CURATOR_AI_SCORER_CONCURRENCY: 3
+
+      # AI suggester (Anthropic)
+      CURATOR_AI_SUGGESTER_PROVIDER: anthropic
+      CURATOR_AI_SUGGESTER_MODEL: claude-haiku-4-5-20251001
+      CURATOR_AI_SUGGESTER_MAX_TOKENS: 8192
+      CURATOR_AI_SUGGESTER_NUM_CTX: 8192
+      CURATOR_AI_SUGGESTER_NUM_PREDICT: 1024
+      CURATOR_AI_SUGGESTER_TIMEOUT_SECS: 600
+      CURATOR_AI_SUGGESTER_REFRESH_HOURS: 6
+      CURATOR_AI_SUGGESTER_CACHE_LIMIT: 25
+
+      # qBittorrent (non-secret)
+      QBITTORRENT_HOST: http://192.168.68.60:30024
+      QBITTORRENT_USER: admin
+      QBITTORRENT_CATEGORY: curator
+      QBITTORRENT_ADD_PAUSED: "true"
+
+      # Metadata provider
+      CURATOR_META_PROVIDER: tmdb
+
+      # --- secrets injected by Infisical ---
+      CURATOR_AI_SUGGESTER_KEY: ${CURATOR_AI_SUGGESTER_KEY}
+      CURATOR_META_KEY: ${CURATOR_META_KEY}
+      CURATOR_PASSWORD: ${CURATOR_PASSWORD}
+      CURATOR_SESSION_SECRET: ${CURATOR_SESSION_SECRET}
+      QBITTORRENT_PASS: ${QBITTORRENT_PASS}
+      RSS_FEED_URL: ${RSS_FEED_URL}
+      RSS_MOVIE_FEED_URL: ${RSS_MOVIE_FEED_URL}
+
+    volumes:
+      - /mnt/cell_block_d/apps/rss-curator/curator-db:/app/data
+      - /mnt/cell_block_d/apps/rss-curator/shows.json:/app/shows.json
+      - /mnt/cell_block_d/apps/rss-curator/watchlist.json:/app/watchlist.json
+      - /mnt/cell_block_d/apps/rss-curator/logs:/app/logs
+
+volumes:
+  ollama-data:
+    driver: local
