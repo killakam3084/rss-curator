@@ -56,3 +56,26 @@ HTTP 200
 header "Content-Type" contains "application/json"
 jsonpath "$.torrents" isCollection
 jsonpath "$.count"    isInteger
+
+
+# ── 5. /login/ (trailing slash) → 301 to /login ───────────────────────────
+# Regression: /login/?next=/ previously returned 404 after a successful login
+# because ServeMux had no handler for /login/ and the auth middleware did not
+# exempt it.
+GET {{base}}/login/
+[Options]
+location: false
+
+HTTP 301
+[Asserts]
+header "Location" == "/login"
+
+
+# ── 6. /login/?next=/ → 301 to /login?next=/ (query preserved) ───────────
+GET {{base}}/login/?next=/
+[Options]
+location: false
+
+HTTP 301
+[Asserts]
+header "Location" == "/login?next=/"

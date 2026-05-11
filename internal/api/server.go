@@ -403,6 +403,14 @@ func (s *Server) Start() error {
 	// Auth routes (registered unconditionally; handleLogin/handleLogout are
 	// no-ops when auth is disabled because the middleware never blocks access)
 	mux.HandleFunc("/login", s.handleLogin)
+	// Redirect /login/ (trailing slash) → /login, preserving any query string.
+	mux.HandleFunc("/login/", func(w http.ResponseWriter, r *http.Request) {
+		target := "/login"
+		if r.URL.RawQuery != "" {
+			target += "?" + r.URL.RawQuery
+		}
+		http.Redirect(w, r, target, http.StatusMovedPermanently)
+	})
 	mux.HandleFunc("/logout", s.handleLogout)
 
 	// Jobs dedicated page

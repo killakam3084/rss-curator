@@ -92,7 +92,7 @@ func authMiddleware(next http.Handler, secret []byte) http.Handler {
 		path := r.URL.Path
 
 		// Exempt paths — no auth required
-		if path == "/login" || path == "/logout" || path == "/api/health" {
+		if path == "/login" || path == "/login/" || path == "/logout" || path == "/api/health" {
 			next.ServeHTTP(w, r)
 			return
 		}

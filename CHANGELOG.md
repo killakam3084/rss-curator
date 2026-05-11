@@ -8,6 +8,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.52.2] - 2026-05-11
+
+### Fixed
+- **`/login/` trailing-slash 404 after successful login** — requests to
+  `/login/?next=/` now 301-redirect to `/login?next=/` instead of returning
+  404. Root cause: Go's `ServeMux` had no handler for `/login/` and the auth
+  middleware did not exempt it, causing the redirect-after-login target to 404.
+
 ## [0.52.1] - 2026-04-30
 
 ### Fixed
