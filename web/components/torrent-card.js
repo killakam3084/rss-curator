@@ -11,7 +11,7 @@
                 operating:        { type: Boolean, default: false },
             },
 
-            emits: ['toggle-select', 'approve', 'reject', 'queue', 'rematch', 'rescore'],
+            emits: ['toggle-select', 'approve', 'reject', 'queue', 'rematch', 'rescore', 'retry'],
 
             setup(props, { emit }) {
                 const menuOpen = ref(false);
@@ -58,6 +58,8 @@
                                 'inline-block px-2 py-1 rounded text-xs font-mono font-bold uppercase',
                                 torrent.status === 'pending'  ? 'badge-blue border' :
                                 torrent.status === 'accepted' ? 'badge-accent border' :
+                                torrent.status === 'failed'   ? 'badge-red border' :
+                                torrent.status === 'queued'   ? 'badge-emerald border' :
                                 'badge-red border'
                             ]">
                                 {{ torrent.status }}
@@ -102,6 +104,11 @@
                                     @click="$emit('queue')"
                                     class="w-full text-left px-4 py-2 text-sm font-mono fg-soft hover:bg-gray-700 hover:text-curator-500 transition-colors flex items-center gap-2"
                                 >&#8595; queue for dl</button>
+                                <button
+                                    v-if="torrent.status === 'failed'"
+                                    @click="$emit('retry')"
+                                    class="w-full text-left px-4 py-2 text-sm font-mono text-red-400 hover:bg-gray-700 hover:text-red-300 transition-colors flex items-center gap-2"
+                                >&#8635; retry queue</button>
                             </div>
                         </div>
                     </div>
@@ -131,6 +138,10 @@
                                 <span class="fg-dim font-mono">match:</span>
                                 <span class="font-mono font-bold px-2 py-1 rounded text-xs badge-amber border" :title="torrent.match_confidence_reason">&#9888; low confidence</span>
                             </div>
+                            <!-- Failure reason banner -->
+                            <div v-if="torrent.status === 'failed' && torrent.fail_reason" class="mt-3 p-2 rounded bg-red-950/40 border border-red-800/50">
+                                <span class="text-xs font-mono text-red-400 break-words">&#9888; {{ torrent.fail_reason }}</span>
+                            </div>
                         </div>
 
                         <!-- Card Actions: visible when card is selected -->
@@ -141,6 +152,10 @@
 
                         <div v-if="activeTab === 'accepted'" v-show="selected && !multiSelectActive">
                             <curator-btn :full="true" @click.stop="$emit('queue')" :disabled="operating" :loading="operating" loading-text="queuing...">&#8595; queue for dl</curator-btn>
+                        </div>
+
+                        <div v-if="activeTab === 'failed'" v-show="selected && !multiSelectActive">
+                            <curator-btn :full="true" variant="danger" @click.stop="$emit('retry')" :disabled="operating" :loading="operating" loading-text="retrying...">&#8635; retry queue</curator-btn>
                         </div>
                     </div>
                 </div>
@@ -161,7 +176,7 @@
                             <div class="overflow-y-auto px-5 py-4 space-y-2 text-xs font-mono">
                                 <!-- badges row -->
                                 <div class="flex flex-wrap gap-1.5 mb-3">
-                                    <span :class="['px-2 py-0.5 rounded border font-bold uppercase', torrent.status === 'pending' ? 'badge-blue border' : torrent.status === 'accepted' ? 'badge-accent border' : 'badge-red border']">{{ torrent.status }}</span>
+                                    <span :class="['px-2 py-0.5 rounded border font-bold uppercase', torrent.status === 'pending' ? 'badge-blue border' : torrent.status === 'accepted' ? 'badge-accent border' : torrent.status === 'failed' ? 'badge-red border' : torrent.status === 'queued' ? 'badge-emerald border' : 'badge-red border']">{{ torrent.status }}</span>
                                     <span :class="['px-2 py-0.5 rounded border', torrent.content_type === 'movie' ? 'badge-purple border' : 'badge-blue border']">{{ torrent.content_type }}</span>
                                 </div>
                                 <div class="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 items-baseline">

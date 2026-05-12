@@ -8,6 +8,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.53.0] - 2026-05-11
+
+### Added
+- **Failed torrent state with error surfacing** — when qBittorrent rejects a
+  torrent add (e.g. "An unknown error related to the remote content was
+  detected"), the torrent is now transitioned to a `failed` status and the
+  exact error message is persisted and shown on the card. Previously the error
+  was silently logged and the torrent remained `accepted` with no indication
+  of what went wrong.
+- **`failed` tab in the UI** — a dedicated tab between `accepted` and `queued`
+  lists all torrents that failed to add, with the qBittorrent error reason
+  displayed as a red banner on each card.
+- **One-click retry** — failed cards expose a "retry queue" button (and kebab
+  menu entry) that calls `POST /api/torrents/{id}/retry-qb` with exponential
+  backoff. Bulk "retry selected" is also available in the bulk-actions bar.
+- **`POST /api/torrents/{id}/retry-qb` now accepts `failed` status** — previously
+  only `accepted` torrents could be retried; now failed torrents can be retried
+  directly from the failed tab.
+
+### Fixed
+- **Retry now marks torrent as `queued` on success** — the existing retry
+  endpoint left the torrent in `accepted` status even after a successful add;
+  it now correctly advances to `queued`.
+
 ## [0.52.2] - 2026-05-11
 
 ### Fixed

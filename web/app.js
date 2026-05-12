@@ -40,8 +40,8 @@ const app = createApp({
         const logsDrawerOpen = ref(false);
         const logsDrawerHeight = ref('60vh');
         
-        // Tab structure: pending → accepted → queued → rejected
-        const tabs = ['pending', 'accepted', 'queued', 'rejected'];
+        // Tab structure: pending → accepted → failed → queued → rejected
+        const tabs = ['pending', 'accepted', 'failed', 'queued', 'rejected'];
         const reviewModalOpen = ref(false);
         const reviewingTorrent = ref(null);
         const reviewForm = ref({
@@ -100,6 +100,9 @@ const app = createApp({
         );
         const queuedCount = computed(() =>
             torrents.value.filter(t => t.status === 'queued').length
+        );
+        const failedCount = computed(() =>
+            torrents.value.filter(t => t.status === 'failed').length
         );
         const rejectedCount = computed(() =>
             torrents.value.filter(t => t.status === 'rejected').length
@@ -369,7 +372,9 @@ const app = createApp({
                     await fetchAllTorrents();
                     await fetchActivities();
                 } else {
-                    showToast('Failed to queue torrent', 'error');
+                    let msg = 'Failed to queue torrent';
+                    try { const d = await response.json(); if (d.error) msg = d.error; } catch (_) {}
+                    showToast(msg, 'error');
                 }
             } catch (error) {
                 console.error('Error queueing torrent:', error);
@@ -406,6 +411,28 @@ const app = createApp({
             const torrent = torrents.value.find(t => t.id === id);
             if (!torrent) return;
             openReviewModal(torrent);
+        };
+
+        const retryQBittorrent = async (id) => {
+            operatingIds.value.add(id);
+            try {
+                const response = await fetch(`/api/torrents/${id}/retry-qb`, { method: 'POST' });
+                if (response.ok) {
+                    showToast('Queued for download!', 'success');
+                    await fetchAllTorrents();
+                    await fetchActivities();
+                } else {
+                    let msg = 'Retry failed';
+                    try { const d = await response.json(); if (d.error) msg = d.error; } catch (_) {}
+                    showToast(msg, 'error');
+                    await fetchAllTorrents();
+                }
+            } catch (error) {
+                console.error('Error retrying torrent:', error);
+                showToast('Error retrying torrent', 'error');
+            } finally {
+                operatingIds.value.delete(id);
+            }
         };
 
         const bulkApprove = async () => {
@@ -527,7 +554,12 @@ const app = createApp({
                     await fetchAllTorrents();
                     await fetchActivities();
                 } else {
-                    showToast('Some queues failed', 'error');
+                    const failCount = results.filter(r => !r.ok).length;
+                    showToast(`${failCount} of ${results.length} queues failed — check the failed tab`, 'error');
+                    selectedIds.value.clear();
+                    closeBulkReviewModal();
+                    await fetchAllTorrents();
+                    await fetchActivities();
                 }
             } catch (error) {
                 console.error('Error in bulk queue:', error);
@@ -1018,6 +1050,7 @@ const app = createApp({
             pendingCount,
             acceptedCount,
             queuedCount,
+            failedCount,
             rejectedCount,
             selectedCount,
             multiSelectActive,
@@ -1069,6 +1102,7 @@ const app = createApp({
             closeRematchModal,
             submitRematch,
             queueForDownload,
+            retryQBittorrent,
             bulkApprove,
             bulkReject,
             bulkQueue,

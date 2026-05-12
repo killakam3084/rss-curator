@@ -44,6 +44,8 @@ type Store interface {
 	List(status, query, contentType string) ([]models.StagedTorrent, error)
 	Add(torrent models.StagedTorrent) error
 	UpdateStatus(id int, status string) error
+	// SetFailed marks a torrent status='failed' and stores the error reason.
+	SetFailed(id int, reason string) error
 	LogActivity(torrentID int, title, action, matchReason string) error
 	GetActivity(limit int, offset int, action string) ([]models.Activity, error)
 	GetActivityCount(action string) (int, error)
@@ -249,6 +251,9 @@ func (s *Storage) migrate() error {
 		// suggestion to become active again after a configurable period. NULL means
 		// the dismissal is permanent (backward-compatible with v0.48.x rows).
 		`ALTER TABLE suggestions ADD COLUMN dismissed_until DATETIME`,
+		// Migration 13: fail_reason — stores the qBittorrent error message when a
+		// torrent add attempt fails so the UI can surface it to the user.
+		`ALTER TABLE staged_torrents ADD COLUMN fail_reason TEXT NOT NULL DEFAULT ''`,
 	}
 
 	for _, migration := range migrations {
@@ -305,7 +310,7 @@ func (s *Storage) List(status, query, contentType string) ([]models.StagedTorren
 		args = append(args, contentType)
 	}
 
-	sqlStr := `SELECT id, link, feed_item, match_reason, staged_at, status, approved_at, ai_score, ai_reason, ai_scored, match_confidence, match_confidence_reason, content_type
+	sqlStr := `SELECT id, link, feed_item, match_reason, staged_at, status, approved_at, ai_score, ai_reason, ai_scored, match_confidence, match_confidence_reason, content_type, fail_reason
 		FROM staged_torrents`
 	if len(conds) > 0 {
 		sqlStr += " WHERE "
@@ -333,7 +338,7 @@ func (s *Storage) List(status, query, contentType string) ([]models.StagedTorren
 		var approvedAt sql.NullTime
 		var contentTypeDB string
 
-		err := rows.Scan(&t.ID, &link, &feedItemJSON, &t.MatchReason, &t.StagedAt, &t.Status, &approvedAt, &t.AIScore, &t.AIReason, &t.AIScored, &t.MatchConfidence, &t.MatchConfidenceReason, &contentTypeDB)
+		err := rows.Scan(&t.ID, &link, &feedItemJSON, &t.MatchReason, &t.StagedAt, &t.Status, &approvedAt, &t.AIScore, &t.AIReason, &t.AIScored, &t.MatchConfidence, &t.MatchConfidenceReason, &contentTypeDB, &t.FailReason)
 		if err != nil {
 			return nil, err
 		}
@@ -365,10 +370,10 @@ func (s *Storage) Get(id int) (*models.StagedTorrent, error) {
 
 	var contentTypeDB string
 	err := s.db.QueryRow(`
-		SELECT id, link, feed_item, match_reason, staged_at, status, approved_at, ai_score, ai_reason, ai_scored, match_confidence, match_confidence_reason, content_type
+		SELECT id, link, feed_item, match_reason, staged_at, status, approved_at, ai_score, ai_reason, ai_scored, match_confidence, match_confidence_reason, content_type, fail_reason
 		FROM staged_torrents
 		WHERE id = ?
-	`, id).Scan(&t.ID, &link, &feedItemJSON, &t.MatchReason, &t.StagedAt, &t.Status, &approvedAt, &t.AIScore, &t.AIReason, &t.AIScored, &t.MatchConfidence, &t.MatchConfidenceReason, &contentTypeDB)
+	`, id).Scan(&t.ID, &link, &feedItemJSON, &t.MatchReason, &t.StagedAt, &t.Status, &approvedAt, &t.AIScore, &t.AIReason, &t.AIScored, &t.MatchConfidence, &t.MatchConfidenceReason, &contentTypeDB, &t.FailReason)
 
 	if err == sql.ErrNoRows {
 		return nil, fmt.Errorf("torrent not found")
@@ -389,6 +394,16 @@ func (s *Storage) Get(id int) (*models.StagedTorrent, error) {
 	}
 
 	return &t, nil
+}
+
+// SetFailed marks a torrent as failed and records the error reason for display in the UI.
+func (s *Storage) SetFailed(id int, reason string) error {
+	_, err := s.db.Exec(`
+		UPDATE staged_torrents
+		SET status = 'failed', fail_reason = ?
+		WHERE id = ?
+	`, reason, id)
+	return err
 }
 
 // UpdateStatus updates the status of a torrent
@@ -458,10 +473,10 @@ func (s *Storage) GetByID(id int) (*models.StagedTorrent, error) {
 
 	var contentTypeDB string
 	err := s.db.QueryRow(`
-		SELECT id, feed_item, match_reason, staged_at, status, approved_at, ai_score, ai_reason, ai_scored, match_confidence, match_confidence_reason, content_type
+		SELECT id, feed_item, match_reason, staged_at, status, approved_at, ai_score, ai_reason, ai_scored, match_confidence, match_confidence_reason, content_type, fail_reason
 		FROM staged_torrents
 		WHERE id = ?
-	`, id).Scan(&t.ID, &feedItemJSON, &t.MatchReason, &t.StagedAt, &t.Status, &approvedAt, &t.AIScore, &t.AIReason, &t.AIScored, &t.MatchConfidence, &t.MatchConfidenceReason, &contentTypeDB)
+	`, id).Scan(&t.ID, &feedItemJSON, &t.MatchReason, &t.StagedAt, &t.Status, &approvedAt, &t.AIScore, &t.AIReason, &t.AIScored, &t.MatchConfidence, &t.MatchConfidenceReason, &contentTypeDB, &t.FailReason)
 
 	if err == sql.ErrNoRows {
 		return nil, nil

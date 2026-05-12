@@ -680,8 +680,13 @@ func (s *Server) handleQueue(w http.ResponseWriter, r *http.Request, id int) {
 		"category": queueConfig.Category,
 	}); err != nil {
 		s.logger.Error("failed to add torrent to qBittorrent", zap.Int("id", id), zap.Error(err))
+		// Persist the failure so the UI can surface the reason and offer a retry.
+		if ferr := s.store.SetFailed(id, err.Error()); ferr != nil {
+			s.logger.Error("failed to mark torrent as failed", zap.Int("id", id), zap.Error(ferr))
+		}
+		_ = s.store.LogActivity(id, torrent.FeedItem.Title, "queue_failed", torrent.MatchReason)
 		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusInternalServerError)
+		w.WriteHeader(http.StatusBadGateway)
 		json.NewEncoder(w).Encode(ErrorResponse{Error: fmt.Sprintf("Failed to queue: %v", err)})
 		return
 	}
@@ -823,11 +828,11 @@ func (s *Server) handleRetryQBittorrent(w http.ResponseWriter, r *http.Request, 
 		return
 	}
 
-	if torrent.Status != "accepted" {
-		s.logger.Warn("can only retry accepted torrents", zap.Int("id", id), zap.String("status", torrent.Status))
+	if torrent.Status != "accepted" && torrent.Status != "failed" {
+		s.logger.Warn("can only retry accepted or failed torrents", zap.Int("id", id), zap.String("status", torrent.Status))
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(ErrorResponse{Error: fmt.Sprintf("Can only retry accepted torrents, this one is %s", torrent.Status)})
+		json.NewEncoder(w).Encode(ErrorResponse{Error: fmt.Sprintf("Can only retry accepted or failed torrents, this one is %s", torrent.Status)})
 		return
 	}
 
@@ -843,6 +848,9 @@ func (s *Server) handleRetryQBittorrent(w http.ResponseWriter, r *http.Request, 
 	err = s.client.RetryAddTorrent(ctx, torrent.FeedItem.Link, opts)
 	if err != nil {
 		s.logger.Error("retry failed to add torrent to qBittorrent", zap.Int("id", id), zap.String("title", torrent.FeedItem.Title), zap.String("link", torrent.FeedItem.Link), zap.Error(err))
+		// Persist the updated failure reason (may have changed since the first attempt).
+		_ = s.store.SetFailed(id, err.Error())
+		_ = s.store.LogActivity(id, torrent.FeedItem.Title, "queue_failed", torrent.MatchReason)
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusInternalServerError)
 		json.NewEncoder(w).Encode(ErrorResponse{Error: fmt.Sprintf("Failed to add to qBittorrent: %v", err)})
@@ -850,10 +858,17 @@ func (s *Server) handleRetryQBittorrent(w http.ResponseWriter, r *http.Request, 
 	}
 
 	s.logger.Info("torrent successfully added to qBittorrent via retry", zap.Int("id", id), zap.String("title", torrent.FeedItem.Title))
+	// Advance status to queued now that we know the add succeeded.
+	if err := s.store.UpdateStatus(id, "queued"); err != nil {
+		s.logger.Error("failed to update status to queued after retry", zap.Int("id", id), zap.Error(err))
+	}
+	if err := s.store.LogActivity(id, torrent.FeedItem.Title, "queue", torrent.MatchReason); err != nil {
+		s.logger.Error("failed to log queue activity after retry", zap.Int("id", id), zap.Error(err))
+	}
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{
 		"id":     id,
-		"status": "retry_successful",
+		"status": "queued",
 		"title":  torrent.FeedItem.Title,
 	})
 }

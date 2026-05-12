@@ -323,6 +323,7 @@
                                 <curator-btn variant="danger" @click="bulkReject" :disabled="bulkLoading" :loading="bulkLoading" loading-text="rejecting...">&#10005; reject</curator-btn>
                                 </template>
                                 <curator-btn v-if="activeTab === 'accepted'" @click="bulkQueue" :disabled="bulkLoading" :loading="bulkLoading" loading-text="queuing...">&#8595; queue selected</curator-btn>
+                                <curator-btn v-if="activeTab === 'failed'" variant="danger" @click="Array.from(selectedIds).forEach(id => retryQBittorrent(id)); selectedIds.clear()" :disabled="bulkLoading">&#8635; retry selected</curator-btn>
                                 <!-- Actions dropdown: Re-match + Re-score -->
                                 <div class="relative" @click.stop>
                                     <curator-btn variant="indigo" @click="actionsDropdownOpen = !actionsDropdownOpen" :disabled="rematchLoading || rescoreLoading" :loading="rematchLoading || rescoreLoading" :loading-text="rematchLoading ? 'matching…' : 'scoring…'">Actions ▾</curator-btn>
@@ -464,6 +465,7 @@
                             @approve="approveTorrent(torrent.id)"
                             @reject="rejectTorrent(torrent.id)"
                             @queue="queueForDownload(torrent.id)"
+                            @retry="retryQBittorrent(torrent.id)"
                             @rematch="rematchOne(torrent.id)"
                             @rescore="rescoreOne(torrent.id)"
                         ></torrent-card>

@@ -57,6 +57,9 @@ type StagedTorrent struct {
 	// Orthogonal to AIScore: a perfect release of wrong content → high score, low confidence.
 	MatchConfidence       float64 `json:"match_confidence"`
 	MatchConfidenceReason string  `json:"match_confidence_reason"`
+	// FailReason holds the error message from the last failed qBittorrent add attempt.
+	// Non-empty only when Status == "failed".
+	FailReason string `json:"fail_reason,omitempty"`
 }
 
 // RawFeedItem represents a raw item pulled from RSS feed (before filtering/matching)
