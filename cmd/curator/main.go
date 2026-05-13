@@ -656,6 +656,38 @@ func cmdPause(cfg models.Config, store *storage.Storage, args []string) {
 	}
 }
 
+// retryWithBackoff attempts an operation with exponential backoff until success or max attempts reached.
+// Useful for health checks during startup when services may need time to become available.
+// Starts with 500ms delay, doubles each attempt (capped at 5s).
+func retryWithBackoff(name string, maxAttempts int, fn func() bool) bool {
+	if maxAttempts < 1 {
+		maxAttempts = 1
+	}
+
+	for attempt := 1; attempt <= maxAttempts; attempt++ {
+		fmt.Printf("[Init] Checking %s (attempt %d/%d)...\n", name, attempt, maxAttempts)
+
+		if fn() {
+			fmt.Printf("[Init] ✓ %s is available\n", name)
+			return true
+		}
+
+		if attempt < maxAttempts {
+			// Exponential backoff: 500ms, 1s, 2s, 4s, 5s, 5s, ...
+			delayMs := 500 * (1 << uint(attempt-1)) // 500, 1000, 2000, 4000, 8000, ...
+			if delayMs > 5000 {
+				delayMs = 5000
+			}
+			fmt.Printf("[Init] ✗ %s unavailable, retrying in %dms...\n", name, delayMs)
+			time.Sleep(time.Duration(delayMs) * time.Millisecond)
+		} else {
+			fmt.Printf("[Init] ✗ %s unavailable after %d attempts, proceeding without it\n", name, maxAttempts)
+		}
+	}
+
+	return false
+}
+
 func cmdServe(cfg models.Config, store *storage.Storage, buf *logbuffer.Buffer, metaLookup *metadata.Lookup) {
 	// Initialise AI scorer (available even during serve — used for on-demand rescore).
 	// Uses CURATOR_AI_SCORER_MODEL if set, falls back to CURATOR_AI_MODEL.
@@ -663,7 +695,12 @@ func cmdServe(cfg models.Config, store *storage.Storage, buf *logbuffer.Buffer, 
 	scorer := ai.NewScorer(scorerProvider, metaLookup)
 	enricherProvider := ai.NewProviderFor("enricher")
 	enricher := ai.NewEnricher(enricherProvider, nil)
-	if scorerProvider.Available() {
+
+	// Health check: AI scorer with retry
+	scorerAvailable := retryWithBackoff("AI scorer provider", 5, func() bool {
+		return scorerProvider.Available()
+	})
+	if scorerAvailable {
 		fmt.Println("[Serve] AI scorer provider available — on-demand rescore enabled")
 	} else {
 		fmt.Println("[Serve] AI scorer provider unavailable — rescore disabled")
@@ -671,7 +708,10 @@ func cmdServe(cfg models.Config, store *storage.Storage, buf *logbuffer.Buffer, 
 
 	// Suggester uses its own provider/model config so it can be tuned independently.
 	suggestProvider := ai.NewProviderFor("suggester")
-	if suggestProvider.Available() {
+	suggestAvailable := retryWithBackoff("AI suggester provider", 5, func() bool {
+		return suggestProvider.Available()
+	})
+	if suggestAvailable {
 		fmt.Println("[Serve] AI suggester provider available — suggestions enabled")
 	} else {
 		fmt.Println("[Serve] AI suggester provider unavailable — suggestions disabled (check CURATOR_AI_SUGGESTER_PROVIDER/KEY/HOST)")
@@ -685,16 +725,19 @@ func cmdServe(cfg models.Config, store *storage.Storage, buf *logbuffer.Buffer, 
 		m = matcher.NewMatcher(nil, &cfg.MatchRules)
 	}
 
-	// Try to initialize qBittorrent client, but don't fail if unavailable
+	// Try to initialize qBittorrent client with retry
 	var qb *client.Client
-	qb, err := client.New(cfg.QBittorrent)
-	if err != nil {
-		fmt.Printf("[Serve] Warning: qBittorrent unavailable at startup (%v)\n", err)
-		fmt.Println("[Serve] API will start but approve/reject operations may fail")
-		fmt.Println("[Serve] Retrying qBittorrent connection will happen during operation")
-		qb = nil // Set to nil to signal unavailable
-	} else {
+	var err error
+	qbAvailable := retryWithBackoff("qBittorrent", 5, func() bool {
+		qb, err = client.New(cfg.QBittorrent)
+		return err == nil
+	})
+	if qbAvailable {
 		fmt.Println("[Serve] qBittorrent connection successful")
+	} else {
+		fmt.Println("[Serve] Warning: qBittorrent unavailable after retries")
+		fmt.Println("[Serve] API will start but queue operations may fail")
+		qb = nil // Set to nil to signal unavailable
 	}
 
 	// Parse API port from environment or use default
