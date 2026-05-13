@@ -106,6 +106,12 @@ services:
       - /mnt/cell_block_d/apps/rss-curator/shows.json:/app/shows.json
       - /mnt/cell_block_d/apps/rss-curator/watchlist.json:/app/watchlist.json
       - /mnt/cell_block_d/apps/rss-curator/logs:/app/logs
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8081/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
 
 volumes:
   ollama-data:
