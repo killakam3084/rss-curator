@@ -39,6 +39,10 @@ type FeedCheckDeps struct {
 	// BackfillEnabled is called each run to check whether the rescore-backfill
 	// step should execute. When nil, backfill is enabled (preserves old behaviour).
 	BackfillEnabled func() bool
+	// AutoQueueEnabled, when non-nil and returning true, causes RunFeedCheck to
+	// trigger a RunAutoQueueJob after staging completes. The fn receives an
+	// AutoQueueConfig; when nil, no auto-queue step is triggered.
+	AutoQueueEnabled func() (bool, AutoQueueConfig, AutoQueueDeps)
 }
 
 // RunFeedCheck executes a full feed-check cycle: parse all feeds, match items,
@@ -168,7 +172,8 @@ func RunFeedCheck(ctx context.Context, cfg FeedCheckConfig, deps FeedCheckDeps) 
 	// Score the deduplicated match set in one concurrent batch.
 	if deps.ScorerProv != nil && deps.ScorerProv.Available() && deps.Scorer != nil {
 		history, _ := deps.Store.GetActivity(50, 0, "")
-		allMatches = deps.Scorer.ScoreAll(allMatches, history)
+		groupStats, _ := deps.Store.GetGroupReputationStats()
+		allMatches = deps.Scorer.ScoreAll(allMatches, history, groupStats)
 		totalScored = len(allMatches)
 	}
 	log.Info("staging after dedup", zap.Int("count", len(allMatches)))
@@ -240,7 +245,7 @@ func RunFeedCheck(ctx context.Context, cfg FeedCheckConfig, deps FeedCheckDeps) 
 				}
 			}
 			if len(unscored) > 0 {
-				scored := deps.Scorer.ScoreAll(unscored, history)
+				scored := deps.Scorer.ScoreAll(unscored, history, nil)
 				for _, s := range scored {
 					if err := deps.Store.UpdateAIScore(s.ID, s.AIScore, s.AIReason, s.MatchConfidence, s.MatchConfidenceReason); err == nil {
 						backfilled++
@@ -260,6 +265,14 @@ func RunFeedCheck(ctx context.Context, cfg FeedCheckConfig, deps FeedCheckDeps) 
 	if feedFailed {
 		retErr = fmt.Errorf("one or more feeds failed to parse")
 	}
+
+	// Trigger auto-queue after staging completes when the caller has configured it.
+	if deps.AutoQueueEnabled != nil {
+		if enabled, aqCfg, aqDeps := deps.AutoQueueEnabled(); enabled {
+			go RunAutoQueueJob(ctx, aqCfg, aqDeps)
+		}
+	}
+
 	return summary, retErr
 }
 
