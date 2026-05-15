@@ -54,6 +54,7 @@ const settingsApp = createApp({
                 min_confidence: 0.85,
                 interval_secs: 600,
                 hold_mins: 30,
+                max_hold_mins: 480,
             },
             alerts: {
                 alert_poller_interval_secs: 60,
@@ -108,6 +109,7 @@ const settingsApp = createApp({
                 form.auto_queue.min_confidence = data.auto_queue.min_confidence ?? 0.85;
                 form.auto_queue.interval_secs  = data.auto_queue.interval_secs  ?? 600;
                 form.auto_queue.hold_mins      = data.auto_queue.hold_mins      ?? 30;
+                form.auto_queue.max_hold_mins  = data.auto_queue.max_hold_mins  ?? 480;
             }
             // alerts
             if (data.alerts) {

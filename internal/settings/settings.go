@@ -71,6 +71,12 @@ type AutoQueueSettings struct {
 	// 4K, etc.) time to land and be scored before a winner is committed.
 	// 0 disables the hold. Default 30.
 	HoldMins int `json:"hold_mins"`
+	// MaxHoldMins is the hard ceiling on the sliding-window hold. Once the
+	// oldest first-staged variant in a group is this many minutes old, the hold
+	// is released and the best available candidate is queued immediately. This
+	// prevents indefinite deferral for episodes with slow or multi-source
+	// release patterns. 0 disables the cap. Default 480 (8 h).
+	MaxHoldMins int `json:"max_hold_mins"`
 }
 
 // EnvDefaults carries the values parsed from environment variables at startup.
@@ -107,6 +113,7 @@ const (
 	keyAutoQueueMinConfidence  = "auto_queue.min_confidence"
 	keyAutoQueueIntervalSecs   = "auto_queue.interval_secs"
 	keyAutoQueueHoldMins       = "auto_queue.hold_mins"
+	keyAutoQueueMaxHoldMins    = "auto_queue.max_hold_mins"
 )
 
 // ──────────────────────────────────────────────────────────────────────────────
@@ -140,6 +147,7 @@ func hardcodedDefaults() AppSettings {
 			MinConfidence: 0.85,
 			IntervalSecs:  600,
 			HoldMins:      30,
+			MaxHoldMins:   480,
 		},
 	}
 }
@@ -255,6 +263,7 @@ func (m *Manager) persist(s AppSettings) error {
 		{keyAutoQueueMinConfidence, fmt.Sprintf("%g", s.AutoQueue.MinConfidence)},
 		{keyAutoQueueIntervalSecs, fmt.Sprintf("%d", s.AutoQueue.IntervalSecs)},
 		{keyAutoQueueHoldMins, fmt.Sprintf("%d", s.AutoQueue.HoldMins)},
+		{keyAutoQueueMaxHoldMins, fmt.Sprintf("%d", s.AutoQueue.MaxHoldMins)},
 	}
 	for _, p := range pairs {
 		if err := m.store.SetSetting(p.key, p.val); err != nil {
@@ -358,6 +367,11 @@ func applyStoredValues(s *AppSettings, stored map[string]string) {
 	if v, ok := stored[keyAutoQueueHoldMins]; ok {
 		if n := parseInt(v); n >= 0 {
 			s.AutoQueue.HoldMins = n
+		}
+	}
+	if v, ok := stored[keyAutoQueueMaxHoldMins]; ok {
+		if n := parseInt(v); n >= 0 {
+			s.AutoQueue.MaxHoldMins = n
 		}
 	}
 }

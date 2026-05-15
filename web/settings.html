@@ -267,6 +267,16 @@
                             />
                             <p class="text-xs fg-muted font-mono">wait this many minutes after the newest variant before committing a winner — 0 to disable (default 30)</p>
                         </div>
+
+                        <div class="space-y-1">
+                            <label class="block text-xs font-mono fg-soft uppercase tracking-widest">hold cap (minutes)</label>
+                            <input
+                                v-model.number="form.auto_queue.max_hold_mins"
+                                type="number" min="0"
+                                class="w-full bg-raised border border-base rounded px-3 py-2 font-mono text-sm fg-base focus:outline-none focus:border-accent transition-colors"
+                            />
+                            <p class="text-xs fg-muted font-mono">force-commit after this many minutes regardless of sliding activity — prevents indefinite deferral for multi-source releases — 0 to disable (default 480)</p>
+                        </div>
                     </div>
 
                     <!-- On-demand run -->

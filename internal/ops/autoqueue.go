@@ -24,6 +24,11 @@ type AutoQueueConfig struct {
 	// is deferred until at least HoldMins minutes have elapsed since the newest
 	// StagedAt across all variants in that group. 0 disables the hold.
 	HoldMins int
+	// MaxHoldMins is a hard ceiling on the sliding-window hold. Once any
+	// candidate in the group was first staged at least MaxHoldMins minutes ago,
+	// the hold is force-released and the best available candidate is queued
+	// immediately. 0 disables the cap.
+	MaxHoldMins int
 	// DryRun when true runs selection logic without writing to the store or
 	// qBittorrent. All decisions are still recorded in the summary.
 	DryRun bool
@@ -313,22 +318,28 @@ func RunAutoQueue(ctx context.Context, cfg AutoQueueConfig, deps AutoQueueDeps) 
 		// have elapsed since the newest variant was staged. This allows
 		// late-arriving quality variants (DV, 4K, alternate codecs) time to
 		// land and be scored before a winner is committed.
+		// MaxHoldMins acts as a hard ceiling: if the oldest candidate has been
+		// staged for that long, force through regardless of sliding activity.
 		if cfg.HoldMins > 0 {
-			var newest time.Time
+			var newest, oldest time.Time
 			for _, c := range candidates {
 				if c.StagedAt.After(newest) {
 					newest = c.StagedAt
 				}
+				if oldest.IsZero() || c.StagedAt.Before(oldest) {
+					oldest = c.StagedAt
+				}
 			}
 			age := now.Sub(newest)
 			hold := time.Duration(cfg.HoldMins) * time.Minute
-			if age < hold {
+			capHit := cfg.MaxHoldMins > 0 && now.Sub(oldest) >= time.Duration(cfg.MaxHoldMins)*time.Minute
+			if !capHit && age < hold {
 				summary.Skipped++
 				summary.Selections = append(summary.Selections, AutoQueueDecision{
 					ShowName:   rep.FeedItem.ShowName,
 					Episode:    epLabel,
 					Skipped:    true,
-					SkipReason: fmt.Sprintf("hold window: newest variant staged %.0fm ago, hold=%dm", age.Minutes(), cfg.HoldMins),
+					SkipReason: fmt.Sprintf("hold window: newest variant staged %.0fm ago (hold=%dm, cap=%dm)", age.Minutes(), cfg.HoldMins, cfg.MaxHoldMins),
 				})
 				continue
 			}

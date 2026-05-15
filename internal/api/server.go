@@ -2025,6 +2025,7 @@ func (s *Server) applySettings(cfg settings.AppSettings) {
 				MinAIScore:    aqCfg.MinAIScore,
 				MinConfidence: aqCfg.MinConfidence,
 				HoldMins:      aqCfg.HoldMins,
+				MaxHoldMins:   aqCfg.MaxHoldMins,
 			}, s.autoQueueDeps
 		}
 	}
@@ -2243,9 +2244,10 @@ func (s *Server) handleAutoQueue(w http.ResponseWriter, r *http.Request) {
 			MinAIScore:    st.MinAIScore,
 			MinConfidence: st.MinConfidence,
 			HoldMins:      st.HoldMins,
+			MaxHoldMins:   st.MaxHoldMins,
 		}
 	} else {
-		aqCfg = ops.AutoQueueConfig{MinAIScore: 0.80, MinConfidence: 0.85, HoldMins: 30}
+		aqCfg = ops.AutoQueueConfig{MinAIScore: 0.80, MinConfidence: 0.85, HoldMins: 30, MaxHoldMins: 480}
 	}
 
 	aqDeps := s.autoQueueDeps
@@ -2281,10 +2283,11 @@ func (s *Server) handleAutoQueuePreview(w http.ResponseWriter, r *http.Request) 
 			MinAIScore:    st.MinAIScore,
 			MinConfidence: st.MinConfidence,
 			HoldMins:      st.HoldMins,
+			MaxHoldMins:   st.MaxHoldMins,
 			DryRun:        true,
 		}
 	} else {
-		aqCfg = ops.AutoQueueConfig{MinAIScore: 0.80, MinConfidence: 0.85, HoldMins: 30, DryRun: true}
+		aqCfg = ops.AutoQueueConfig{MinAIScore: 0.80, MinConfidence: 0.85, HoldMins: 30, MaxHoldMins: 480, DryRun: true}
 	}
 
 	aqDeps := s.autoQueueDeps
