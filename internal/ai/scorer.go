@@ -131,12 +131,17 @@ func (s *Scorer) configureFormat() {
 func (s *Scorer) SetLogger(l *zap.Logger) { s.logger = l }
 
 // ScoreAll attaches AI scores to each staged torrent.
+// groupStats is an optional map of release_group → queue-frequency ratio [0–1]
+// used to produce a history context block in the scoring prompt. Pass nil to
+// omit the group history section (backward-compatible with callers that do not
+// yet have the stats available).
 // Torrents that fail scoring retain AIScore=0 and AIReason="".
 // Returns the same slice with scores filled in.
-func (s *Scorer) ScoreAll(staged []models.StagedTorrent, history []models.Activity) []models.StagedTorrent {
+func (s *Scorer) ScoreAll(staged []models.StagedTorrent, history []models.Activity, groupStats map[string]float64) []models.StagedTorrent {
 	if !s.provider.Available() {
 		return staged
 	}
+	groupCtx := buildGroupContext(groupStats)
 	sem := make(chan struct{}, s.concurrency)
 	var wg sync.WaitGroup
 	for i := range staged {
@@ -148,7 +153,7 @@ func (s *Scorer) ScoreAll(staged []models.StagedTorrent, history []models.Activi
 			t := &staged[i]
 			candidateShow := extractMatchedRule(t.MatchReason)
 			histCtx := buildHistoryContext(history, s.historySize, candidateShow)
-			t.AIScore, t.AIReason, t.MatchConfidence, t.MatchConfidenceReason = s.scoreOne(t, histCtx)
+			t.AIScore, t.AIReason, t.MatchConfidence, t.MatchConfidenceReason = s.scoreOne(t, histCtx, groupCtx)
 		}(i)
 	}
 	wg.Wait()
@@ -172,7 +177,7 @@ func extractMatchedRule(matchReason string) string {
 	return strings.TrimSpace(rest)
 }
 
-func (s *Scorer) scoreOne(t *models.StagedTorrent, histCtx string) (float64, string, float64, string) {
+func (s *Scorer) scoreOne(t *models.StagedTorrent, histCtx, groupCtx string) (float64, string, float64, string) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(s.timeoutSecs)*time.Second)
 	defer cancel()
 
@@ -218,6 +223,11 @@ func (s *Scorer) scoreOne(t *models.StagedTorrent, histCtx string) (float64, str
 				user += "\nShow metadata: " + strings.Join(parts, " | ")
 			}
 		}
+	}
+
+	// Append group reputation context when available.
+	if groupCtx != "" {
+		user += "\n" + groupCtx
 	}
 
 	user += "\n\nScore the candidate torrent above."
@@ -427,4 +437,34 @@ func sampleHistory(history []models.Activity, size int) []models.Activity {
 		return out[i].ActionAt.Before(out[j].ActionAt)
 	})
 	return out
+}
+
+// buildGroupContext returns a compact text block listing the top queued release
+// groups and their queue-frequency ratios for inclusion in the scoring prompt.
+// Returns an empty string when groupStats is nil or empty.
+func buildGroupContext(groupStats map[string]float64) string {
+	if len(groupStats) == 0 {
+		return ""
+	}
+
+	type kv struct {
+		group string
+		ratio float64
+	}
+	ranked := make([]kv, 0, len(groupStats))
+	for g, r := range groupStats {
+		ranked = append(ranked, kv{g, r})
+	}
+	sort.Slice(ranked, func(i, j int) bool { return ranked[i].ratio > ranked[j].ratio })
+
+	const maxGroups = 10
+	var sb strings.Builder
+	sb.WriteString("Release group queue history (frequency among previously queued torrents):\n")
+	for i, kv := range ranked {
+		if i >= maxGroups {
+			break
+		}
+		sb.WriteString(fmt.Sprintf("  %s: %.0f%%\n", kv.group, kv.ratio*100))
+	}
+	return sb.String()
 }

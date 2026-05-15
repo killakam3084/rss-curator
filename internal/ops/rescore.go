@@ -83,7 +83,7 @@ func RunRescore(ctx context.Context, opts RescoreOptions, deps RescoreDeps) ([]m
 		if err != nil || t == nil {
 			continue
 		}
-		scored := deps.Scorer.ScoreAll([]models.StagedTorrent{*t}, history)
+		scored := deps.Scorer.ScoreAll([]models.StagedTorrent{*t}, history, nil)
 		if len(scored) == 0 {
 			continue
 		}

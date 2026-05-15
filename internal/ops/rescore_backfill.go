@@ -66,7 +66,7 @@ func RunRescoreBackfill(ctx context.Context, deps RescoreBackfillDeps) (models.R
 		if t.AIScored {
 			continue
 		}
-		scored := deps.Scorer.ScoreAll([]models.StagedTorrent{t}, history)
+		scored := deps.Scorer.ScoreAll([]models.StagedTorrent{t}, history, nil)
 		if len(scored) > 0 {
 			if err := deps.Store.UpdateAIScore(
 				t.ID,

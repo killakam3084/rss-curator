@@ -149,7 +149,7 @@ func RunRematch(ctx context.Context, opts RematchOptions, deps RematchDeps) (Rem
 		}
 
 		if canRescore && matches {
-			scored := deps.Scorer.ScoreAll([]models.StagedTorrent{*refreshed}, history)
+			scored := deps.Scorer.ScoreAll([]models.StagedTorrent{*refreshed}, history, nil)
 			if len(scored) > 0 {
 				r := scored[0]
 				if err := deps.Store.UpdateAIScore(refreshed.ID, r.AIScore, r.AIReason, r.MatchConfidence, r.MatchConfidenceReason); err != nil {
