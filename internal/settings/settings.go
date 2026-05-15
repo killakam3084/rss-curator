@@ -21,6 +21,7 @@ type AppSettings struct {
 	Alerts    AlertSettings     `json:"alerts"`
 	Match     MatchSettings     `json:"match"`
 	Auth      AuthSettings      `json:"auth"`
+	AutoQueue AutoQueueSettings `json:"auto_queue"`
 }
 
 // SchedulerSettings controls periodic background tasks.
@@ -52,6 +53,20 @@ type AuthSettings struct {
 	Password string `json:"password"`
 }
 
+// AutoQueueSettings controls the automatic torrent selection and queueing job.
+type AutoQueueSettings struct {
+	// Enabled turns on the auto_queue scheduler task. Default false.
+	Enabled bool `json:"enabled"`
+	// MinAIScore is the minimum AIScore [0.0–1.0] a candidate must have to be
+	// eligible for auto-queue. Default 0.80.
+	MinAIScore float64 `json:"min_ai_score"`
+	// MinConfidence is the minimum MatchConfidence [0.0–1.0] a candidate must
+	// have to be eligible for auto-queue. Default 0.85.
+	MinConfidence float64 `json:"min_confidence"`
+	// IntervalSecs is the period between auto_queue scheduler runs. Default 600.
+	IntervalSecs int `json:"interval_secs"`
+}
+
 // EnvDefaults carries the values parsed from environment variables at startup.
 // Fields with zero/empty values mean "the env var was absent; use hardcoded default".
 type EnvDefaults struct {
@@ -81,6 +96,10 @@ const (
 	keyPreferredGroups         = "match.preferred_groups"
 	keyAuthUsername            = "auth.username"
 	keyAuthPassword            = "auth.password"
+	keyAutoQueueEnabled        = "auto_queue.enabled"
+	keyAutoQueueMinAIScore     = "auto_queue.min_ai_score"
+	keyAutoQueueMinConfidence  = "auto_queue.min_confidence"
+	keyAutoQueueIntervalSecs   = "auto_queue.interval_secs"
 )
 
 // ──────────────────────────────────────────────────────────────────────────────
@@ -107,6 +126,12 @@ func hardcodedDefaults() AppSettings {
 		Auth: AuthSettings{
 			Username: "curator",
 			Password: "",
+		},
+		AutoQueue: AutoQueueSettings{
+			Enabled:       false,
+			MinAIScore:    0.80,
+			MinConfidence: 0.85,
+			IntervalSecs:  600,
 		},
 	}
 }
@@ -217,6 +242,10 @@ func (m *Manager) persist(s AppSettings) error {
 		{keyPreferredGroups, string(prefJSON)},
 		{keyAuthUsername, s.Auth.Username},
 		{keyAuthPassword, s.Auth.Password},
+		{keyAutoQueueEnabled, boolStr(s.AutoQueue.Enabled)},
+		{keyAutoQueueMinAIScore, fmt.Sprintf("%g", s.AutoQueue.MinAIScore)},
+		{keyAutoQueueMinConfidence, fmt.Sprintf("%g", s.AutoQueue.MinConfidence)},
+		{keyAutoQueueIntervalSecs, fmt.Sprintf("%d", s.AutoQueue.IntervalSecs)},
 	}
 	for _, p := range pairs {
 		if err := m.store.SetSetting(p.key, p.val); err != nil {
@@ -299,12 +328,36 @@ func applyStoredValues(s *AppSettings, stored map[string]string) {
 	if v, ok := stored[keyAuthPassword]; ok {
 		s.Auth.Password = v
 	}
+	if v, ok := stored[keyAutoQueueEnabled]; ok {
+		s.AutoQueue.Enabled = v == "true"
+	}
+	if v, ok := stored[keyAutoQueueMinAIScore]; ok {
+		if f := parseFloat(v); f > 0 {
+			s.AutoQueue.MinAIScore = f
+		}
+	}
+	if v, ok := stored[keyAutoQueueMinConfidence]; ok {
+		if f := parseFloat(v); f > 0 {
+			s.AutoQueue.MinConfidence = f
+		}
+	}
+	if v, ok := stored[keyAutoQueueIntervalSecs]; ok {
+		if n := parseInt(v); n > 0 {
+			s.AutoQueue.IntervalSecs = n
+		}
+	}
 }
 
 func parseInt(s string) int {
 	n := 0
 	fmt.Sscanf(s, "%d", &n)
 	return n
+}
+
+func parseFloat(s string) float64 {
+	var f float64
+	fmt.Sscanf(s, "%g", &f)
+	return f
 }
 
 func boolStr(b bool) string {
