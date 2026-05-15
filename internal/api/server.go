@@ -63,6 +63,7 @@ type Server struct {
 	dismissDays      int                  // days until a dismissed suggestion becomes eligible again (0 = permanent)
 	feedCheckCfg     ops.FeedCheckConfig
 	feedCheckDeps    ops.FeedCheckDeps
+	autoQueueDeps    ops.AutoQueueDeps // populated by WithAutoQueueDeps
 	httpSrv          *http.Server
 	metrics          metricsState
 }
@@ -130,13 +131,14 @@ type ActivityItem struct {
 }
 
 type StatsResponse struct {
-	Hours    int `json:"hours"`
-	Pending  int `json:"pending"`
-	Seen     int `json:"seen"`
-	Staged   int `json:"staged"`
-	Approved int `json:"approved"`
-	Rejected int `json:"rejected"`
-	Queued   int `json:"queued"`
+	Hours      int `json:"hours"`
+	Pending    int `json:"pending"`
+	Seen       int `json:"seen"`
+	Staged     int `json:"staged"`
+	Approved   int `json:"approved"`
+	Rejected   int `json:"rejected"`
+	Queued     int `json:"queued"`
+	AutoQueued int `json:"auto_queued"`
 }
 
 type RescoreRequest struct {
@@ -333,6 +335,15 @@ func (s *Server) WithFeedCheck(cfg ops.FeedCheckConfig, deps ops.FeedCheckDeps) 
 	return s
 }
 
+// WithAutoQueueDeps stores the shared deps used by the auto-queue job and the
+// POST /api/auto-queue and GET /api/auto-queue/preview endpoints. The QB client
+// and Matcher are inherited from the server when not supplied here. Returns the
+// server for call chaining.
+func (s *Server) WithAutoQueueDeps(deps ops.AutoQueueDeps) *Server {
+	s.autoQueueDeps = deps
+	return s
+}
+
 // WithShowsPath sets the filesystem path that GET/PUT /api/watchlist reads and
 // writes. If not called the server defaults to "watchlist.json" (current working
 // directory — the same location the binary looks for it at startup).
@@ -373,6 +384,8 @@ func (s *Server) Start() error {
 	mux.HandleFunc("/api/suggestions/dismiss", s.handleSuggestionsDismiss)
 	mux.HandleFunc("/api/suggestions", s.handleSuggestions)
 	mux.HandleFunc("/api/feed-check", s.handleFeedCheck)
+	mux.HandleFunc("/api/auto-queue/preview", s.handleAutoQueuePreview)
+	mux.HandleFunc("/api/auto-queue", s.handleAutoQueue)
 	mux.HandleFunc("/api/jobs/stream", s.handleJobsStream)
 	mux.HandleFunc("/api/jobs/", s.handleJob)
 	mux.HandleFunc("/api/jobs", s.handleJobs)
@@ -997,13 +1010,14 @@ func (s *Server) handleStats(w http.ResponseWriter, r *http.Request) {
 	s.logger.Info("stats retrieved", zap.Int("pending", ws.Pending), zap.Int("seen_24h", ws.Seen))
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(StatsResponse{
-		Hours:    ws.Hours,
-		Pending:  ws.Pending,
-		Seen:     ws.Seen,
-		Staged:   ws.Staged,
-		Approved: ws.Approved,
-		Rejected: ws.Rejected,
-		Queued:   ws.Queued,
+		Hours:      ws.Hours,
+		Pending:    ws.Pending,
+		Seen:       ws.Seen,
+		Staged:     ws.Staged,
+		Approved:   ws.Approved,
+		Rejected:   ws.Rejected,
+		Queued:     ws.Queued,
+		AutoQueued: ws.AutoQueued,
 	})
 }
 
@@ -1993,6 +2007,25 @@ func (s *Server) applySettings(cfg settings.AppSettings) {
 			time.Duration(cfg.Scheduler.FeedCheckIntervalSecs)*time.Second)
 		s.scheduler.SetEnabled("feed_check", cfg.Scheduler.FeedCheckEnabled)
 		s.scheduler.SetEnabled("rescore_backfill", cfg.Scheduler.RescoreBackfillEnabled)
+		s.scheduler.SetEnabled("auto_queue", cfg.AutoQueue.Enabled)
+		if cfg.AutoQueue.IntervalSecs > 0 {
+			s.scheduler.SetInterval("auto_queue",
+				time.Duration(cfg.AutoQueue.IntervalSecs)*time.Second)
+		}
+	}
+	// Auto-queue: wire the post-feed-check trigger into feedCheckDeps so
+	// RunFeedCheck can kick off an auto-queue pass after staging completes.
+	if s.settingsMgr != nil {
+		s.feedCheckDeps.AutoQueueEnabled = func() (bool, ops.AutoQueueConfig, ops.AutoQueueDeps) {
+			aqCfg := s.settingsMgr.Get().AutoQueue
+			if !aqCfg.Enabled {
+				return false, ops.AutoQueueConfig{}, ops.AutoQueueDeps{}
+			}
+			return true, ops.AutoQueueConfig{
+				MinAIScore:    aqCfg.MinAIScore,
+				MinConfidence: aqCfg.MinConfidence,
+			}, s.autoQueueDeps
+		}
 	}
 	// Matcher default rules hot-reload
 	if s.matcher != nil {
@@ -2185,4 +2218,80 @@ func (s *Server) handleWatchlist(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusMethodNotAllowed)
 		json.NewEncoder(w).Encode(ErrorResponse{Error: "method not allowed"})
 	}
+}
+
+// handleAutoQueue triggers an on-demand auto-queue job.
+// POST /api/auto-queue — returns 202 or 409 if already active.
+func (s *Server) handleAutoQueue(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+
+	if s.queue == nil {
+		w.WriteHeader(http.StatusServiceUnavailable)
+		json.NewEncoder(w).Encode(ErrorResponse{Error: "job queue unavailable"})
+		return
+	}
+
+	var aqCfg ops.AutoQueueConfig
+	if s.settingsMgr != nil {
+		st := s.settingsMgr.Get().AutoQueue
+		aqCfg = ops.AutoQueueConfig{
+			MinAIScore:    st.MinAIScore,
+			MinConfidence: st.MinConfidence,
+		}
+	} else {
+		aqCfg = ops.AutoQueueConfig{MinAIScore: 0.80, MinConfidence: 0.85}
+	}
+
+	aqDeps := s.autoQueueDeps
+
+	err := s.queue.Submit("auto_queue", true, func(ctx context.Context) {
+		ops.RunAutoQueueJob(ctx, aqCfg, aqDeps)
+	})
+	if err != nil {
+		w.WriteHeader(http.StatusConflict)
+		json.NewEncoder(w).Encode(ErrorResponse{Error: err.Error()})
+		return
+	}
+
+	s.logger.Info("auto-queue triggered via API")
+	w.WriteHeader(http.StatusAccepted)
+	json.NewEncoder(w).Encode(map[string]string{"status": "queued"})
+}
+
+// handleAutoQueuePreview runs a dry-run auto-queue pass and returns the
+// selection decisions without making any changes.
+// GET /api/auto-queue/preview
+func (s *Server) handleAutoQueuePreview(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+
+	var aqCfg ops.AutoQueueConfig
+	if s.settingsMgr != nil {
+		st := s.settingsMgr.Get().AutoQueue
+		aqCfg = ops.AutoQueueConfig{
+			MinAIScore:    st.MinAIScore,
+			MinConfidence: st.MinConfidence,
+			DryRun:        true,
+		}
+	} else {
+		aqCfg = ops.AutoQueueConfig{MinAIScore: 0.80, MinConfidence: 0.85, DryRun: true}
+	}
+
+	aqDeps := s.autoQueueDeps
+	summary, err := ops.RunAutoQueue(r.Context(), aqCfg, aqDeps)
+	if err != nil {
+		s.logger.Error("auto-queue preview failed", zap.Error(err))
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(ErrorResponse{Error: err.Error()})
+		return
+	}
+
+	json.NewEncoder(w).Encode(summary)
 }

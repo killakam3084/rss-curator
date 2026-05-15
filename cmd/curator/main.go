@@ -820,6 +820,9 @@ func cmdServe(cfg models.Config, store *storage.Storage, buf *logbuffer.Buffer, 
 		ScorerProv: scorerProvider,
 		LogBuffer:  buf,
 	}
+	// Pre-declare settingsMgr so scheduler task closures can capture it as a
+	// mutable reference; the actual assignment happens after sched.Start().
+	var settingsMgr *settings.Manager
 	sched := scheduler.New()
 	sched.Register(&scheduler.Task{
 		Type:     "feed_check",
@@ -874,6 +877,28 @@ func cmdServe(cfg models.Config, store *storage.Storage, buf *logbuffer.Buffer, 
 		},
 	})
 
+	// auto_queue — select and forward best pending candidates to qBittorrent.
+	// Disabled by default; enabled via in-app settings (AutoQueue.Enabled).
+	autoQueueDeps := ops.AutoQueueDeps{
+		Store:   store,
+		QB:      qb,
+		Matcher: m,
+		Logger:  nil, // defaults to nop logger inside RunAutoQueueJob
+	}
+	autoQueueInterval := 10 * time.Minute
+	sched.Register(&scheduler.Task{
+		Type:     "auto_queue",
+		Interval: autoQueueInterval,
+		Enabled:  false, // managed by settingsMgr after load
+		Fn: func(ctx context.Context) {
+			st := settingsMgr.Get().AutoQueue
+			ops.RunAutoQueueJob(ctx, ops.AutoQueueConfig{
+				MinAIScore:    st.MinAIScore,
+				MinConfidence: st.MinConfidence,
+			}, autoQueueDeps)
+		},
+	})
+
 	// watchlist_enrich — backfill empty rule fields from approval history.
 	watchlistEnrichInterval := 6 * time.Hour
 	if v := os.Getenv("CURATOR_WATCHLIST_ENRICH_INTERVAL_HOURS"); v != "" {
@@ -906,7 +931,7 @@ func cmdServe(cfg models.Config, store *storage.Storage, buf *logbuffer.Buffer, 
 
 	// Settings manager — load DB overrides on top of env-var defaults.
 	// Placed after feedCheckInterval so EnvDefaults can capture it.
-	settingsMgr := settings.NewManager(store)
+	settingsMgr = settings.NewManager(store)
 	progressIntervalEnv := 0
 	if v := os.Getenv("CURATOR_PROGRESS_INTERVAL"); v != "" {
 		if n, err := strconv.Atoi(v); err == nil && n > 0 {
@@ -942,7 +967,8 @@ func cmdServe(cfg models.Config, store *storage.Storage, buf *logbuffer.Buffer, 
 		WithSettings(settingsMgr).
 		WithShowsPath(resolveShowsPath()).
 		WithSuggester(sg).
-		WithFeedCheck(feedCheckCfg, onDemandFeedCheckDeps)
+		WithFeedCheck(feedCheckCfg, onDemandFeedCheckDeps).
+		WithAutoQueueDeps(autoQueueDeps)
 	fmt.Printf("[Serve] Starting API server on port %d\n", port)
 	if err := server.Start(); err != nil {
 		fmt.Fprintf(os.Stderr, "Error starting API server: %v\n", err)

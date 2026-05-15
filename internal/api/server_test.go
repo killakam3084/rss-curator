@@ -191,7 +191,11 @@ func (m *mockStorage) SetSetting(key, value string) error               { return
 func (m *mockStorage) GetAllSettings() (map[string]string, error) {
 	return map[string]string{}, nil
 }
-func (m *mockStorage) GetApprovalQualityProfile() (string, string, error)          { return "", "", nil }
+func (m *mockStorage) GetApprovalQualityProfile() (string, string, error) { return "", "", nil }
+func (m *mockStorage) GetGroupReputationStats() (map[string]float64, error) {
+	return map[string]float64{}, nil
+}
+func (m *mockStorage) SetFailed(id int, reason string) error                       { return nil }
 func (m *mockStorage) UpsertSuggestions(suggestions []storage.SuggestionRow) error { return nil }
 func (m *mockStorage) ListSuggestions() ([]storage.SuggestionRow, error)           { return nil, nil }
 func (m *mockStorage) DismissSuggestion(showName string, until time.Time) error    { return nil }
