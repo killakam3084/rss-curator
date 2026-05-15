@@ -65,6 +65,12 @@ type AutoQueueSettings struct {
 	MinConfidence float64 `json:"min_confidence"`
 	// IntervalSecs is the period between auto_queue scheduler runs. Default 600.
 	IntervalSecs int `json:"interval_secs"`
+	// HoldMins is the sliding-window hold period in minutes. An episode group
+	// is deferred until at least HoldMins minutes have elapsed since the newest
+	// staged variant in that group, giving late-arriving quality variants (DV,
+	// 4K, etc.) time to land and be scored before a winner is committed.
+	// 0 disables the hold. Default 30.
+	HoldMins int `json:"hold_mins"`
 }
 
 // EnvDefaults carries the values parsed from environment variables at startup.
@@ -100,6 +106,7 @@ const (
 	keyAutoQueueMinAIScore     = "auto_queue.min_ai_score"
 	keyAutoQueueMinConfidence  = "auto_queue.min_confidence"
 	keyAutoQueueIntervalSecs   = "auto_queue.interval_secs"
+	keyAutoQueueHoldMins       = "auto_queue.hold_mins"
 )
 
 // ──────────────────────────────────────────────────────────────────────────────
@@ -132,6 +139,7 @@ func hardcodedDefaults() AppSettings {
 			MinAIScore:    0.80,
 			MinConfidence: 0.85,
 			IntervalSecs:  600,
+			HoldMins:      30,
 		},
 	}
 }
@@ -246,6 +254,7 @@ func (m *Manager) persist(s AppSettings) error {
 		{keyAutoQueueMinAIScore, fmt.Sprintf("%g", s.AutoQueue.MinAIScore)},
 		{keyAutoQueueMinConfidence, fmt.Sprintf("%g", s.AutoQueue.MinConfidence)},
 		{keyAutoQueueIntervalSecs, fmt.Sprintf("%d", s.AutoQueue.IntervalSecs)},
+		{keyAutoQueueHoldMins, fmt.Sprintf("%d", s.AutoQueue.HoldMins)},
 	}
 	for _, p := range pairs {
 		if err := m.store.SetSetting(p.key, p.val); err != nil {
@@ -344,6 +353,11 @@ func applyStoredValues(s *AppSettings, stored map[string]string) {
 	if v, ok := stored[keyAutoQueueIntervalSecs]; ok {
 		if n := parseInt(v); n > 0 {
 			s.AutoQueue.IntervalSecs = n
+		}
+	}
+	if v, ok := stored[keyAutoQueueHoldMins]; ok {
+		if n := parseInt(v); n >= 0 {
+			s.AutoQueue.HoldMins = n
 		}
 	}
 }

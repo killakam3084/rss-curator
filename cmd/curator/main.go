@@ -895,6 +895,7 @@ func cmdServe(cfg models.Config, store *storage.Storage, buf *logbuffer.Buffer, 
 			ops.RunAutoQueueJob(ctx, ops.AutoQueueConfig{
 				MinAIScore:    st.MinAIScore,
 				MinConfidence: st.MinConfidence,
+				HoldMins:      st.HoldMins,
 			}, autoQueueDeps)
 		},
 	})

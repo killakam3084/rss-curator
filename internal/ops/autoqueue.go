@@ -20,6 +20,10 @@ type AutoQueueConfig struct {
 	MinAIScore float64
 	// MinConfidence is the minimum MatchConfidence [0.0–1.0] a candidate must have.
 	MinConfidence float64
+	// HoldMins is the sliding-window hold period in minutes. An episode group
+	// is deferred until at least HoldMins minutes have elapsed since the newest
+	// StagedAt across all variants in that group. 0 disables the hold.
+	HoldMins int
 	// DryRun when true runs selection logic without writing to the store or
 	// qBittorrent. All decisions are still recorded in the summary.
 	DryRun bool
@@ -304,6 +308,31 @@ func RunAutoQueue(ctx context.Context, cfg AutoQueueConfig, deps AutoQueueDeps) 
 		// Representative item for display.
 		rep := candidates[0]
 		epLabel := fmt.Sprintf("S%02dE%02d", rep.FeedItem.Season, rep.FeedItem.Episode)
+
+		// Sliding-window hold: defer the group until at least HoldMins minutes
+		// have elapsed since the newest variant was staged. This allows
+		// late-arriving quality variants (DV, 4K, alternate codecs) time to
+		// land and be scored before a winner is committed.
+		if cfg.HoldMins > 0 {
+			var newest time.Time
+			for _, c := range candidates {
+				if c.StagedAt.After(newest) {
+					newest = c.StagedAt
+				}
+			}
+			age := now.Sub(newest)
+			hold := time.Duration(cfg.HoldMins) * time.Minute
+			if age < hold {
+				summary.Skipped++
+				summary.Selections = append(summary.Selections, AutoQueueDecision{
+					ShowName:   rep.FeedItem.ShowName,
+					Episode:    epLabel,
+					Skipped:    true,
+					SkipReason: fmt.Sprintf("hold window: newest variant staged %.0fm ago, hold=%dm", age.Minutes(), cfg.HoldMins),
+				})
+				continue
+			}
+		}
 
 		// Filter to candidates that pass thresholds.
 		var eligible []models.StagedTorrent
