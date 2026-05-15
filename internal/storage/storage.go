@@ -13,13 +13,14 @@ import (
 
 // WindowStats holds counts for a rolling time window.
 type WindowStats struct {
-	Hours    int `json:"hours"`
-	Seen     int `json:"seen"`     // raw feed items pulled within window
-	Staged   int `json:"staged"`   // torrents staged within window
-	Approved int `json:"approved"` // activity_log approve actions within window
-	Rejected int `json:"rejected"` // activity_log reject actions within window
-	Queued   int `json:"queued"`   // activity_log queue actions within window
-	Pending  int `json:"pending"`  // current staged_torrents with status='pending'
+	Hours      int `json:"hours"`
+	Seen       int `json:"seen"`        // raw feed items pulled within window
+	Staged     int `json:"staged"`      // torrents staged within window
+	Approved   int `json:"approved"`    // activity_log approve actions within window
+	Rejected   int `json:"rejected"`    // activity_log reject actions within window
+	Queued     int `json:"queued"`      // activity_log queue actions within window
+	AutoQueued int `json:"auto_queued"` // activity_log auto_queue actions within window
+	Pending    int `json:"pending"`     // current staged_torrents with status='pending'
 }
 
 // SuggestionRow is one persistent suggestion record in the suggestions table.
@@ -77,6 +78,11 @@ type Store interface {
 	// in approved torrents (mode query). Returns empty strings when no approved
 	// torrents exist yet.
 	GetApprovalQualityProfile() (quality, codec string, err error)
+	// GetGroupReputationStats returns a map of release_group → frequency ratio
+	// (0.0–1.0) derived from all activity_log entries with action IN
+	// ('queue', 'auto_queue'). Groups that have never been queued are absent.
+	// Returns an empty map (not nil) when no queued history exists.
+	GetGroupReputationStats() (map[string]float64, error)
 
 	// Suggestion row operations — replaces the old single-blob cache.
 	// Each suggestion is a persistent row; status controls visibility.
@@ -254,6 +260,9 @@ func (s *Storage) migrate() error {
 		// Migration 13: fail_reason — stores the qBittorrent error message when a
 		// torrent add attempt fails so the UI can surface it to the user.
 		`ALTER TABLE staged_torrents ADD COLUMN fail_reason TEXT NOT NULL DEFAULT ''`,
+		// Migration 14: index on activity_log action to speed up group reputation
+		// and auto_queue window stat queries.
+		`CREATE INDEX IF NOT EXISTS idx_activity_torrent_id ON activity_log(torrent_id)`,
 	}
 
 	for _, migration := range migrations {
@@ -852,6 +861,52 @@ func (s *Storage) GetApprovalQualityProfile() (quality, codec string, err error)
 	return quality, codec, nil
 }
 
+// GetGroupReputationStats returns a map of release_group → frequency ratio
+// (0.0–1.0) derived from all activity_log entries with action IN
+// ('queue', 'auto_queue'). The ratio is each group's count divided by the
+// total number of queued items. Returns an empty map when no queued history
+// exists.
+func (s *Storage) GetGroupReputationStats() (map[string]float64, error) {
+	rows, err := s.db.Query(`
+		SELECT
+			json_extract(st.feed_item, '$.release_group') AS grp,
+			COUNT(*) AS cnt
+		FROM activity_log al
+		JOIN staged_torrents st ON st.id = al.torrent_id
+		WHERE al.action IN ('queue', 'auto_queue')
+		  AND json_extract(st.feed_item, '$.release_group') != ''
+		  AND json_extract(st.feed_item, '$.release_group') IS NOT NULL
+		GROUP BY grp
+	`)
+	if err != nil {
+		return nil, fmt.Errorf("GetGroupReputationStats: query: %w", err)
+	}
+	defer rows.Close()
+
+	counts := make(map[string]int)
+	total := 0
+	for rows.Next() {
+		var grp string
+		var cnt int
+		if err := rows.Scan(&grp, &cnt); err != nil {
+			return nil, fmt.Errorf("GetGroupReputationStats: scan: %w", err)
+		}
+		counts[grp] = cnt
+		total += cnt
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("GetGroupReputationStats: rows: %w", err)
+	}
+
+	result := make(map[string]float64, len(counts))
+	if total > 0 {
+		for grp, cnt := range counts {
+			result[grp] = float64(cnt) / float64(total)
+		}
+	}
+	return result, nil
+}
+
 // UpsertSuggestions inserts new suggestion rows, ignoring conflicts on
 // show_name so existing rows (including dismissed ones) are never overwritten.
 func (s *Storage) UpsertSuggestions(suggestions []SuggestionRow) error {
@@ -1025,6 +1080,7 @@ func (s *Storage) GetWindowStats(hours int) (*WindowStats, error) {
 		{&ws.Approved, "approve"},
 		{&ws.Rejected, "reject"},
 		{&ws.Queued, "queue"},
+		{&ws.AutoQueued, "auto_queue"},
 	} {
 		*pair.dest, err = countQuery(
 			`SELECT COUNT(*) FROM activity_log WHERE action = ? AND action_at >= datetime('now', ? || ' hours')`,

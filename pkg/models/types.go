@@ -89,6 +89,9 @@ type ShowRule struct {
 	PreferredGroups []string `json:"preferred_groups,omitempty"`
 	PreferredHDR    []string `json:"preferred_hdr,omitempty"`
 	ExcludeGroups   []string `json:"exclude_groups,omitempty"`
+	// AutoQueue controls whether the auto-queue job may select and queue torrents
+	// for this show without human review. nil means "use the global default".
+	AutoQueue *bool `json:"auto_queue,omitempty"`
 }
 
 // MovieRule represents rules for a specific movie (mirrors ShowRule).
@@ -99,6 +102,9 @@ type MovieRule struct {
 	PreferredGroups []string `json:"preferred_groups,omitempty"`
 	PreferredHDR    []string `json:"preferred_hdr,omitempty"`
 	ExcludeGroups   []string `json:"exclude_groups,omitempty"`
+	// AutoQueue controls whether the auto-queue job may select and queue torrents
+	// for this movie without human review. nil means "use the global default".
+	AutoQueue *bool `json:"auto_queue,omitempty"`
 }
 
 // DefaultRules represents default matching rules
