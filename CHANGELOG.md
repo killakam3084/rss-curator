@@ -8,6 +8,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Auto-queue** — a new fully-automated queuing pipeline that selects the best
+  pending torrent candidate for each episode and sends it directly to
+  qBittorrent without human review.
+  - Composite scoring formula (0–100 pts) weights: AI score ×60, release-group
+    reputation ×20 (biased toward historically approved groups), quality tier
+    (0–8), codec preference (0–4), HDR preference (0–4), file-size signal (0–2),
+    recency decay (0–2), RAR penalty (−3).
+  - Per-show/movie opt-out via `auto_queue: false` in `watchlist.json`.
+  - New `AutoQueueSettings` in in-app settings: enabled toggle, `min_ai_score`
+    (default 0.80), `min_confidence` (default 0.85), `interval_secs`
+    (default 600).
+  - **Scheduler task** `auto_queue` fires every `interval_secs`; also triggered
+    automatically after each feed-check when enabled.
+  - **`POST /api/auto-queue`** — on-demand trigger (returns 202).
+  - **`GET /api/auto-queue/preview`** — dry-run that returns `AutoQueueSummary`
+    with per-episode selection decisions without making any changes.
+  - **Settings UI** — new "auto-queue" section in `/settings` with all controls
+    and an on-demand "run auto-queue now" button.
+  - `stats` response now includes `auto_queued` counter for the selected window.
+- **Release-group reputation stats** — `GetGroupReputationStats()` exposes a
+  per-group queue frequency ratio derived from `activity_log`, injected into AI
+  scorer prompts and the auto-queue composite score.
+- **`WindowStats.AutoQueued`** — counts `auto_queue` actions in the activity
+  window; surfaced in the `/api/stats` response.
+- **`AutoQueue *bool`** on `ShowRule` and `MovieRule` — per-show/movie opt-in/out
+  of auto-queuing (nil = follow global setting).
+
 ## [0.53.0] - 2026-05-11
 
 ### Added

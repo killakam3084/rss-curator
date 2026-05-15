@@ -203,6 +203,84 @@
                     <curator-btn @click="save('scheduler')" :disabled="saving" :loading="saving" loading-text="saving…">save scheduler</curator-btn>
                 </section>
 
+                <!-- ── Auto-Queue ── -->
+                <section v-if="!loading && activeSection === 'auto_queue'" class="space-y-6">
+                    <div>
+                        <h2 class="text-xl font-bold font-mono fg-accent mb-1">> auto-queue</h2>
+                        <p class="text-sm fg-dim font-mono">automatically forward the best pending candidate per episode to qBittorrent</p>
+                    </div>
+
+                    <div class="bg-card border border-subtle rounded-lg p-6 space-y-5">
+
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <div class="text-xs font-mono fg-soft uppercase tracking-widest">enabled</div>
+                                <div class="text-xs fg-muted font-mono mt-0.5">run auto-queue on schedule and after each feed check</div>
+                            </div>
+                            <button
+                                @click="form.auto_queue.enabled = !form.auto_queue.enabled"
+                                :class="[
+                                    'relative inline-flex h-6 w-11 items-center rounded-full transition-colors duration-200 focus:outline-none border',
+                                    form.auto_queue.enabled ? 'bg-accent border-accent' : 'bg-deep border-base'
+                                ]"
+                            >
+                                <span :class="['inline-block h-4 w-4 transform rounded-full transition-transform duration-200', form.auto_queue.enabled ? 'bg-white translate-x-6' : 'bg-raised translate-x-1 border border-base']"/>
+                            </button>
+                        </div>
+
+                        <div class="space-y-1">
+                            <label class="block text-xs font-mono fg-soft uppercase tracking-widest">min AI score (0.0 – 1.0)</label>
+                            <input
+                                v-model.number="form.auto_queue.min_ai_score"
+                                type="number" min="0" max="1" step="0.01"
+                                class="w-full bg-raised border border-base rounded px-3 py-2 font-mono text-sm fg-base focus:outline-none focus:border-accent transition-colors"
+                            />
+                            <p class="text-xs fg-muted font-mono">candidates below this AI score are excluded (default 0.80)</p>
+                        </div>
+
+                        <div class="space-y-1">
+                            <label class="block text-xs font-mono fg-soft uppercase tracking-widest">min match confidence (0.0 – 1.0)</label>
+                            <input
+                                v-model.number="form.auto_queue.min_confidence"
+                                type="number" min="0" max="1" step="0.01"
+                                class="w-full bg-raised border border-base rounded px-3 py-2 font-mono text-sm fg-base focus:outline-none focus:border-accent transition-colors"
+                            />
+                            <p class="text-xs fg-muted font-mono">candidates below this match confidence are excluded (default 0.85)</p>
+                        </div>
+
+                        <div class="space-y-1">
+                            <label class="block text-xs font-mono fg-soft uppercase tracking-widest">scheduler interval (seconds)</label>
+                            <input
+                                v-model.number="form.auto_queue.interval_secs"
+                                type="number" min="60"
+                                class="w-full bg-raised border border-base rounded px-3 py-2 font-mono text-sm fg-base focus:outline-none focus:border-accent transition-colors"
+                            />
+                            <p class="text-xs fg-muted font-mono">how often the scheduler checks for eligible pending torrents (default 600)</p>
+                        </div>
+                    </div>
+
+                    <!-- On-demand run -->
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <div class="text-xs font-mono fg-soft uppercase tracking-widest">on-demand run</div>
+                            <div class="text-xs fg-muted font-mono mt-0.5">trigger auto-queue immediately (uses saved thresholds)</div>
+                        </div>
+                        <button
+                            @click="runAutoQueue"
+                            :disabled="autoQueueRunning"
+                            class="flex items-center gap-2 px-3 py-1.5 rounded border border-base fg-soft hover:fg-base hover:border-accent font-mono text-xs transition-colors disabled:opacity-50 disabled:cursor-wait"
+                        >
+                            <svg v-if="autoQueueRunning" class="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
+                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+                                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/>
+                            </svg>
+                            {{ autoQueueRunning ? 'triggered…' : 'run auto-queue now' }}
+                        </button>
+                    </div>
+
+                    <curator-btn @click="save('auto_queue')" :disabled="saving" :loading="saving" loading-text="saving…">save auto-queue</curator-btn>
+                </section>
+
                 <!-- ── Alerts ── -->
                 <section v-if="!loading && activeSection === 'alerts'" class="space-y-6">
                     <div>

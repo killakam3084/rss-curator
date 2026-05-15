@@ -6,6 +6,7 @@ const settingsApp = createApp({
         // ── State ────────────────────────────────────────────────────
         const sections = [
             { id: 'scheduler',   label: 'scheduler'   },
+            { id: 'auto_queue',  label: 'auto-queue'  },
             { id: 'alerts',      label: 'alerts'      },
             { id: 'match',       label: 'match'       },
             { id: 'auth',        label: 'auth'        },
@@ -38,6 +39,7 @@ const settingsApp = createApp({
         const suggestActiveLimit = ref(0);      // cap configured on server (CURATOR_SUGGESTIONS_LIMIT)
         const feedCheckRunning        = ref(false);  // true while polling on-demand feed-check job
         const watchlistEnrichRunning = ref(false);  // true briefly after triggering watchlist_enrich
+        const autoQueueRunning       = ref(false);  // true while polling on-demand auto-queue job
 
         // Flat form state mirroring AppSettings JSON shape
         const form = reactive({
@@ -45,6 +47,12 @@ const settingsApp = createApp({
                 feed_check_interval_secs: 300,
                 feed_check_enabled: true,
                 rescore_backfill_enabled: false,
+            },
+            auto_queue: {
+                enabled: false,
+                min_ai_score: 0.80,
+                min_confidence: 0.85,
+                interval_secs: 600,
             },
             alerts: {
                 alert_poller_interval_secs: 60,
@@ -91,6 +99,13 @@ const settingsApp = createApp({
                 form.scheduler.feed_check_interval_secs  = data.scheduler.feed_check_interval_secs  ?? 300;
                 form.scheduler.feed_check_enabled        = data.scheduler.feed_check_enabled        ?? true;
                 form.scheduler.rescore_backfill_enabled  = data.scheduler.rescore_backfill_enabled  ?? false;
+            }
+            // auto_queue
+            if (data.auto_queue) {
+                form.auto_queue.enabled        = data.auto_queue.enabled        ?? false;
+                form.auto_queue.min_ai_score   = data.auto_queue.min_ai_score   ?? 0.80;
+                form.auto_queue.min_confidence = data.auto_queue.min_confidence ?? 0.85;
+                form.auto_queue.interval_secs  = data.auto_queue.interval_secs  ?? 600;
             }
             // alerts
             if (data.alerts) {
@@ -146,6 +161,8 @@ const settingsApp = createApp({
             const patch = {};
             if (section === 'scheduler') {
                 patch.scheduler = { ...form.scheduler };
+            } else if (section === 'auto_queue') {
+                patch.auto_queue = { ...form.auto_queue };
             } else if (section === 'alerts') {
                 patch.alerts = { ...form.alerts };
             } else if (section === 'match') {
@@ -450,6 +467,28 @@ const settingsApp = createApp({
             }
         }
 
+        async function runAutoQueue() {
+            if (autoQueueRunning.value) return;
+            autoQueueRunning.value = true;
+            try {
+                const res = await fetch('/api/auto-queue', { method: 'POST' });
+                if (res.status === 409) return; // already running
+                if (res.status === 503) {
+                    console.warn('runAutoQueue: service unavailable');
+                    return;
+                }
+                if (!res.ok) {
+                    const d = await res.json().catch(() => ({}));
+                    console.error('runAutoQueue failed:', d.error || 'HTTP ' + res.status);
+                    return;
+                }
+            } catch (err) {
+                console.error('runAutoQueue:', err);
+            } finally {
+                setTimeout(() => { autoQueueRunning.value = false; }, 3000);
+            }
+        }
+
         async function runFeedCheck() {
             if (feedCheckRunning.value) return;
             feedCheckRunning.value = true;
@@ -644,6 +683,8 @@ const settingsApp = createApp({
             runFeedCheck,
             watchlistEnrichRunning,
             runWatchlistEnrich,
+            autoQueueRunning,
+            runAutoQueue,
             addSuggestion,
             dismissSuggestion,
             logsOpen,
