@@ -228,6 +228,22 @@
                             </button>
                         </div>
 
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <div class="text-xs font-mono fg-soft uppercase tracking-widest">dry-run mode</div>
+                                <div class="text-xs fg-muted font-mono mt-0.5">run selection logic without sending to qBittorrent — decisions are recorded in the job log</div>
+                            </div>
+                            <button
+                                @click="form.auto_queue.dry_run = !form.auto_queue.dry_run"
+                                :class="[
+                                    'relative inline-flex h-6 w-11 items-center rounded-full transition-colors duration-200 focus:outline-none border',
+                                    form.auto_queue.dry_run ? 'bg-accent border-accent' : 'bg-deep border-base'
+                                ]"
+                            >
+                                <span :class="['inline-block h-4 w-4 transform rounded-full transition-transform duration-200', form.auto_queue.dry_run ? 'bg-white translate-x-6' : 'bg-raised translate-x-1 border border-base']"/>
+                            </button>
+                        </div>
+
                         <div class="space-y-1">
                             <label class="block text-xs font-mono fg-soft uppercase tracking-widest">min AI score (0.0 – 1.0)</label>
                             <input

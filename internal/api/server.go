@@ -2026,6 +2026,7 @@ func (s *Server) applySettings(cfg settings.AppSettings) {
 				MinConfidence: aqCfg.MinConfidence,
 				HoldMins:      aqCfg.HoldMins,
 				MaxHoldMins:   aqCfg.MaxHoldMins,
+				DryRun:        aqCfg.DryRun,
 			}, s.autoQueueDeps
 		}
 	}
@@ -2245,6 +2246,7 @@ func (s *Server) handleAutoQueue(w http.ResponseWriter, r *http.Request) {
 			MinConfidence: st.MinConfidence,
 			HoldMins:      st.HoldMins,
 			MaxHoldMins:   st.MaxHoldMins,
+			DryRun:        st.DryRun,
 		}
 	} else {
 		aqCfg = ops.AutoQueueConfig{MinAIScore: 0.80, MinConfidence: 0.85, HoldMins: 30, MaxHoldMins: 480}

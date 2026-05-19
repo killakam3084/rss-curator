@@ -897,6 +897,7 @@ func cmdServe(cfg models.Config, store *storage.Storage, buf *logbuffer.Buffer, 
 				MinConfidence: st.MinConfidence,
 				HoldMins:      st.HoldMins,
 				MaxHoldMins:   st.MaxHoldMins,
+				DryRun:        st.DryRun,
 			}, autoQueueDeps)
 		},
 	})

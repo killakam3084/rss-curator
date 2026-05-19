@@ -77,6 +77,11 @@ type AutoQueueSettings struct {
 	// prevents indefinite deferral for episodes with slow or multi-source
 	// release patterns. 0 disables the cap. Default 480 (8 h).
 	MaxHoldMins int `json:"max_hold_mins"`
+	// DryRun when true makes the scheduler and on-demand runs execute selection
+	// logic without writing to the store or qBittorrent. Decisions are still
+	// recorded in the job summary. The /api/auto-queue/preview endpoint always
+	// runs in dry-run mode regardless of this setting. Default false.
+	DryRun bool `json:"dry_run"`
 }
 
 // EnvDefaults carries the values parsed from environment variables at startup.
@@ -114,6 +119,7 @@ const (
 	keyAutoQueueIntervalSecs   = "auto_queue.interval_secs"
 	keyAutoQueueHoldMins       = "auto_queue.hold_mins"
 	keyAutoQueueMaxHoldMins    = "auto_queue.max_hold_mins"
+	keyAutoQueueDryRun         = "auto_queue.dry_run"
 )
 
 // ──────────────────────────────────────────────────────────────────────────────
@@ -148,6 +154,7 @@ func hardcodedDefaults() AppSettings {
 			IntervalSecs:  600,
 			HoldMins:      30,
 			MaxHoldMins:   480,
+			DryRun:        false,
 		},
 	}
 }
@@ -264,6 +271,7 @@ func (m *Manager) persist(s AppSettings) error {
 		{keyAutoQueueIntervalSecs, fmt.Sprintf("%d", s.AutoQueue.IntervalSecs)},
 		{keyAutoQueueHoldMins, fmt.Sprintf("%d", s.AutoQueue.HoldMins)},
 		{keyAutoQueueMaxHoldMins, fmt.Sprintf("%d", s.AutoQueue.MaxHoldMins)},
+		{keyAutoQueueDryRun, boolStr(s.AutoQueue.DryRun)},
 	}
 	for _, p := range pairs {
 		if err := m.store.SetSetting(p.key, p.val); err != nil {
@@ -373,6 +381,9 @@ func applyStoredValues(s *AppSettings, stored map[string]string) {
 		if n := parseInt(v); n >= 0 {
 			s.AutoQueue.MaxHoldMins = n
 		}
+	}
+	if v, ok := stored[keyAutoQueueDryRun]; ok {
+		s.AutoQueue.DryRun = v == "true"
 	}
 }
 

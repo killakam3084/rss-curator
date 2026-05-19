@@ -8,6 +8,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.54.0] - 2026-05-19
+
+### Added
+- **Auto-queue dry-run mode** — new `dry_run` setting persisted to the DB and
+  exposed as a toggle in the auto-queue settings UI (grouped with the `enabled`
+  toggle). When on, the scheduler and on-demand "run now" trigger execute full
+  selection logic and record decisions in the job log without writing to the
+  store or sending anything to qBittorrent. The `/api/auto-queue/preview`
+  endpoint remains unconditionally dry-run regardless of this setting.
+- **Hold window & hold cap** (`hold_mins` / `max_hold_mins`) — sliding-window
+  deferral and hard-ceiling settings exposed in the auto-queue settings UI with
+  persisted DB storage. `hold_mins` (default 30) defers an episode group until
+  the newest staged variant is at least that old; `max_hold_mins` (default 480)
+  force-commits once the oldest variant has been pending that long.
+
+## [0.53.1] - 2026-05-15
+
 ### Added
 - **Auto-queue** — a new fully-automated queuing pipeline that selects the best
   pending torrent candidate for each episode and sends it directly to
