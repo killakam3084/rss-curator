@@ -290,9 +290,14 @@ func RunAutoQueue(ctx context.Context, cfg AutoQueueConfig, deps AutoQueueDeps) 
 
 	now := time.Now()
 
-	// Group by (show_lower, season, episode). Skip items without episode info.
+	// Group by (show_lower, season, episode). Skip items without episode info
+	// and skip movies — their titles often contain audio channel strings like
+	// "5.1" or "7.1" that the feed parser can misread as season/episode numbers.
 	groups := make(map[episodeKey][]models.StagedTorrent)
 	for _, t := range pending {
+		if t.FeedItem.ContentType == "movie" {
+			continue // movies handled separately; skip to avoid false S/E parses
+		}
 		if t.FeedItem.Season == 0 && t.FeedItem.Episode == 0 {
 			continue // season pack / unrecognised — skip
 		}
@@ -313,6 +318,22 @@ func RunAutoQueue(ctx context.Context, cfg AutoQueueConfig, deps AutoQueueDeps) 
 		// Representative item for display.
 		rep := candidates[0]
 		epLabel := fmt.Sprintf("S%02dE%02d", rep.FeedItem.Season, rep.FeedItem.Episode)
+
+		// Check per-show auto-queue opt-out first — no point holding something
+		// we will never queue. Use candidates[0] for the rule lookup; all
+		// candidates in a group share the same show/movie.
+		showRule, movieRule := lookupRule(watchlistCfg, rep)
+		if !autoQueueEnabled(showRule, movieRule, true /* caller gates on global enabled */) {
+			summary.Skipped++
+			summary.Selections = append(summary.Selections, AutoQueueDecision{
+				ShowName:   rep.FeedItem.ShowName,
+				Episode:    epLabel,
+				Skipped:    true,
+				SkipReason: "auto_queue disabled for this show/movie in watchlist",
+				DryRun:     cfg.DryRun,
+			})
+			continue
+		}
 
 		// Sliding-window hold: defer the group until at least HoldMins minutes
 		// have elapsed since the newest variant was staged. This allows
@@ -340,6 +361,7 @@ func RunAutoQueue(ctx context.Context, cfg AutoQueueConfig, deps AutoQueueDeps) 
 					Episode:    epLabel,
 					Skipped:    true,
 					SkipReason: fmt.Sprintf("hold window: newest variant staged %.0fm ago (hold=%dm, cap=%dm)", age.Minutes(), cfg.HoldMins, cfg.MaxHoldMins),
+					DryRun:     cfg.DryRun,
 				})
 				continue
 			}
@@ -366,21 +388,7 @@ func RunAutoQueue(ctx context.Context, cfg AutoQueueConfig, deps AutoQueueDeps) 
 				Episode:    epLabel,
 				Skipped:    true,
 				SkipReason: "no candidate meets score/confidence thresholds",
-			})
-			continue
-		}
-
-		// Look up rule for the first eligible candidate (all same show).
-		showRule, movieRule := lookupRule(watchlistCfg, eligible[0])
-
-		// Check per-show auto-queue opt-out.
-		if !autoQueueEnabled(showRule, movieRule, true /* caller gates on global enabled */) {
-			summary.Skipped++
-			summary.Selections = append(summary.Selections, AutoQueueDecision{
-				ShowName:   rep.FeedItem.ShowName,
-				Episode:    epLabel,
-				Skipped:    true,
-				SkipReason: "auto_queue disabled for this show/movie in watchlist",
+				DryRun:     cfg.DryRun,
 			})
 			continue
 		}
