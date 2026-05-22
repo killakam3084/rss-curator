@@ -39,7 +39,7 @@ services:
       ollama:
         condition: service_healthy
     environment:
-      OLLAMA_HOST: http://192.168.68.60:11434
+      OLLAMA_HOST: http://127.0.0.1:11434
     entrypoint:
       - sh
       - -c
@@ -64,7 +64,7 @@ services:
 
       # AI (ollama)
       CURATOR_AI_PROVIDER: ollama
-      CURATOR_AI_HOST: http://192.168.68.60:11434
+      CURATOR_AI_HOST: http://127.0.0.1:11434
       CURATOR_AI_SCORER_MODEL: llama3.2:3b
       CURATOR_AI_ENRICHER_MODEL: llama3.2:1b
       CURATOR_AI_MAX_TOKENS: 8192
@@ -84,7 +84,7 @@ services:
       CURATOR_AI_SUGGESTER_CACHE_LIMIT: 25
 
       # qBittorrent (non-secret)
-      QBITTORRENT_HOST: http://192.168.68.60:30024
+      QBITTORRENT_HOST: http://127.0.0.1:30024
       QBITTORRENT_USER: admin
       QBITTORRENT_CATEGORY: curator
       QBITTORRENT_ADD_PAUSED: "true"
