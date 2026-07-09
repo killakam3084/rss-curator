@@ -321,8 +321,7 @@
                             <div class="flex gap-2 ml-auto flex-wrap">
                                 <template v-if="activeTab === 'pending'">
                                 <curator-btn @click="bulkApprove" :disabled="bulkLoading" :loading="bulkLoading" loading-text="accepting...">&#10003; accept</curator-btn>
-                                <curator-btn variant="indigo" @click="bulkAlreadyHave" :disabled="bulkLoading" :loading="bulkLoading" loading-text="marking...">&#128218; already have</curator-btn>
-                                <curator-btn variant="danger" @click="bulkReject" :disabled="bulkLoading" :loading="bulkLoading" loading-text="rejecting...">&#10005; reject</curator-btn>
+                                <curator-btn variant="danger" @click="bulkReject" :disabled="bulkLoading" :loading="bulkLoading" loading-text="opening...">&#10005; reject...</curator-btn>
                                 </template>
                                 <curator-btn v-if="activeTab === 'accepted'" @click="bulkQueue" :disabled="bulkLoading" :loading="bulkLoading" loading-text="queuing...">&#8595; queue selected</curator-btn>
                                 <curator-btn v-if="activeTab === 'failed'" variant="danger" @click="Array.from(selectedIds).forEach(id => retryQBittorrent(id)); selectedIds.clear()" :disabled="bulkLoading">&#8635; retry selected</curator-btn>
@@ -465,7 +464,6 @@
                             :operating="operatingIds.has(torrent.id)"
                             @toggle-select="toggleCard(torrent.id)"
                             @approve="approveTorrent(torrent.id)"
-                            @already-have="markAlreadyHave(torrent.id)"
                             @reject="rejectTorrent(torrent.id)"
                             @queue="queueForDownload(torrent.id)"
                             @retry="retryQBittorrent(torrent.id)"
@@ -571,6 +569,103 @@
                         <curator-btn type="submit" :full="true" :disabled="operatingIds.has(reviewingTorrent?.id)" :loading="operatingIds.has(reviewingTorrent?.id)" loading-text="queuing...">⬇ queue</curator-btn>
                         <curator-btn type="button" :full="true" variant="muted" @click="deferReview">defer</curator-btn>
                         <curator-btn type="button" variant="muted" @click="closeReviewModal">close</curator-btn>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- Reject Decision Modal -->
+        <div v-if="rejectModalOpen" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div class="bg-card border border-subtle rounded-lg shadow-2xl max-w-md w-full mx-4 p-6">
+                <h2 class="text-xl font-bold fg-accent font-mono mb-4">Reject Torrents</h2>
+
+                <div class="mb-6 pb-4 border-b border-subtle">
+                    <p class="text-sm fg-soft mb-2">Applying decision to <span class="fg-base font-semibold">{{ rejectingIds.length }}</span> torrent<span v-if="rejectingIds.length !== 1">s</span>.</p>
+                    <p class="text-xs fg-dim">Status will become <span class="text-red-400 font-semibold">rejected</span>; reason controls activity semantics.</p>
+                </div>
+
+                <form @submit.prevent="submitRejectModal" class="space-y-4 mb-2">
+                    <label class="flex items-start gap-3 p-3 bg-raised border border-base rounded cursor-pointer">
+                        <input
+                            v-model="rejectReason"
+                            type="radio"
+                            value="already_have"
+                            class="w-4 h-4 mt-0.5 rounded border-base bg-raised fg-accent focus:ring-accent"
+                        >
+                        <div>
+                            <span class="block text-sm font-mono fg-soft">Already in library</span>
+                            <span class="block text-xs fg-dim mt-1">Use when you already have this item and don't want to queue it.</span>
+                        </div>
+                    </label>
+
+                    <label class="flex items-start gap-3 p-3 bg-raised border border-base rounded cursor-pointer">
+                        <input
+                            v-model="rejectReason"
+                            type="radio"
+                            value="reject"
+                            class="w-4 h-4 mt-0.5 rounded border-base bg-raised fg-accent focus:ring-accent"
+                        >
+                        <div>
+                            <span class="block text-sm font-mono fg-soft">General reject</span>
+                            <span class="block text-xs fg-dim mt-1">No specific reason captured.</span>
+                        </div>
+                    </label>
+
+                    <label class="flex items-start gap-3 p-3 bg-raised border border-base rounded cursor-pointer">
+                        <input
+                            v-model="rejectReason"
+                            type="radio"
+                            value="low_quality"
+                            class="w-4 h-4 mt-0.5 rounded border-base bg-raised fg-accent focus:ring-accent"
+                        >
+                        <div>
+                            <span class="block text-sm font-mono fg-soft">Low quality</span>
+                            <span class="block text-xs fg-dim mt-1">Resolution/encode quality below your threshold.</span>
+                        </div>
+                    </label>
+
+                    <label class="flex items-start gap-3 p-3 bg-raised border border-base rounded cursor-pointer">
+                        <input
+                            v-model="rejectReason"
+                            type="radio"
+                            value="bad_match"
+                            class="w-4 h-4 mt-0.5 rounded border-base bg-raised fg-accent focus:ring-accent"
+                        >
+                        <div>
+                            <span class="block text-sm font-mono fg-soft">Bad match</span>
+                            <span class="block text-xs fg-dim mt-1">Parsed/matched content appears incorrect.</span>
+                        </div>
+                    </label>
+
+                    <label class="flex items-start gap-3 p-3 bg-raised border border-base rounded cursor-pointer">
+                        <input
+                            v-model="rejectReason"
+                            type="radio"
+                            value="duplicate"
+                            class="w-4 h-4 mt-0.5 rounded border-base bg-raised fg-accent focus:ring-accent"
+                        >
+                        <div>
+                            <span class="block text-sm font-mono fg-soft">Duplicate</span>
+                            <span class="block text-xs fg-dim mt-1">Equivalent candidate already accepted/queued.</span>
+                        </div>
+                    </label>
+
+                    <label class="flex items-start gap-3 p-3 bg-raised border border-base rounded cursor-pointer">
+                        <input
+                            v-model="rejectReason"
+                            type="radio"
+                            value="not_interested"
+                            class="w-4 h-4 mt-0.5 rounded border-base bg-raised fg-accent focus:ring-accent"
+                        >
+                        <div>
+                            <span class="block text-sm font-mono fg-soft">Not interested</span>
+                            <span class="block text-xs fg-dim mt-1">You simply do not want this release.</span>
+                        </div>
+                    </label>
+
+                    <div class="flex gap-3 pt-2">
+                        <curator-btn type="submit" :full="true" variant="danger" :disabled="bulkLoading" :loading="bulkLoading" loading-text="applying...">&#10005; apply</curator-btn>
+                        <curator-btn type="button" variant="muted" @click="closeRejectModal">close</curator-btn>
                     </div>
                 </form>
             </div>

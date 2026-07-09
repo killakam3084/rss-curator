@@ -817,6 +817,20 @@ func (s *Server) handleReject(w http.ResponseWriter, r *http.Request, id int) {
 		return
 	}
 
+	// Optional reason payload from UI modal.
+	var rejectReq struct {
+		Reason string `json:"reason"`
+	}
+	decisionReason := "general"
+	if r.Body != nil {
+		if err := json.NewDecoder(r.Body).Decode(&rejectReq); err == nil {
+			r := strings.TrimSpace(strings.ToLower(rejectReq.Reason))
+			if r != "" {
+				decisionReason = r
+			}
+		}
+	}
+
 	torrent, err := s.store.Get(id)
 	if err != nil {
 		s.logger.Error("failed to retrieve torrent", zap.Int("id", id), zap.Error(err))
@@ -850,18 +864,28 @@ func (s *Server) handleReject(w http.ResponseWriter, r *http.Request, id int) {
 		return
 	}
 
+	activityReason := torrent.MatchReason
+	if decisionReason != "general" {
+		activityReason = fmt.Sprintf("%s | decision_reason:%s", torrent.MatchReason, decisionReason)
+	}
+
 	// Log the activity
-	if err := s.store.LogActivity(id, torrent.FeedItem.Title, "reject", torrent.MatchReason); err != nil {
+	if err := s.store.LogActivity(id, torrent.FeedItem.Title, "reject", activityReason); err != nil {
 		s.logger.Error("failed to log activity", zap.Int("id", id), zap.Error(err))
 		// Don't fail the request, just log the error
+	}
+
+	alertMsg := "Rejected: " + torrent.FeedItem.Title
+	if decisionReason != "general" {
+		alertMsg = fmt.Sprintf("Rejected (%s): %s", decisionReason, torrent.FeedItem.Title)
 	}
 
 	s.logBuffer.EmitAlertEvent(models.AlertRecord{
 		Action:       "reject",
 		TorrentID:    id,
 		TorrentTitle: torrent.FeedItem.Title,
-		MatchReason:  torrent.MatchReason,
-		Message:      "Rejected: " + torrent.FeedItem.Title,
+		MatchReason:  activityReason,
+		Message:      alertMsg,
 		TriggeredAt:  time.Now(),
 	})
 
@@ -871,6 +895,7 @@ func (s *Server) handleReject(w http.ResponseWriter, r *http.Request, id int) {
 		zap.String("show", torrent.FeedItem.ShowName),
 		zap.String("quality", torrent.FeedItem.Quality),
 		zap.String("match_reason", torrent.MatchReason),
+		zap.String("decision_reason", decisionReason),
 		zap.Float64("ai_score", torrent.AIScore),
 	)
 	w.Header().Set("Content-Type", "application/json")

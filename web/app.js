@@ -49,6 +49,9 @@ const app = createApp({
             category: '',  // single selected category string
             newTag: '',    // draft input for adding a new tag
         });
+        const rejectModalOpen = ref(false);
+        const rejectingIds = ref([]);
+        const rejectReason = ref('already_have');
         const bulkReviewModalOpen = ref(false);
         const bulkReviewForm = ref({
             tags: [],
@@ -384,48 +387,63 @@ const app = createApp({
             }
         };
 
-        const rejectTorrent = async (id) => {
-            operatingIds.value.add(id);
+        const openRejectModal = (ids) => {
+            if (!ids || ids.length === 0) return;
+            rejectingIds.value = [...new Set(ids)];
+            rejectReason.value = 'already_have';
+            rejectModalOpen.value = true;
+        };
+
+        const closeRejectModal = () => {
+            rejectModalOpen.value = false;
+            rejectingIds.value = [];
+            rejectReason.value = 'already_have';
+        };
+
+        const submitRejectModal = async () => {
+            if (rejectingIds.value.length === 0) return;
+
+            bulkLoading.value = true;
+            const ids = [...rejectingIds.value];
+            const endpoint = rejectReason.value === 'already_have' ? 'already-have' : 'reject';
+            let successCount = 0;
+
             try {
-                const response = await fetch(`/api/torrents/${id}/reject`, {
-                    method: 'POST'
-                });
-                if (response.ok) {
-                    await response.json();
-                    showToast('Torrent rejected.', 'info');
+                for (const id of ids) {
+                    operatingIds.value.add(id);
+                    const body = endpoint === 'reject' ? JSON.stringify({ reason: rejectReason.value }) : null;
+                    const response = await fetch(`/api/torrents/${id}/${endpoint}`, {
+                        method: 'POST',
+                        headers: endpoint === 'reject' ? { 'Content-Type': 'application/json' } : undefined,
+                        body,
+                    });
+                    if (response.ok) successCount++;
+                }
+
+                if (successCount > 0) {
+                    if (endpoint === 'already-have') {
+                        showToast(`Marked ${successCount}/${ids.length} as already in library`, 'info');
+                    } else {
+                        showToast(`Rejected ${successCount}/${ids.length} torrents`, 'info');
+                    }
+                    selectedIds.value.clear();
+                    closeRejectModal();
                     await fetchAllTorrents();
                     await fetchActivities();
                 } else {
-                    showToast('Failed to reject torrent', 'error');
+                    showToast('No torrents were updated', 'error');
                 }
             } catch (error) {
-                console.error('Error rejecting torrent:', error);
-                showToast('Error rejecting torrent', 'error');
+                console.error('Error in reject flow:', error);
+                showToast('Error applying rejection decision', 'error');
             } finally {
-                operatingIds.value.delete(id);
+                ids.forEach(id => operatingIds.value.delete(id));
+                bulkLoading.value = false;
             }
         };
 
-        const markAlreadyHave = async (id) => {
-            operatingIds.value.add(id);
-            try {
-                const response = await fetch(`/api/torrents/${id}/already-have`, {
-                    method: 'POST'
-                });
-                if (response.ok) {
-                    await response.json();
-                    showToast('Marked as already in library.', 'info');
-                    await fetchAllTorrents();
-                    await fetchActivities();
-                } else {
-                    showToast('Failed to mark as already-have', 'error');
-                }
-            } catch (error) {
-                console.error('Error marking already-have:', error);
-                showToast('Error marking already-have', 'error');
-            } finally {
-                operatingIds.value.delete(id);
-            }
+        const rejectTorrent = async (id) => {
+            openRejectModal([id]);
         };
 
         const queueForDownload = async (id) => {
@@ -490,64 +508,7 @@ const app = createApp({
 
         const bulkReject = async () => {
             if (selectedIds.value.size === 0) return;
-            
-            bulkLoading.value = true;
-            const ids = Array.from(selectedIds.value);
-            let successCount = 0;
-            
-            try {
-                for (const id of ids) {
-                    const response = await fetch(`/api/torrents/${id}/reject`, {
-                        method: 'POST'
-                    });
-                    if (response.ok) {
-                        successCount++;
-                    }
-                }
-                
-                if (successCount > 0) {
-                    showToast(`Rejected ${successCount}/${ids.length} torrents`, 'success');
-                    selectedIds.value.clear();
-                    await fetchAllTorrents();
-                    await fetchActivities();
-                }
-            } catch (error) {
-                console.error('Error in bulk reject:', error);
-                showToast('Error rejecting torrents', 'error');
-            } finally {
-                bulkLoading.value = false;
-            }
-        };
-
-        const bulkAlreadyHave = async () => {
-            if (selectedIds.value.size === 0) return;
-
-            bulkLoading.value = true;
-            const ids = Array.from(selectedIds.value);
-            let successCount = 0;
-
-            try {
-                for (const id of ids) {
-                    const response = await fetch(`/api/torrents/${id}/already-have`, {
-                        method: 'POST'
-                    });
-                    if (response.ok) {
-                        successCount++;
-                    }
-                }
-
-                if (successCount > 0) {
-                    showToast(`Marked ${successCount}/${ids.length} as already-have`, 'success');
-                    selectedIds.value.clear();
-                    await fetchAllTorrents();
-                    await fetchActivities();
-                }
-            } catch (error) {
-                console.error('Error in bulk already-have:', error);
-                showToast('Error marking already-have', 'error');
-            } finally {
-                bulkLoading.value = false;
-            }
+            openRejectModal(Array.from(selectedIds.value));
         };
 
         const bulkQueue = () => openBulkReviewModal();
@@ -1129,7 +1090,6 @@ const app = createApp({
             closeLogsDrawer,
             approveTorrent,
             rejectTorrent,
-            markAlreadyHave,
             openReviewModal,
             closeReviewModal,
             deferReview,
@@ -1140,6 +1100,11 @@ const app = createApp({
             toggleReviewTag,
             addReviewTag,
             removeReviewTag,
+            rejectModalOpen,
+            rejectingIds,
+            rejectReason,
+            closeRejectModal,
+            submitRejectModal,
             bulkReviewModalOpen,
             bulkReviewForm,
             openBulkReviewModal,
@@ -1159,7 +1124,6 @@ const app = createApp({
             retryQBittorrent,
             bulkApprove,
             bulkReject,
-            bulkAlreadyHave,
             bulkQueue,
             toggleCard,
             isSelected,

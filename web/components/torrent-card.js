@@ -11,7 +11,7 @@
                 operating:        { type: Boolean, default: false },
             },
 
-            emits: ['toggle-select', 'approve', 'already-have', 'reject', 'queue', 'rematch', 'rescore', 'retry'],
+            emits: ['toggle-select', 'approve', 'reject', 'queue', 'rematch', 'rescore', 'retry'],
 
             setup(props, { emit }) {
                 const menuOpen = ref(false);
@@ -147,8 +147,7 @@
                         <!-- Card Actions: visible when card is selected -->
                         <div v-if="activeTab === 'pending'" v-show="selected && !multiSelectActive" class="flex gap-3">
                             <curator-btn :full="true" @click.stop="$emit('approve')" :disabled="operating" :loading="operating">&#10003; accept</curator-btn>
-                            <curator-btn :full="true" variant="indigo" @click.stop="$emit('already-have')" :disabled="operating" :loading="operating">&#128218; have</curator-btn>
-                            <curator-btn :full="true" variant="danger" @click.stop="$emit('reject')" :disabled="operating" :loading="operating">&#10005; reject</curator-btn>
+                            <curator-btn :full="true" variant="danger" @click.stop="$emit('reject')" :disabled="operating" :loading="operating">&#10005; reject...</curator-btn>
                         </div>
 
                         <div v-if="activeTab === 'accepted'" v-show="selected && !multiSelectActive">
