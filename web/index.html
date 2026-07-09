@@ -183,6 +183,7 @@
                             <span :class="[
                                 'mt-0.5 w-2.5 h-2.5 rounded-full shrink-0',
                                 alert.action === 'approve'       ? 'bg-emerald-500' :
+                                alert.action === 'already_have'  ? 'bg-amber-400' :
                                 alert.action === 'reject'        ? 'bg-red-500' :
                                 alert.action === 'queue'         ? 'bg-blue-400' :
                                 alert.action === 'staged'        ? 'bg-accent' :
@@ -320,6 +321,7 @@
                             <div class="flex gap-2 ml-auto flex-wrap">
                                 <template v-if="activeTab === 'pending'">
                                 <curator-btn @click="bulkApprove" :disabled="bulkLoading" :loading="bulkLoading" loading-text="accepting...">&#10003; accept</curator-btn>
+                                <curator-btn variant="indigo" @click="bulkAlreadyHave" :disabled="bulkLoading" :loading="bulkLoading" loading-text="marking...">&#128218; already have</curator-btn>
                                 <curator-btn variant="danger" @click="bulkReject" :disabled="bulkLoading" :loading="bulkLoading" loading-text="rejecting...">&#10005; reject</curator-btn>
                                 </template>
                                 <curator-btn v-if="activeTab === 'accepted'" @click="bulkQueue" :disabled="bulkLoading" :loading="bulkLoading" loading-text="queuing...">&#8595; queue selected</curator-btn>
@@ -463,6 +465,7 @@
                             :operating="operatingIds.has(torrent.id)"
                             @toggle-select="toggleCard(torrent.id)"
                             @approve="approveTorrent(torrent.id)"
+                            @already-have="markAlreadyHave(torrent.id)"
                             @reject="rejectTorrent(torrent.id)"
                             @queue="queueForDownload(torrent.id)"
                             @retry="retryQBittorrent(torrent.id)"

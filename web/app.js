@@ -406,6 +406,28 @@ const app = createApp({
             }
         };
 
+        const markAlreadyHave = async (id) => {
+            operatingIds.value.add(id);
+            try {
+                const response = await fetch(`/api/torrents/${id}/already-have`, {
+                    method: 'POST'
+                });
+                if (response.ok) {
+                    await response.json();
+                    showToast('Marked as already in library.', 'info');
+                    await fetchAllTorrents();
+                    await fetchActivities();
+                } else {
+                    showToast('Failed to mark as already-have', 'error');
+                }
+            } catch (error) {
+                console.error('Error marking already-have:', error);
+                showToast('Error marking already-have', 'error');
+            } finally {
+                operatingIds.value.delete(id);
+            }
+        };
+
         const queueForDownload = async (id) => {
             // Get the torrent and open the configuration modal
             const torrent = torrents.value.find(t => t.id === id);
@@ -492,6 +514,37 @@ const app = createApp({
             } catch (error) {
                 console.error('Error in bulk reject:', error);
                 showToast('Error rejecting torrents', 'error');
+            } finally {
+                bulkLoading.value = false;
+            }
+        };
+
+        const bulkAlreadyHave = async () => {
+            if (selectedIds.value.size === 0) return;
+
+            bulkLoading.value = true;
+            const ids = Array.from(selectedIds.value);
+            let successCount = 0;
+
+            try {
+                for (const id of ids) {
+                    const response = await fetch(`/api/torrents/${id}/already-have`, {
+                        method: 'POST'
+                    });
+                    if (response.ok) {
+                        successCount++;
+                    }
+                }
+
+                if (successCount > 0) {
+                    showToast(`Marked ${successCount}/${ids.length} as already-have`, 'success');
+                    selectedIds.value.clear();
+                    await fetchAllTorrents();
+                    await fetchActivities();
+                }
+            } catch (error) {
+                console.error('Error in bulk already-have:', error);
+                showToast('Error marking already-have', 'error');
             } finally {
                 bulkLoading.value = false;
             }
@@ -1076,6 +1129,7 @@ const app = createApp({
             closeLogsDrawer,
             approveTorrent,
             rejectTorrent,
+            markAlreadyHave,
             openReviewModal,
             closeReviewModal,
             deferReview,
@@ -1105,6 +1159,7 @@ const app = createApp({
             retryQBittorrent,
             bulkApprove,
             bulkReject,
+            bulkAlreadyHave,
             bulkQueue,
             toggleCard,
             isSelected,

@@ -362,6 +362,31 @@ func TestHandleRejectNotFound(t *testing.T) {
 	}
 }
 
+// TestHandleAlreadyHave tests the already-have handler.
+func TestHandleAlreadyHave(t *testing.T) {
+	server, mockStore := setupTestServer(t)
+
+	torrent := createTestTorrent(1, "pending")
+	mockStore.torrents[1] = torrent
+
+	req := httptest.NewRequest("POST", "/api/torrents/1/already-have", nil)
+	w := httptest.NewRecorder()
+
+	server.handleAlreadyHave(w, req, 1)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", w.Code)
+	}
+
+	if mockStore.torrents[1].Status != "rejected" {
+		t.Errorf("expected torrent status 'rejected', got '%s'", mockStore.torrents[1].Status)
+	}
+
+	if len(mockStore.activities) == 0 || mockStore.activities[len(mockStore.activities)-1].Action != "already_have" {
+		t.Fatalf("expected latest activity action 'already_have', got %+v", mockStore.activities)
+	}
+}
+
 // TestHandleQueueWithoutClient tests queue without qBittorrent client
 func TestHandleQueueWithoutClient(t *testing.T) {
 	server, mockStore := setupTestServer(t)

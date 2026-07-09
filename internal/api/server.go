@@ -550,6 +550,8 @@ func (s *Server) handleTorrentAction(w http.ResponseWriter, r *http.Request) {
 		s.handleApprove(w, r, id)
 	case "reject":
 		s.handleReject(w, r, id)
+	case "already-have":
+		s.handleAlreadyHave(w, r, id)
 	case "queue":
 		s.handleQueue(w, r, id)
 	case "retry-qb":
@@ -560,6 +562,75 @@ func (s *Server) handleTorrentAction(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(ErrorResponse{Error: "Unknown action"})
 	}
+}
+
+// handleAlreadyHave marks a pending torrent as rejected with explicit
+// "already_have" activity semantics for future analytics and UI affordances.
+func (s *Server) handleAlreadyHave(w http.ResponseWriter, r *http.Request, id int) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	torrent, err := s.store.Get(id)
+	if err != nil {
+		s.logger.Error("failed to retrieve torrent", zap.Int("id", id), zap.Error(err))
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(ErrorResponse{Error: fmt.Sprintf("Error retrieving torrent: %v", err)})
+		return
+	}
+
+	if torrent == nil {
+		s.logger.Warn("torrent not found", zap.Int("id", id))
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusNotFound)
+		json.NewEncoder(w).Encode(ErrorResponse{Error: "Torrent not found"})
+		return
+	}
+
+	if torrent.Status != "pending" {
+		s.logger.Warn("cannot mark non-pending torrent as already-have", zap.Int("id", id), zap.String("status", torrent.Status))
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(ErrorResponse{Error: fmt.Sprintf("Torrent already %s", torrent.Status)})
+		return
+	}
+
+	if err := s.store.UpdateStatus(id, "rejected"); err != nil {
+		s.logger.Error("failed to update torrent status", zap.Int("id", id), zap.Error(err))
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(ErrorResponse{Error: err.Error()})
+		return
+	}
+
+	if err := s.store.LogActivity(id, torrent.FeedItem.Title, "already_have", torrent.MatchReason); err != nil {
+		s.logger.Warn("failed to log already_have activity", zap.Int("id", id), zap.Error(err))
+	}
+
+	s.logBuffer.EmitAlertEvent(models.AlertRecord{
+		Action:       "already_have",
+		TorrentID:    id,
+		TorrentTitle: torrent.FeedItem.Title,
+		MatchReason:  torrent.MatchReason,
+		Message:      "Already have: " + torrent.FeedItem.Title,
+		TriggeredAt:  time.Now(),
+	})
+
+	s.logger.Info("torrent marked as already in library",
+		zap.Int("id", id),
+		zap.String("title", torrent.FeedItem.Title),
+		zap.String("show", torrent.FeedItem.ShowName),
+		zap.String("quality", torrent.FeedItem.Quality),
+		zap.String("match_reason", torrent.MatchReason),
+		zap.Float64("ai_score", torrent.AIScore),
+	)
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(RejectResponse{
+		ID:     id,
+		Status: "rejected",
+	})
 }
 
 // handleApprove marks a torrent as approved (tollgate entry)

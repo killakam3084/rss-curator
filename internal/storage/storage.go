@@ -437,7 +437,7 @@ func (s *Storage) DeleteOld(olderThan time.Duration) error {
 	cutoff := time.Now().Add(-olderThan)
 	_, err := s.db.Exec(`
 		DELETE FROM staged_torrents
-		WHERE staged_at < ? AND status IN ('approved', 'rejected')
+		WHERE staged_at < ? AND status IN ('accepted', 'queued', 'failed', 'rejected')
 	`, cutoff)
 	return err
 }
