@@ -19,6 +19,7 @@
                     netInHistory:  [],
                     netOutHistory: [],
                     metricsTimer:  null,
+                    activityReasonFilter: 'all',
                 };
             },
 
@@ -38,6 +39,44 @@
                 netOutCurrent() {
                     if (!this.netOutHistory.length) return '—';
                     return this.formatBps(this.netOutHistory[this.netOutHistory.length - 1]);
+                },
+                reasonFilterOptions() {
+                    return [
+                        { value: 'all', label: 'all' },
+                        { value: 'already_have', label: 'have' },
+                        { value: 'low_quality', label: 'quality' },
+                        { value: 'bad_match', label: 'match' },
+                        { value: 'duplicate', label: 'dup' },
+                        { value: 'not_interested', label: 'skip' },
+                        { value: 'general', label: 'general' },
+                    ];
+                },
+                filteredActivities() {
+                    if (this.activityReasonFilter === 'all') return this.activities;
+
+                    return this.activities.filter((a) => {
+                        if (a.action !== 'reject' && a.action !== 'already_have') return false;
+                        return this.extractDecisionReason(a.match_reason) === this.activityReasonFilter;
+                    });
+                },
+                reasonFilterCounts() {
+                    const counts = {
+                        all: this.activities.length,
+                        already_have: 0,
+                        low_quality: 0,
+                        bad_match: 0,
+                        duplicate: 0,
+                        not_interested: 0,
+                        general: 0,
+                    };
+
+                    this.activities.forEach((a) => {
+                        if (a.action !== 'reject' && a.action !== 'already_have') return;
+                        const reason = this.extractDecisionReason(a.match_reason);
+                        if (counts[reason] !== undefined) counts[reason]++;
+                    });
+
+                    return counts;
                 },
             },
 
@@ -94,6 +133,15 @@
                     }).join(' ');
                     const lastX = ((n - 1) * step).toFixed(1);
                     return `${pts} ${lastX},${h} 0,${h}`;
+                },
+                extractDecisionReason(matchReason) {
+                    const marker = 'decision_reason:';
+                    if (!matchReason || !matchReason.includes(marker)) {
+                        return 'general';
+                    }
+                    const reason = matchReason.split(marker).pop().trim().toLowerCase();
+                    if (!reason) return 'general';
+                    return reason;
                 },
             },
 
@@ -252,13 +300,29 @@
                     <div v-if="!collapsed" class="flex-1 min-h-0 p-4 overflow-y-auto">
                         <!-- Activity Log Tab -->
                         <div v-if="tab === 'activity'">
-                            <div v-if="activities.length === 0" class="text-center py-8">
+                            <div class="flex flex-wrap gap-1.5 mb-3">
+                                <button
+                                    v-for="opt in reasonFilterOptions"
+                                    :key="opt.value"
+                                    @click="activityReasonFilter = opt.value"
+                                    :class="[
+                                        'px-2 py-1 rounded text-[10px] font-mono font-bold uppercase border transition-colors',
+                                        activityReasonFilter === opt.value
+                                            ? 'bg-accent text-gray-900 border-accent'
+                                            : 'bg-raised fg-dim border-base hover:fg-accent hover:border-accent'
+                                    ]"
+                                >
+                                    {{ opt.label }} {{ reasonFilterCounts[opt.value] || 0 }}
+                                </button>
+                            </div>
+
+                            <div v-if="filteredActivities.length === 0" class="text-center py-8">
                                 <p class="fg-dim text-sm font-mono">no activity</p>
                             </div>
 
                             <div v-else class="space-y-3">
                                 <div
-                                    v-for="activity in activities"
+                                    v-for="activity in filteredActivities"
                                     :key="activity.id"
                                     class="p-3 rounded border-l-4 bg-raised/50 transition-all duration-200 border-accent animate-in fade-in slide-in-from-top-2"
                                 >

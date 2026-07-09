@@ -160,6 +160,29 @@ const app = createApp({
         );
         const recentAlerts = computed(() => alerts.value.slice().reverse().slice(0, 5));
 
+        const decisionReasonByTorrent = computed(() => {
+            const out = new Map();
+            for (const a of activities.value) {
+                if (!a || out.has(a.torrent_id)) continue;
+                if (a.action === 'already_have') {
+                    out.set(a.torrent_id, 'already_have');
+                    continue;
+                }
+                if (a.action !== 'reject') continue;
+                const marker = 'decision_reason:';
+                const raw = String(a.match_reason || '');
+                if (raw.includes(marker)) {
+                    const parsed = raw.split(marker).pop().trim().toLowerCase();
+                    out.set(a.torrent_id, parsed || 'general');
+                } else {
+                    out.set(a.torrent_id, 'general');
+                }
+            }
+            return out;
+        });
+
+        const decisionReasonFor = (id) => decisionReasonByTorrent.value.get(id) || '';
+
         const displayedTorrents = computed(() => {
             const filtered = torrents.value.filter(t => t.status === activeTab.value);
             return filtered.slice().sort((a, b) => {
@@ -1131,6 +1154,7 @@ const app = createApp({
             rematchOne,
             rescoreSelected,
             rescoreOne,
+            decisionReasonFor,
             formatSize,
             showToast,
             toggleSidebarCollapse,

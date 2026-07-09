@@ -9,6 +9,7 @@
                 multiSelectActive:{ type: Boolean, default: false },
                 activeTab:        { type: String,  default: 'pending' },
                 operating:        { type: Boolean, default: false },
+                decisionReason:   { type: String,  default: '' },
             },
 
             emits: ['toggle-select', 'approve', 'reject', 'queue', 'rematch', 'rescore', 'retry'],
@@ -129,6 +130,13 @@
                             <div class="flex items-center justify-between">
                                 <span class="fg-dim font-mono">match:</span>
                                 <span class="fg-accent font-mono font-bold px-2 py-1 bg-raised rounded">{{ torrent.match_reason }}</span>
+                            </div>
+                            <div v-if="torrent.status === 'rejected' && decisionReason" class="flex items-center justify-between">
+                                <span class="fg-dim font-mono">decision:</span>
+                                <span class="font-mono font-bold px-2 py-1 rounded text-xs border"
+                                      :class="decisionReason === 'already_have' ? 'badge-indigo border' : decisionReason === 'low_quality' ? 'badge-amber border' : decisionReason === 'bad_match' ? 'badge-red border' : decisionReason === 'duplicate' ? 'badge-blue border' : decisionReason === 'not_interested' ? 'badge-purple border' : 'badge-emerald border'">
+                                    {{ decisionReason.replace('_', ' ') }}
+                                </span>
                             </div>
                             <div v-if="torrent.ai_scored" class="flex items-center justify-between">
                                 <span class="fg-dim font-mono">ai score:</span>

@@ -462,6 +462,7 @@
                             :multi-select-active="multiSelectActive"
                             :active-tab="activeTab"
                             :operating="operatingIds.has(torrent.id)"
+                            :decision-reason="decisionReasonFor(torrent.id)"
                             @toggle-select="toggleCard(torrent.id)"
                             @approve="approveTorrent(torrent.id)"
                             @reject="rejectTorrent(torrent.id)"
