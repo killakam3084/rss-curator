@@ -323,6 +323,7 @@ const app = createApp({
                 });
                 if (response.ok) {
                     showToast('Torrent accepted! Ready to queue for download.', 'info');
+                    selectedIds.value = new Set();
                     await fetchAllTorrents();
                     // Get the updated torrent with new status
                     torrent = torrents.value.find(t => t.id === id);
@@ -372,6 +373,7 @@ const app = createApp({
             // Close modal without taking action - torrent stays in 'accepted' state
             // User can configure and queue later or in bulk
             showToast('Queue deferred. Configure and queue later.', 'info');
+            selectedIds.value = new Set();
             closeReviewModal();
         };
 
@@ -393,7 +395,7 @@ const app = createApp({
                 });
                 if (response.ok) {
                     showToast('Queued for download!', 'success');
-                    selectedIds.value.clear();
+                    selectedIds.value = new Set();
                     closeReviewModal();
                     await fetchAllTorrents();
                     await fetchActivities();
@@ -449,7 +451,7 @@ const app = createApp({
                     } else {
                         showToast(`Rejected ${successCount}/${ids.length} torrents`, 'info');
                     }
-                    selectedIds.value.clear();
+                    selectedIds.value = new Set();
                     closeRejectModal();
                     await fetchAllTorrents();
                     await fetchActivities();
@@ -517,7 +519,7 @@ const app = createApp({
                 
                 if (successCount > 0) {
                     showToast(`Approved ${successCount}/${ids.length} torrents`, 'success');
-                    selectedIds.value.clear();
+                    selectedIds.value = new Set();
                     await fetchAllTorrents();
                     await fetchActivities();
                 }
@@ -586,14 +588,14 @@ const app = createApp({
                 
                 if (results.every(r => r.ok)) {
                     showToast(`Queued ${selectedIds.value.size} torrents with config`, 'success');
-                    selectedIds.value.clear();
+                    selectedIds.value = new Set();
                     closeBulkReviewModal();
                     await fetchAllTorrents();
                     await fetchActivities();
                 } else {
                     const failCount = results.filter(r => !r.ok).length;
                     showToast(`${failCount} of ${results.length} queues failed — check the failed tab`, 'error');
-                    selectedIds.value.clear();
+                    selectedIds.value = new Set();
                     closeBulkReviewModal();
                     await fetchAllTorrents();
                     await fetchActivities();
