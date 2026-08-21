@@ -244,3 +244,16 @@ func TestParseResponse_SkipsEmptyReason(t *testing.T) {
 		t.Errorf("expected only Good Show, got %+v", out)
 	}
 }
+
+func TestClampSuggestions(t *testing.T) {
+	items := []Suggestion{{ShowName: "A"}, {ShowName: "B"}, {ShowName: "C"}}
+	if got := clampSuggestions(items, 2); len(got) != 2 || got[0].ShowName != "A" || got[1].ShowName != "B" {
+		t.Fatalf("clampSuggestions limit=2 = %+v, want A,B", got)
+	}
+	if got := clampSuggestions(items, 10); len(got) != 3 {
+		t.Fatalf("clampSuggestions over-limit should no-op when limit exceeds len: %+v", got)
+	}
+	if got := clampSuggestions(items, 0); len(got) != 3 {
+		t.Fatalf("clampSuggestions zero limit should no-op: %+v", got)
+	}
+}

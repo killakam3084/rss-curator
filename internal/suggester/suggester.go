@@ -196,6 +196,9 @@ func (sg *Suggester) RefreshCache(ctx context.Context) (int, error) {
 	}
 
 	suggestions, err := sg.Suggest(ctx, limit)
+	if len(suggestions) > remaining {
+		suggestions = suggestions[:remaining]
+	}
 	if err != nil {
 		return 0, fmt.Errorf("suggester: RefreshCache: %w", err)
 	}
@@ -441,7 +444,19 @@ func (sg *Suggester) Suggest(ctx context.Context, limit int) ([]Suggestion, erro
 		fmt.Printf("[Suggester] after post-metadata dedup: %d suggestion(s) remain\n", len(suggestions))
 	}
 
+	if limit > 0 && len(suggestions) > limit {
+		suggestions = suggestions[:limit]
+		fmt.Printf("[Suggester] hard cap: clipped %d suggestion(s) to %d\n", len(suggestions), limit)
+	}
+
 	return suggestions, nil
+}
+
+func clampSuggestions(suggestions []Suggestion, limit int) []Suggestion {
+	if limit <= 0 || len(suggestions) <= limit {
+		return suggestions
+	}
+	return suggestions[:limit]
 }
 
 // metaToSuggestionMeta converts a metadata.ShowMetadata to a SuggestionMeta.
