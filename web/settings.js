@@ -207,6 +207,12 @@ const settingsApp = createApp({
 
         // Initialise (first time) or refresh (tab switch) the CodeMirror editor.
         // Must be called after the #shows-editor div is in the DOM.
+        function resetWatchlistEditorView() {
+            if (!showsCM) return;
+            showsCM.setCursor({ line: 0, ch: 0 });
+            showsCM.scrollTo(0, 0);
+        }
+
         function initOrRefreshShowsCM(value) {
             const el = document.getElementById('shows-editor');
             if (!el) return;
@@ -219,7 +225,7 @@ const settingsApp = createApp({
                     tabSize: 2,
                     indentWithTabs: false,
                     lineWrapping: false,
-                    autofocus: true,
+                    autofocus: false,
                     extraKeys: {
                         'Ctrl-S': () => saveShows(),
                         'Cmd-S':  () => saveShows(),
@@ -227,9 +233,11 @@ const settingsApp = createApp({
                 });
                 // Fix height to fill container div
                 showsCM.setSize('100%', 'calc(100vh - 280px)');
+                resetWatchlistEditorView();
             } else {
                 showsCM.setValue(value || '');
                 showsCM.refresh();
+                resetWatchlistEditorView();
             }
         }
 
@@ -248,6 +256,7 @@ const settingsApp = createApp({
                 if (showsCM) {
                     showsCM.setValue(pretty);
                     showsCM.refresh();
+                    resetWatchlistEditorView();
                 } else {
                     // Will be picked up by the watch on activeSection
                     pendingShowsValue = pretty;
@@ -295,7 +304,10 @@ const settingsApp = createApp({
                     // Normalise editor content to what the server wrote
                     const { shows_count, movies_count, ...saved } = data;
                     const pretty = JSON.stringify(saved, null, 2);
-                    if (showsCM) showsCM.setValue(pretty);
+                    if (showsCM) {
+                        showsCM.setValue(pretty);
+                        resetWatchlistEditorView();
+                    }
                     const sl = showsCount.value;
                     const ml = moviesCount.value;
                     const parts = [`${sl} show${sl !== 1 ? 's' : ''}`];
@@ -346,7 +358,10 @@ const settingsApp = createApp({
         }
 
         function focusWatchlistEditor() {
-            if (showsCM) showsCM.focus();
+            if (showsCM) {
+                showsCM.focus();
+                resetWatchlistEditorView();
+            }
         }
 
         function formatShows() {
@@ -365,7 +380,10 @@ const settingsApp = createApp({
                     );
                 }
                 const pretty = JSON.stringify(parsed, null, 2);
-                if (showsCM) showsCM.setValue(pretty);
+                if (showsCM) {
+                    showsCM.setValue(pretty);
+                    resetWatchlistEditorView();
+                }
             } catch (err) {
                 showsError.value = `invalid JSON — ${err.message}`;
             }
@@ -598,6 +616,7 @@ const settingsApp = createApp({
             }
             showsCM.setValue(JSON.stringify(cfg, null, 2));
             showsCM.refresh();
+            resetWatchlistEditorView();
             // Remove from suggestions list so the row disappears immediately,
             // then persist via dismiss so it stays gone on the next fetch.
             suggestions.value = suggestions.value.filter(s => s.show_name !== suggestion.show_name);
