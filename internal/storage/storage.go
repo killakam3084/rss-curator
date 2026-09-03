@@ -107,6 +107,10 @@ type Store interface {
 	// suggest_refresh to evict stale entries added before a show joined the
 	// watchlist. Returns the number of rows deleted.
 	PruneSuggestions(watchlistNames []string) (int64, error)
+	// TrimActiveSuggestions keeps only the newest N active suggestions
+	// (generated_at DESC, id DESC) and removes older active rows. Returns the
+	// number of rows deleted. No-op when limit <= 0.
+	TrimActiveSuggestions(limit int) (int64, error)
 	// SuggestionCount returns the number of active suggestions.
 	SuggestionCount() (int, error)
 }
@@ -1028,6 +1032,28 @@ func (s *Storage) PruneSuggestions(watchlistNames []string) (int64, error) {
 	res, err := s.db.Exec(
 		`DELETE FROM suggestions WHERE status='active' AND lower(show_name) IN (`+strings.Repeat("?,", len(watchlistNames)-1)+`?)`,
 		args...,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return res.RowsAffected()
+}
+
+// TrimActiveSuggestions keeps only the newest limit active suggestions and
+// deletes any older active rows.
+func (s *Storage) TrimActiveSuggestions(limit int) (int64, error) {
+	if limit <= 0 {
+		return 0, nil
+	}
+	res, err := s.db.Exec(
+		`DELETE FROM suggestions
+		 WHERE id IN (
+		   SELECT id FROM suggestions
+		   WHERE status='active'
+		   ORDER BY generated_at DESC, id DESC
+		   LIMIT -1 OFFSET ?
+		 )`,
+		limit,
 	)
 	if err != nil {
 		return 0, err

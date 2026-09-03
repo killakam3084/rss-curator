@@ -178,6 +178,64 @@ func TestSuggestionCount(t *testing.T) {
 	}
 }
 
+func TestTrimActiveSuggestions(t *testing.T) {
+	store, tmpDir := setupTestDB(t)
+	defer cleanupTestDB(store, tmpDir)
+
+	now := time.Now().UTC()
+	_ = store.UpsertSuggestions([]SuggestionRow{
+		{ShowName: "Oldest", ContentType: "show", RuleJSON: json.RawMessage(`{}`), GeneratedAt: now.Add(-3 * time.Minute)},
+		{ShowName: "Older", ContentType: "show", RuleJSON: json.RawMessage(`{}`), GeneratedAt: now.Add(-2 * time.Minute)},
+		{ShowName: "Newer", ContentType: "show", RuleJSON: json.RawMessage(`{}`), GeneratedAt: now.Add(-1 * time.Minute)},
+		{ShowName: "Newest", ContentType: "show", RuleJSON: json.RawMessage(`{}`), GeneratedAt: now},
+	})
+
+	trimmed, err := store.TrimActiveSuggestions(2)
+	if err != nil {
+		t.Fatalf("TrimActiveSuggestions: %v", err)
+	}
+	if trimmed != 2 {
+		t.Fatalf("expected 2 trimmed rows, got %d", trimmed)
+	}
+
+	list, err := store.ListSuggestions()
+	if err != nil {
+		t.Fatalf("ListSuggestions after trim: %v", err)
+	}
+	if len(list) != 2 {
+		t.Fatalf("expected 2 rows after trim, got %d", len(list))
+	}
+	if list[0].ShowName != "Newest" || list[1].ShowName != "Newer" {
+		t.Fatalf("unexpected order/content after trim: %+v", list)
+	}
+}
+
+func TestTrimActiveSuggestions_NoOpForNonPositiveLimit(t *testing.T) {
+	store, tmpDir := setupTestDB(t)
+	defer cleanupTestDB(store, tmpDir)
+
+	_ = store.UpsertSuggestions([]SuggestionRow{
+		{ShowName: "A", ContentType: "show", RuleJSON: json.RawMessage(`{}`), GeneratedAt: time.Now().UTC()},
+		{ShowName: "B", ContentType: "show", RuleJSON: json.RawMessage(`{}`), GeneratedAt: time.Now().UTC()},
+	})
+
+	trimmed, err := store.TrimActiveSuggestions(0)
+	if err != nil {
+		t.Fatalf("TrimActiveSuggestions(0): %v", err)
+	}
+	if trimmed != 0 {
+		t.Fatalf("expected 0 trimmed rows, got %d", trimmed)
+	}
+
+	n, err := store.SuggestionCount()
+	if err != nil {
+		t.Fatalf("SuggestionCount: %v", err)
+	}
+	if n != 2 {
+		t.Fatalf("expected count to remain 2, got %d", n)
+	}
+}
+
 // ── Raw feed items ────────────────────────────────────────────────────────────
 
 func TestAddAndGetRawFeedItems(t *testing.T) {

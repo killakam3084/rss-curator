@@ -180,6 +180,13 @@ func (sg *Suggester) RefreshCache(ctx context.Context) (int, error) {
 		fmt.Printf("[Suggester] RefreshCache: reactivated %d expired dismissal(s)\n", reactivated)
 	}
 
+	// Enforce cap before top-off checks so legacy overflow states self-heal.
+	if trimmed, err := sg.store.TrimActiveSuggestions(sg.activeLimit); err != nil {
+		return 0, fmt.Errorf("suggester: RefreshCache trim: %w", err)
+	} else if trimmed > 0 {
+		fmt.Printf("[Suggester] RefreshCache: trimmed %d active suggestion(s) to cap\n", trimmed)
+	}
+
 	// Step 2: cap check — top off to activeLimit rather than always requesting cacheLimit.
 	current, err := sg.store.SuggestionCount()
 	if err != nil {

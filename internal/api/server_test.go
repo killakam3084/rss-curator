@@ -201,6 +201,7 @@ func (m *mockStorage) ListSuggestions() ([]storage.SuggestionRow, error)        
 func (m *mockStorage) DismissSuggestion(showName string, until time.Time) error    { return nil }
 func (m *mockStorage) ReactivateExpiredDismissals() (int64, error)                 { return 0, nil }
 func (m *mockStorage) PruneSuggestions(watchlistNames []string) (int64, error)     { return 0, nil }
+func (m *mockStorage) TrimActiveSuggestions(limit int) (int64, error)              { return 0, nil }
 func (m *mockStorage) SuggestionCount() (int, error)                               { return 0, nil }
 
 // setupTestServer creates a test server instance
