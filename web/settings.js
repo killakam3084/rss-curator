@@ -16,9 +16,8 @@ const settingsApp = createApp({
         const logsOpen = ref(false);
         const saving = ref(false);
 
-        const feedCheckRunning        = ref(false);  // true while polling on-demand feed-check job
-        const watchlistEnrichRunning = ref(false);  // true briefly after triggering watchlist_enrich
-        const autoQueueRunning       = ref(false);  // true while polling on-demand auto-queue job
+        const feedCheckRunning = ref(false);  // true while polling on-demand feed-check job
+        const autoQueueRunning = ref(false);  // true while polling on-demand auto-queue job
 
         // Flat form state mirroring AppSettings JSON shape
         const form = reactive({
@@ -246,27 +245,6 @@ const settingsApp = createApp({
             }
         }
 
-        async function runWatchlistEnrich() {
-            if (watchlistEnrichRunning.value) return;
-            watchlistEnrichRunning.value = true;
-            try {
-                const res = await fetch('/api/scheduler/run/watchlist_enrich', { method: 'POST' });
-                if (res.status === 409) {
-                    console.warn('runWatchlistEnrich: already running');
-                    return;
-                }
-                if (!res.ok) {
-                    const d = await res.json().catch(() => ({}));
-                    console.error('runWatchlistEnrich failed:', d.error || 'HTTP ' + res.status);
-                    return;
-                }
-            } catch (err) {
-                console.error('runWatchlistEnrich:', err);
-            } finally {
-                setTimeout(() => { watchlistEnrichRunning.value = false; }, 3000);
-            }
-        }
-
         // ── Lifecycle ────────────────────────────────────────────────
         onMounted(() => {
             loadSettings();
@@ -285,8 +263,6 @@ const settingsApp = createApp({
             save,
             feedCheckRunning,
             runFeedCheck,
-            watchlistEnrichRunning,
-            runWatchlistEnrich,
             autoQueueRunning,
             runAutoQueue,
             logsOpen,
