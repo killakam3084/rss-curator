@@ -21,6 +21,9 @@ const watchlistApp = createApp({
                 loadSuggestStatus();
                 loadCachedSuggestions();
             }
+            nextTick(() => {
+                if (cmEditor) cmEditor.refresh();
+            });
         }
 
         function startSplitDrag(e) {
