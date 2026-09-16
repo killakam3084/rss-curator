@@ -1,0 +1,644 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Watchlist — RSS Curator</title>
+    <!-- Favicon -->
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0%25' stop-color='%2322c55e'/%3E%3Cstop offset='100%25' stop-color='%2316a34a'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='64' height='64' rx='14' fill='url(%23g)'/%3E%3Ccircle cx='20' cy='44' r='4' fill='white'/%3E%3Cpath d='M20%2034a10%2010%200%200%201%2010%2010' fill='none' stroke='white' stroke-width='4' stroke-linecap='round'/%3E%3Cpath d='M20%2024a20%2020%200%200%201%2020%2020' fill='none' stroke='white' stroke-width='4' stroke-linecap='round'/%3E%3C/svg%3E">
+    <!-- Tailwind CSS via CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        curator: {
+                            50: '#f0ffed',
+                            100: '#dcffdb',
+                            400: '#4ade80',
+                            500: '#00ff41',
+                            600: '#00dd38',
+                            700: '#00bb2e',
+                            900: '#003d10'
+                        },
+                        hacker: {
+                            bg: '#1a1a1a',
+                            card: '#242424',
+                            border: '#333333'
+                        }
+                    },
+                    fontFamily: {
+                        mono: ['ui-monospace', 'SFMono-Regular', 'Menlo', 'Monaco', 'Courier New', 'monospace'],
+                    }
+                }
+            }
+        }
+    </script>
+    <link rel="stylesheet" href="style.css">
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <!-- CodeMirror 5 for the JSON editor mode -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/theme/material-darker.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/javascript/javascript.min.js"></script>
+    <!-- Apply theme class before Vue mounts to prevent flash -->
+    <script>
+        (function() {
+            const dm = localStorage.getItem('rss-curator-dark-mode');
+            if (dm === 'true' || (dm === null && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+                document.documentElement.classList.add('dark');
+            }
+        })();
+    </script>
+</head>
+<body class="bg-surface fg-base min-h-screen">
+    <div id="watchlist-app" class="flex flex-col min-h-screen">
+        <!-- ── Primary Navigation ── -->
+        <site-nav page="watchlist" :logs-open="logsOpen" @toggle-logs="logsOpen = !logsOpen">
+            <!-- Custom toolbar actions in site-nav slot -->
+            <div class="flex items-center gap-2">
+                <curator-btn size="sm" @click="saveWatchlist" :disabled="saving" :loading="saving" loading-text="saving…">
+                    save watchlist
+                </curator-btn>
+            </div>
+        </site-nav>
+
+        <!-- Toast Notification -->
+        <Transition
+            enter-active-class="transition duration-200 ease-out"
+            enter-from-class="transform translate-y-2 opacity-0"
+            enter-to-class="transform translate-y-0 opacity-100"
+            leave-active-class="transition duration-150 ease-in"
+            leave-from-class="transform translate-y-0 opacity-100"
+            leave-to-class="transform translate-y-2 opacity-0"
+        >
+            <div
+                v-if="toast.visible"
+                :class="[
+                    'fixed bottom-6 right-6 z-50 px-4 py-2.5 rounded shadow-lg font-mono text-xs border flex items-center gap-2',
+                    toast.type === 'error'
+                        ? 'bg-red-950/90 text-red-300 border-red-800'
+                        : 'bg-green-950/90 text-green-300 border-green-800'
+                ]"
+            >
+                <span>{{ toast.message }}</span>
+            </div>
+        </Transition>
+
+        <!-- Main Workspace Container -->
+        <main class="pt-14 flex-1 flex flex-col min-h-0">
+            <!-- Header Bar with Stats & Mode Controls -->
+            <div class="border-b border-subtle bg-card px-6 py-3 flex flex-wrap items-center justify-between gap-4">
+                <div class="flex items-center gap-4">
+                    <div>
+                        <h1 class="text-lg font-bold font-mono fg-accent flex items-center gap-2">
+                            <span>&gt; watchlist</span>
+                            <span v-if="hasUnsavedChanges" class="w-2 h-2 rounded-full bg-yellow-400" title="Unsaved changes"></span>
+                        </h1>
+                        <p class="text-xs fg-dim font-mono">
+                            {{ shows.length }} show{{ shows.length !== 1 ? 's' : '' }} &middot; {{ movies.length }} movie{{ movies.length !== 1 ? 's' : '' }}
+                            <template v-if="suggestions.length > 0">&middot; {{ suggestions.length }} recommendation{{ suggestions.length !== 1 ? 's' : '' }}</template>
+                        </p>
+                    </div>
+
+                    <!-- Mode Segmented Control: Visual vs JSON -->
+                    <div class="inline-flex rounded-lg border border-base bg-raised p-0.5 font-mono text-xs ml-4">
+                        <button
+                            @click="setEditorMode('visual')"
+                            :class="[
+                                'px-3 py-1 rounded-md transition-colors flex items-center gap-1.5',
+                                editorMode === 'visual' ? 'bg-card fg-accent font-bold shadow-sm' : 'fg-dim hover:fg-soft'
+                            ]"
+                        >
+                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 10h16M4 14h16M4 18h16" />
+                            </svg>
+                            Visual
+                        </button>
+                        <button
+                            @click="setEditorMode('json')"
+                            :class="[
+                                'px-3 py-1 rounded-md transition-colors flex items-center gap-1.5',
+                                editorMode === 'json' ? 'bg-card fg-accent font-bold shadow-sm' : 'fg-dim hover:fg-soft'
+                            ]"
+                        >
+                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
+                            </svg>
+                            Raw JSON
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Right Header Controls: Suggestions Drawer Toggle & Enrich Trigger -->
+                <div class="flex items-center gap-3">
+                    <button
+                        @click="runWatchlistEnrich"
+                        :disabled="enrichRunning"
+                        class="flex items-center gap-1.5 px-3 py-1.5 rounded border border-base fg-soft hover:fg-base hover:border-accent font-mono text-xs transition-colors disabled:opacity-50"
+                        title="Backfill missing rule metadata from past approval history"
+                    >
+                        <svg v-if="enrichRunning" class="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
+                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/>
+                        </svg>
+                        <svg v-else class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z"/>
+                        </svg>
+                        <span>{{ enrichRunning ? 'enriching…' : 'enrich from history' }}</span>
+                    </button>
+
+                    <!-- Suggestions Toggle Button -->
+                    <button
+                        @click="toggleSuggestionsDrawer"
+                        :class="[
+                            'flex items-center gap-2 px-3 py-1.5 rounded border font-mono text-xs transition-colors',
+                            suggestionsDrawerOpen
+                                ? 'bg-raised border-accent fg-accent font-bold'
+                                : 'border-base fg-soft hover:fg-base hover:border-accent'
+                        ]"
+                    >
+                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z" />
+                        </svg>
+                        <span>suggestions</span>
+                        <span
+                            v-if="suggestions.length > 0"
+                            class="px-1.5 py-0.2 rounded-full text-[10px] bg-accent/20 text-accent font-bold"
+                        >
+                            {{ suggestions.length }}
+                        </span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Loading Banner -->
+            <div v-if="loading" class="flex-1 flex items-center justify-center gap-3 fg-dim font-mono text-sm">
+                <svg class="w-5 h-5 animate-spin" fill="none" viewBox="0 0 24 24">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/>
+                </svg>
+                loading watchlist…
+            </div>
+
+            <!-- Main Interactive Content (Split or Full Width) -->
+            <div v-else class="flex-1 flex overflow-hidden relative" id="split-container" @mousemove="onSplitDrag" @mouseup="stopSplitDrag">
+
+                <!-- Primary Watchlist Pane -->
+                <div
+                    class="flex-1 flex flex-col min-w-0 overflow-y-auto"
+                    :style="suggestionsDrawerOpen ? { width: (100 - splitPercent) + '%' } : { width: '100%' }"
+                >
+                    <!-- ── VISUAL INSPECTOR MODE ── -->
+                    <div v-show="editorMode === 'visual'" class="p-6 space-y-6 flex-1 flex flex-col">
+                        <!-- Toolbar: Search, Type Filter, Add Button -->
+                        <div class="flex flex-wrap items-center justify-between gap-3 bg-card border border-subtle p-3 rounded-lg">
+                            <div class="flex items-center gap-2 flex-1 min-w-[240px]">
+                                <div class="relative flex-1">
+                                    <input
+                                        v-model="visualFilterQuery"
+                                        type="text"
+                                        placeholder="filter shows and movies…"
+                                        class="w-full bg-raised border border-base rounded pl-8 pr-3 py-1.5 font-mono text-xs fg-base focus:outline-none focus:border-accent transition-colors"
+                                    />
+                                    <svg class="w-3.5 h-3.5 absolute left-2.5 top-2.5 fg-dim pointer-events-none" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                                    </svg>
+                                </div>
+                                <button
+                                    v-if="visualFilterQuery"
+                                    @click="visualFilterQuery = ''"
+                                    class="px-2 py-1.5 rounded border border-base fg-muted hover:fg-base font-mono text-xs"
+                                    title="clear filter"
+                                >✕</button>
+                            </div>
+
+                            <!-- Type Filter Pills -->
+                            <div class="flex items-center gap-1 font-mono text-xs">
+                                <button
+                                    v-for="f in ['all', 'shows', 'movies']"
+                                    :key="f"
+                                    @click="visualContentType = f"
+                                    :class="[
+                                        'px-2.5 py-1 rounded border uppercase text-[11px] transition-colors',
+                                        visualContentType === f
+                                            ? 'bg-raised border-accent fg-accent font-bold'
+                                            : 'border-transparent fg-dim hover:fg-soft'
+                                    ]"
+                                >
+                                    {{ f }}
+                                    <span class="text-[10px] opacity-75">
+                                        ({{ f === 'all' ? shows.length + movies.length : (f === 'shows' ? shows.length : movies.length) }})
+                                    </span>
+                                </button>
+                            </div>
+
+                            <!-- Add Rule Button -->
+                            <curator-btn size="sm" @click="openAddModal">
+                                + add entry
+                            </curator-btn>
+                        </div>
+
+                        <!-- Rule List / Grid -->
+                        <div v-if="filteredRules.length === 0" class="flex-1 flex flex-col items-center justify-center p-12 text-center border border-dashed border-subtle rounded-lg">
+                            <p class="text-sm fg-dim font-mono mb-2">No matching entries found</p>
+                            <p class="text-xs fg-muted font-mono mb-4">Try clearing your filter or add a new show/movie rule.</p>
+                            <curator-btn size="sm" @click="openAddModal">+ add entry</curator-btn>
+                        </div>
+
+                        <div v-else class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                            <div
+                                v-for="item in filteredRules"
+                                :key="item.type + ':' + item.rule.name"
+                                class="bg-card border border-subtle hover:border-base rounded-lg p-4 flex flex-col justify-between transition-colors relative group"
+                            >
+                                <div>
+                                    <!-- Header: Name & Type Badge -->
+                                    <div class="flex items-start justify-between gap-2 mb-2">
+                                        <h3 class="font-mono text-sm font-bold fg-base truncate" :title="item.rule.name">
+                                            {{ item.rule.name }}
+                                        </h3>
+                                        <span
+                                            class="px-1.5 py-0.5 rounded text-[10px] font-mono shrink-0 uppercase tracking-wider"
+                                            :class="item.type === 'movie' ? 'badge-indigo' : 'bg-raised fg-muted'"
+                                        >
+                                            {{ item.type }}
+                                        </span>
+                                    </div>
+
+                                    <!-- Attributes / Badges -->
+                                    <div class="flex flex-wrap gap-1.5 mb-3 font-mono text-[11px]">
+                                        <!-- Quality -->
+                                        <span v-if="item.rule.min_quality" class="px-1.5 py-0.5 rounded bg-raised fg-accent border border-subtle">
+                                            {{ item.rule.min_quality }}
+                                        </span>
+                                        <span v-else class="px-1.5 py-0.5 rounded bg-raised/50 fg-dim text-[10px]">
+                                            any quality
+                                        </span>
+
+                                        <!-- Codec -->
+                                        <span v-if="item.rule.preferred_codec" class="px-1.5 py-0.5 rounded badge-indigo">
+                                            {{ item.rule.preferred_codec }}
+                                        </span>
+
+                                        <!-- Excluded Groups -->
+                                        <span
+                                            v-if="item.rule.exclude_groups && item.rule.exclude_groups.length > 0"
+                                            class="px-1.5 py-0.5 rounded bg-red-950/40 text-red-400 border border-red-900/40"
+                                            :title="'Excluded groups: ' + item.rule.exclude_groups.join(', ')"
+                                        >
+                                            -{{ item.rule.exclude_groups.length }} grp
+                                        </span>
+
+                                        <!-- Preferred Groups -->
+                                        <span
+                                            v-if="item.rule.preferred_groups && item.rule.preferred_groups.length > 0"
+                                            class="px-1.5 py-0.5 rounded bg-green-950/40 text-green-400 border border-green-900/40"
+                                            :title="'Preferred groups: ' + item.rule.preferred_groups.join(', ')"
+                                        >
+                                            +{{ item.rule.preferred_groups.length }} grp
+                                        </span>
+                                    </div>
+                                </div>
+
+                                <!-- Actions: Edit / Delete -->
+                                <div class="flex items-center justify-between border-t border-subtle pt-2.5 mt-2">
+                                    <span class="text-[10px] font-mono fg-muted">
+                                        {{ item.type === 'show' ? 'Show rule' : 'Movie rule' }}
+                                    </span>
+                                    <div class="flex items-center gap-1">
+                                        <button
+                                            @click="openEditModal(item)"
+                                            class="p-1 rounded text-xs fg-dim hover:fg-accent hover:bg-raised transition-colors"
+                                            title="Edit rule"
+                                        >
+                                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                                            </svg>
+                                        </button>
+                                        <button
+                                            @click="deleteRule(item)"
+                                            class="p-1 rounded text-xs fg-dim hover:text-red-400 hover:bg-raised transition-colors"
+                                            title="Delete rule"
+                                        >
+                                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                            </svg>
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- ── RAW JSON CODEMIRROR MODE ── -->
+                    <div v-show="editorMode === 'json'" class="p-6 space-y-4 flex-1 flex flex-col">
+                        <!-- CodeMirror Toolbar: Jump Filter, Upload, Format, Clear -->
+                        <div class="flex flex-wrap items-center justify-between gap-3 bg-card border border-subtle p-3 rounded-lg font-mono text-xs">
+                            <div class="flex items-center gap-2 flex-1 min-w-[240px]">
+                                <input
+                                    v-model="jsonFilterQuery"
+                                    @input="onJsonFilter"
+                                    @keydown.enter="focusJsonEditor"
+                                    type="text"
+                                    placeholder="jump to show or movie in JSON…"
+                                    class="w-full bg-raised border border-base rounded px-3 py-1.5 fg-base focus:outline-none focus:border-accent transition-colors"
+                                />
+                                <button
+                                    v-if="jsonFilterQuery"
+                                    @click="jsonFilterQuery = ''; onJsonFilter()"
+                                    class="px-2 py-1.5 rounded border border-base fg-muted hover:fg-base"
+                                    title="clear jump"
+                                >✕</button>
+                            </div>
+
+                            <div class="flex items-center gap-2">
+                                <label class="cursor-pointer flex items-center gap-1.5 px-3 py-1.5 rounded border border-base fg-soft hover:fg-base hover:border-accent transition-colors">
+                                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/>
+                                    </svg>
+                                    upload .json
+                                    <input type="file" accept=".json,application/json" class="hidden" @change="onJsonFileUpload">
+                                </label>
+
+                                <button
+                                    @click="formatJsonEditor"
+                                    class="px-3 py-1.5 rounded border border-base fg-soft hover:fg-base hover:border-accent transition-colors"
+                                >
+                                    format &amp; sort
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- CodeMirror Wrapper -->
+                        <div class="flex-1 min-h-[400px] border border-subtle rounded-lg overflow-hidden relative">
+                            <div id="watchlist-cm-editor" class="h-full w-full"></div>
+                        </div>
+
+                        <!-- Validation Error Display -->
+                        <div v-if="jsonError" class="p-3 bg-red-950/40 border border-red-900/50 rounded-lg text-xs font-mono text-red-300 flex items-center gap-2">
+                            <svg class="w-4 h-4 shrink-0 text-red-400" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/>
+                            </svg>
+                            <span>{{ jsonError }}</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Resizable Split Divider (Visible when suggestions drawer open) -->
+                <div
+                    v-if="suggestionsDrawerOpen"
+                    @mousedown="startSplitDrag"
+                    class="w-1.5 bg-subtle hover:bg-accent/40 active:bg-accent cursor-col-resize shrink-0 transition-colors relative z-10 flex items-center justify-center"
+                    title="Drag to resize panels"
+                >
+                    <div class="w-0.5 h-6 bg-dim/60 rounded"></div>
+                </div>
+
+                <!-- Suggestions Drawer Pane -->
+                <aside
+                    v-if="suggestionsDrawerOpen"
+                    class="flex flex-col border-l border-subtle bg-card overflow-hidden shrink-0"
+                    :style="{ width: splitPercent + '%' }"
+                >
+                    <!-- Suggestions Header -->
+                    <div class="p-4 border-b border-subtle flex items-center justify-between gap-2">
+                        <div class="min-w-0">
+                            <h2 class="text-sm font-bold font-mono fg-accent flex items-center gap-1.5 truncate">
+                                <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z" />
+                                </svg>
+                                <span>AI Suggestions</span>
+                            </h2>
+                            <p class="text-[11px] font-mono fg-dim truncate">
+                                <span v-if="suggestGeneratedAt">cached {{ new Date(suggestGeneratedAt).toLocaleDateString() }}</span>
+                                <span v-if="suggestActiveLimit > 0">&middot; {{ suggestActiveCount }}/{{ suggestActiveLimit }} active</span>
+                            </p>
+                        </div>
+
+                        <div class="flex items-center gap-1.5 shrink-0">
+                            <button
+                                v-if="suggestAvailable"
+                                @click="refreshSuggestions"
+                                :disabled="suggestsLoading || suggestRefreshing"
+                                class="flex items-center gap-1.5 px-2.5 py-1 rounded border border-base fg-soft hover:fg-base hover:border-accent font-mono text-xs transition-colors disabled:opacity-50"
+                                title="Regenerate suggestions"
+                            >
+                                <svg v-if="suggestsLoading || suggestRefreshing" class="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
+                                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+                                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/>
+                                </svg>
+                                <span>{{ suggestsLoading || suggestRefreshing ? 'thinking…' : 'refresh' }}</span>
+                            </button>
+                            <button
+                                @click="suggestionsDrawerOpen = false"
+                                class="p-1 rounded fg-muted hover:fg-base hover:bg-raised transition-colors"
+                                title="Close suggestions drawer"
+                            >✕</button>
+                        </div>
+                    </div>
+
+                    <!-- Suggestions Content List -->
+                    <div class="flex-1 overflow-y-auto p-4 space-y-3">
+                        <div v-if="suggestError" class="p-2.5 rounded bg-yellow-950/40 border border-yellow-900/50 text-xs font-mono text-yellow-400">
+                            {{ suggestError }}
+                        </div>
+
+                        <div v-if="!suggestAvailable" class="text-xs font-mono fg-muted italic py-6 text-center">
+                            AI provider unavailable — set CURATOR_AI_PROVIDER to enable suggestions.
+                        </div>
+
+                        <div v-else-if="suggestions.length === 0 && !suggestsLoading && !suggestRefreshing" class="text-xs font-mono fg-muted italic py-6 text-center">
+                            No active suggestions. Click refresh to generate recommendations based on your watchlist!
+                        </div>
+
+                        <!-- Suggestion Cards -->
+                        <div
+                            v-for="s in suggestions"
+                            :key="s.show_name"
+                            class="bg-raised/60 border border-subtle hover:border-base rounded-lg p-3.5 space-y-2.5 transition-colors"
+                        >
+                            <!-- Title & Links -->
+                            <div class="flex items-start justify-between gap-2">
+                                <div class="min-w-0 flex-1">
+                                    <div class="flex items-center gap-1.5 flex-wrap">
+                                        <h4 class="font-mono text-sm font-bold fg-base truncate">{{ s.show_name }}</h4>
+                                        <a v-if="s.meta && s.meta.provider_url" :href="s.meta.provider_url" target="_blank" rel="noopener noreferrer"
+                                            class="text-indigo-400 hover:text-indigo-300" title="View provider page">
+                                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/>
+                                            </svg>
+                                        </a>
+                                    </div>
+                                    <p class="text-xs font-mono fg-dim mt-0.5">{{ s.reason }}</p>
+                                </div>
+                                <span class="px-1.5 py-0.5 rounded text-[10px] font-mono shrink-0 uppercase"
+                                    :class="s.content_type === 'movie' ? 'badge-indigo' : 'bg-card fg-muted'">
+                                    {{ s.content_type === 'movie' ? 'movie' : 'show' }}
+                                </span>
+                            </div>
+
+                            <!-- Metadata Badges -->
+                            <div v-if="s.meta" class="flex flex-wrap gap-1 items-center text-[11px] font-mono">
+                                <span v-for="g in (s.meta.genres || []).slice(0, 3)" :key="g" class="px-1.5 py-0.5 rounded badge-indigo text-[10px]">
+                                    {{ g }}
+                                </span>
+                                <span v-if="s.meta.network" class="px-1.5 py-0.5 rounded bg-card fg-soft text-[10px]">
+                                    {{ s.meta.network }}
+                                </span>
+                                <span v-if="s.meta.premiere_year" class="text-[10px] fg-dim">
+                                    {{ s.meta.premiere_year }}
+                                </span>
+                                <span v-if="s.meta.vote_average > 0" class="px-1.5 py-0.5 rounded bg-card text-[10px] fg-soft" title="TMDB Community Score">
+                                    ★ {{ s.meta.vote_average.toFixed(1) }}
+                                </span>
+                                <a v-if="s.meta.imdb_id"
+                                    :href="'https://www.imdb.com/title/' + s.meta.imdb_id + '/'"
+                                    target="_blank" rel="noopener noreferrer"
+                                    class="px-1.5 py-0.5 rounded bg-yellow-500/10 text-yellow-400 hover:text-yellow-300 text-[10px] border border-yellow-500/20"
+                                >IMDb ↗</a>
+                            </div>
+
+                            <!-- Overview Snippet -->
+                            <div v-if="s.meta && s.meta.overview" class="text-xs fg-soft italic leading-snug line-clamp-2">
+                                {{ s.meta.overview }}
+                            </div>
+
+                            <!-- Action Row -->
+                            <div class="flex items-center justify-end gap-2 border-t border-subtle pt-2">
+                                <button
+                                    @click="dismissSuggestion(s)"
+                                    class="px-2 py-1 rounded text-xs font-mono fg-muted hover:text-red-400 hover:bg-card transition-colors"
+                                    title="Dismiss recommendation"
+                                >
+                                    dismiss
+                                </button>
+                                <curator-btn size="sm" @click="addSuggestionToWatchlist(s)">
+                                    + add to watchlist
+                                </curator-btn>
+                            </div>
+                        </div>
+                    </div>
+                </aside>
+            </div>
+
+            <!-- Add / Edit Modal -->
+            <div v-if="ruleModal.open" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+                <div class="bg-card border border-base rounded-xl max-w-md w-full p-6 shadow-2xl space-y-4 font-mono">
+                    <div class="flex items-center justify-between border-b border-subtle pb-3">
+                        <h3 class="text-base font-bold fg-accent">
+                            {{ ruleModal.isEdit ? 'Edit Watchlist Entry' : 'Add Watchlist Entry' }}
+                        </h3>
+                        <button @click="ruleModal.open = false" class="text-xs fg-muted hover:fg-base">✕</button>
+                    </div>
+
+                    <div class="space-y-3 text-xs">
+                        <!-- Content Type Toggle -->
+                        <div>
+                            <label class="block fg-soft uppercase tracking-wider mb-1">Type</label>
+                            <div class="grid grid-cols-2 gap-2">
+                                <button
+                                    type="button"
+                                    @click="ruleModal.form.type = 'show'"
+                                    :class="[
+                                        'py-1.5 rounded border text-center font-bold transition-colors',
+                                        ruleModal.form.type === 'show' ? 'bg-raised border-accent fg-accent' : 'border-base fg-dim'
+                                    ]"
+                                >Show</button>
+                                <button
+                                    type="button"
+                                    @click="ruleModal.form.type = 'movie'"
+                                    :class="[
+                                        'py-1.5 rounded border text-center font-bold transition-colors',
+                                        ruleModal.form.type === 'movie' ? 'bg-raised border-accent fg-accent' : 'border-base fg-dim'
+                                    ]"
+                                >Movie</button>
+                            </div>
+                        </div>
+
+                        <!-- Name -->
+                        <div>
+                            <label class="block fg-soft uppercase tracking-wider mb-1">Title / Name *</label>
+                            <input
+                                v-model="ruleModal.form.name"
+                                type="text"
+                                placeholder="e.g. Severance, Dune: Part Two"
+                                class="w-full bg-raised border border-base rounded px-3 py-2 fg-base focus:outline-none focus:border-accent"
+                                autofocus
+                            />
+                        </div>
+
+                        <!-- Min Quality -->
+                        <div>
+                            <label class="block fg-soft uppercase tracking-wider mb-1">Min Quality</label>
+                            <input
+                                v-model="ruleModal.form.min_quality"
+                                type="text"
+                                placeholder="e.g. 2160p, 1080p, 720p (optional)"
+                                class="w-full bg-raised border border-base rounded px-3 py-2 fg-base focus:outline-none focus:border-accent"
+                            />
+                        </div>
+
+                        <!-- Preferred Codec -->
+                        <div>
+                            <label class="block fg-soft uppercase tracking-wider mb-1">Preferred Codec</label>
+                            <input
+                                v-model="ruleModal.form.preferred_codec"
+                                type="text"
+                                placeholder="e.g. x265, HEVC (optional)"
+                                class="w-full bg-raised border border-base rounded px-3 py-2 fg-base focus:outline-none focus:border-accent"
+                            />
+                        </div>
+
+                        <!-- Exclude Groups -->
+                        <div>
+                            <label class="block fg-soft uppercase tracking-wider mb-1">Exclude Groups</label>
+                            <input
+                                v-model="ruleModal.form.exclude_groups_str"
+                                type="text"
+                                placeholder="comma-separated, e.g. YIFY, RARBG"
+                                class="w-full bg-raised border border-base rounded px-3 py-2 fg-base focus:outline-none focus:border-accent"
+                            />
+                        </div>
+
+                        <!-- Preferred Groups -->
+                        <div>
+                            <label class="block fg-soft uppercase tracking-wider mb-1">Preferred Groups</label>
+                            <input
+                                v-model="ruleModal.form.preferred_groups_str"
+                                type="text"
+                                placeholder="comma-separated, e.g. NTb, FLUX"
+                                class="w-full bg-raised border border-base rounded px-3 py-2 fg-base focus:outline-none focus:border-accent"
+                            />
+                        </div>
+                    </div>
+
+                    <div class="flex items-center justify-end gap-2 border-t border-subtle pt-3">
+                        <button
+                            @click="ruleModal.open = false"
+                            class="px-3 py-1.5 rounded border border-base fg-muted hover:fg-base text-xs"
+                        >
+                            Cancel
+                        </button>
+                        <curator-btn size="sm" @click="saveModalRule">
+                            {{ ruleModal.isEdit ? 'Update Entry' : 'Add Entry' }}
+                        </curator-btn>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Log Viewer Side Panel -->
+            <log-viewer variant="side" :open="logsOpen" @close="logsOpen = false"></log-viewer>
+        </main>
+    </div>
+
+    <!-- Scripts -->
+    <script src="components/curator-btn.js"></script>
+    <script src="components/site-nav.js"></script>
+    <script src="components/auth-guard.js"></script>
+    <script src="components/log-viewer.js"></script>
+    <script src="watchlist.js"></script>
+</body>
+</html>

@@ -8,6 +8,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Dedicated Watchlist & AI Suggestions Route (`/watchlist`)** — extracted Watchlist management and AI Recommendations from the settings page into a dedicated, unified route and full-featured interface (`web/watchlist.html` and `web/watchlist.js`).
+- **Hybrid Watchlist UX** — introduced interactive Visual inspection cards alongside a full CodeMirror raw JSON editor with bi-directional state synchronization, type filtering (All / Shows / Movies), search, and rule add/edit modals.
+- **Integrated AI Suggestions Panel & Drawer** — added a resizable split-panel / drawer for AI show and movie recommendations with 1-click addition directly into the watchlist, live recommendation refresh, and metadata badges (TMDB score, IMDb link, genres, network).
+- **Navigation Update** — added `WATCHLIST` link to the primary `site-nav` bar across all pages.
+
+### Changed
+- **Settings Decluttering** — removed Watchlist JSON editor, AI Suggestions, and CodeMirror dependencies from `web/settings.html` and `web/settings.js`, streamlining the settings view strictly to core application configuration (scheduler, auto-queue, alerts, match defaults, auth).
+
 ## [0.54.0] - 2026-05-19
 
 ### Added

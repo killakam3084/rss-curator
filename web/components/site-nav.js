@@ -2,7 +2,7 @@
     function registerSiteNavComponent(app) {
         app.component('site-nav', {
             props: {
-                // 'index' | 'jobs' | 'settings' — drives active-link highlighting
+                // 'index' | 'jobs' | 'watchlist' | 'settings' — drives active-link highlighting
                 page:         { type: String,  default: '' },
                 // Shows the logs panel toggle button as active when true.
                 logsOpen:     { type: Boolean, default: false },
@@ -71,6 +71,13 @@
                                     page === 'jobs' ? 'fg-accent font-bold' : 'fg-dim hover:fg-soft'
                                 ]"
                             >jobs</a>
+                            <a
+                                href="/watchlist"
+                                :class="[
+                                    'px-3 py-1 rounded font-mono text-xs uppercase tracking-widest transition-colors duration-150',
+                                    page === 'watchlist' ? 'fg-accent font-bold' : 'fg-dim hover:fg-soft'
+                                ]"
+                            >watchlist</a>
                             <a
                                 href="/settings"
                                 :class="[

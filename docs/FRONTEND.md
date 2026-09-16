@@ -13,7 +13,7 @@ and conventions for future contributors.
 | Styling | Tailwind CSS v3 (CDN) | `darkMode: 'class'`, custom `curator` color palette |
 | Design tokens | CSS custom properties (`web/style.css`) | Bare RGB triplets for Tailwind opacity modifier compatibility |
 | Icons | Heroicons inline SVG | Inlined directly in component templates |
-| Code editor | CodeMirror 5 (CDN) | Used only for the `shows.json` editor in Settings |
+| Code editor | CodeMirror 5 (CDN) | Used for the `watchlist.json` editor in Watchlist |
 
 No `package.json`, no compile step. To develop locally: open any HTML file in a browser
 or serve the `web/` directory with any static file server.
@@ -26,9 +26,11 @@ or serve the `web/` directory with any static file server.
 web/
 ├── index.html          # Main torrent dashboard
 ├── jobs.html           # Async jobs monitor
+├── watchlist.html      # Hybrid Watchlist & AI Suggestions manager
 ├── settings.html       # App configuration
 ├── login.html          # Login page
 ├── app.js              # Root Vue app for index.html
+├── watchlist.js        # Root Vue app for watchlist.html
 ├── settings.js         # Root Vue app for settings.html
 ├── style.css           # Design tokens + semantic utility classes
 └── components/
@@ -89,7 +91,7 @@ app.mount('#app');
 ### `site-nav`
 
 **File:** `web/components/site-nav.js`  
-**Pages:** index.html, jobs.html, settings.html, login.html
+**Pages:** index.html, jobs.html, watchlist.html, settings.html, login.html
 
 Fixed top navigation bar. Renders the wordmark, page links with active-state highlighting,
 a default slot for page-specific toolbar actions, an optional SSE live indicator, the theme
@@ -97,7 +99,7 @@ toggle button, and the logout form.
 
 | Prop | Type | Default | Description |
 |------|------|---------|-------------|
-| `page` | String | `''` | Active link: `'index'` \| `'jobs'` \| `'settings'` |
+| `page` | String | `''` | Active link: `'index'` \| `'jobs'` \| `'watchlist'` \| `'settings'` |
 | `right-offset` | String | `'0px'` | CSS right offset to shift nav flush with a collapsible sidebar |
 | `sse-connected` | Boolean/null | `null` | `null` hides the live indicator; `true`/`false` shows connected/disconnected |
 

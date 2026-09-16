@@ -411,6 +411,7 @@ func (s *Server) Start() error {
 	mux.Handle("/style.css", http.FileServer(http.Dir("./web")))
 	mux.Handle("/app.js", http.FileServer(http.Dir("./web")))
 	mux.Handle("/settings.js", http.FileServer(http.Dir("./web")))
+	mux.Handle("/watchlist.js", http.FileServer(http.Dir("./web")))
 	mux.Handle("/components/", http.StripPrefix("/components/", http.FileServer(http.Dir("./web/components"))))
 
 	// Auth routes (registered unconditionally; handleLogin/handleLogout are
@@ -429,6 +430,19 @@ func (s *Server) Start() error {
 	// Jobs dedicated page
 	mux.HandleFunc("/jobs", func(w http.ResponseWriter, r *http.Request) {
 		http.ServeFile(w, r, "./web/jobs.html")
+	})
+
+	// Watchlist dedicated page
+	mux.HandleFunc("/watchlist", func(w http.ResponseWriter, r *http.Request) {
+		http.ServeFile(w, r, "./web/watchlist.html")
+	})
+	// Redirect /watchlist/ (trailing slash) → /watchlist, preserving any query string.
+	mux.HandleFunc("/watchlist/", func(w http.ResponseWriter, r *http.Request) {
+		target := "/watchlist"
+		if r.URL.RawQuery != "" {
+			target += "?" + r.URL.RawQuery
+		}
+		http.Redirect(w, r, target, http.StatusMovedPermanently)
 	})
 
 	// Settings dedicated page
