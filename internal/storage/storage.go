@@ -4,12 +4,19 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"log"
 	"strings"
 	"time"
 
 	"github.com/killakam3084/rss-curator/pkg/models"
 	_ "github.com/mattn/go-sqlite3"
 )
+
+// walCheckpointInterval controls how often the background checkpointer runs
+// PRAGMA wal_checkpoint(PASSIVE) to keep the -wal file from growing
+// unbounded between writes. A stale/huge WAL slows crash recovery on the
+// next startup enough to blow past _busy_timeout, so this keeps it in check.
+const walCheckpointInterval = 5 * time.Minute
 
 // WindowStats holds counts for a rolling time window.
 type WindowStats struct {
@@ -117,7 +124,8 @@ type Store interface {
 
 // Storage handles persistent storage of staged torrents
 type Storage struct {
-	db *sql.DB
+	db               *sql.DB
+	stopCheckpointer chan struct{}
 }
 
 // New creates a new storage instance
@@ -126,10 +134,11 @@ func New(dbPath string) (*Storage, error) {
 	//   _journal_mode=WAL  — allows readers and one writer to proceed concurrently;
 	//                        also makes recovery from unclean shutdowns automatic
 	//                        (WAL is rolled back on the next open, no manual cleanup).
-	//   _busy_timeout=5000 — retry for up to 5 s before returning SQLITE_BUSY,
-	//                        covering brief lock contention at startup.
+	//   _busy_timeout=10000 — retry for up to 10 s before returning SQLITE_BUSY,
+	//                        covering brief lock contention at startup, including
+	//                        the WAL recovery pass on a large-but-checkpointed file.
 	//   _foreign_keys=on   — enforce referential integrity.
-	dsn := dbPath + "?_journal_mode=WAL&_busy_timeout=5000&_foreign_keys=on"
+	dsn := dbPath + "?_journal_mode=WAL&_busy_timeout=10000&_foreign_keys=on"
 	db, err := sql.Open("sqlite3", dsn)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open database: %w", err)
@@ -139,12 +148,31 @@ func New(dbPath string) (*Storage, error) {
 		return nil, fmt.Errorf("failed to connect to database: %w", err)
 	}
 
-	s := &Storage{db: db}
+	s := &Storage{db: db, stopCheckpointer: make(chan struct{})}
 	if err := s.migrate(); err != nil {
 		return nil, fmt.Errorf("failed to migrate database: %w", err)
 	}
 
+	go s.runCheckpointLoop()
+
 	return s, nil
+}
+
+// runCheckpointLoop periodically merges the WAL back into the main db file so
+// it can't grow unbounded across long uptimes or frequent restarts.
+func (s *Storage) runCheckpointLoop() {
+	ticker := time.NewTicker(walCheckpointInterval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ticker.C:
+			if _, err := s.db.Exec("PRAGMA wal_checkpoint(PASSIVE);"); err != nil {
+				log.Printf("[Storage] wal checkpoint failed: %v", err)
+			}
+		case <-s.stopCheckpointer:
+			return
+		}
+	}
 }
 
 // migrate creates the necessary tables and applies schema upgrades
@@ -473,8 +501,13 @@ func (s *Storage) CleanupStaleLinks(patterns []string) (int64, error) {
 	return result.RowsAffected()
 }
 
-// Close closes the database connection
+// Close stops the background checkpointer, does a final full checkpoint, and
+// closes the database connection.
 func (s *Storage) Close() error {
+	close(s.stopCheckpointer)
+	if _, err := s.db.Exec("PRAGMA wal_checkpoint(TRUNCATE);"); err != nil {
+		log.Printf("[Storage] final wal checkpoint failed: %v", err)
+	}
 	return s.db.Close()
 }
 

@@ -17,6 +17,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - **Settings Decluttering** — removed Watchlist JSON editor, AI Suggestions, and CodeMirror dependencies from `web/settings.html` and `web/settings.js`, streamlining the settings view strictly to core application configuration (scheduler, auto-queue, alerts, match defaults, auth).
 
+### Fixed
+- **Unbounded WAL growth** — `internal/storage` now runs a periodic `PRAGMA wal_checkpoint(PASSIVE)` in the background and a final `TRUNCATE` checkpoint on shutdown, preventing the `-wal` file from growing large enough that crash recovery on the next boot exceeds `_busy_timeout` and fails with "database is locked". Also raised `_busy_timeout` from 5s to 10s for additional headroom.
+
 ## [0.54.0] - 2026-05-19
 
 ### Added
