@@ -10,6 +10,12 @@
 #   QBITTORRENT_PASS          — qBittorrent password
 #   RSS_FEED_URL              — iptorrents RSS URL (contains tracker passkey)
 #   RSS_MOVIE_FEED_URL        — iptorrents movie RSS URL (contains tracker passkey)
+#
+# RSS_CURATOR_IMAGE_TAG must also be set in the same env (not a secret) —
+# a specific released version tag (e.g. v0.55.0), never latest. Deploying a
+# new version = bumping this var and re-running `docker compose up -d`; see
+# the rc-release / uat-validate / promote flow in contribution-workflow
+# SKILL.md for how a tag becomes trustworthy enough to deploy.
 
 services:
   ollama:
@@ -47,8 +53,7 @@ services:
 
   rss-curator:
     container_name: rss-curator
-    image: ghcr.io/killakam3084/rss-curator:latest
-    pull_policy: always
+    image: ghcr.io/killakam3084/rss-curator:${RSS_CURATOR_IMAGE_TAG:?RSS_CURATOR_IMAGE_TAG must be set, e.g. v0.55.0 — see rc-release/uat-validate/promote flow in contribution-workflow SKILL.md}
     network_mode: host
     restart: unless-stopped
     depends_on:
