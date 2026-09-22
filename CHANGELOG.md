@@ -9,15 +9,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Release-candidate → UAT → promote pipeline** — `make rc-release` builds and
+  pushes a multi-arch (`linux/amd64,linux/arm64`) image tagged `rc-<shortsha>`;
+  `make uat-up REF=rc-<sha>` + `make uat-validate` run the existing Hurl
+  smoke+auth suite against that exact published artifact locally, before any
+  release tag exists. On tag push, CI's `promote` job retags the same
+  validated manifest as `vX.Y.Z`/`X.Y`/`latest` with no rebuild, guaranteeing
+  the artifact that reaches TrueNAS is byte-identical to what was UAT-tested.
+  New files: `docker-compose.uat.yml`, `uat.env.sample`.
 - **Dedicated Watchlist & AI Suggestions Route (`/watchlist`)** — extracted Watchlist management and AI Recommendations from the settings page into a dedicated, unified route and full-featured interface (`web/watchlist.html` and `web/watchlist.js`).
 - **Hybrid Watchlist UX** — introduced interactive Visual inspection cards alongside a full CodeMirror raw JSON editor with bi-directional state synchronization, type filtering (All / Shows / Movies), search, and rule add/edit modals.
 - **Integrated AI Suggestions Panel & Drawer** — added a resizable split-panel / drawer for AI show and movie recommendations with 1-click addition directly into the watchlist, live recommendation refresh, and metadata badges (TMDB score, IMDb link, genres, network).
 - **Navigation Update** — added `WATCHLIST` link to the primary `site-nav` bar across all pages.
 
 ### Changed
+- **TrueNAS deploys pinned to explicit versions** — `docker-compose.truenas.yml` now requires `RSS_CURATOR_IMAGE_TAG` (fails loudly if unset) instead of tracking `:latest` with `pull_policy: always`. Deploying a new version is now an explicit, auditable env var bump.
+- **CI no longer builds images from source on tag push** — `build-and-push.yml`'s tag-triggered job was replaced with a retag-only `promote` job (see Added above); `test`/`lint`/`e2e` gates are unchanged and now also run on `release/**` branch pushes/PRs.
 - **Settings Decluttering** — removed Watchlist JSON editor, AI Suggestions, and CodeMirror dependencies from `web/settings.html` and `web/settings.js`, streamlining the settings view strictly to core application configuration (scheduler, auto-queue, alerts, match defaults, auth).
 
 ### Fixed
+- **Version constant drift** — `cmd/curator/main.go`'s `version` constant had fallen out of sync with the latest released tag (`0.33.1` vs `0.54.0`); corrected, and the new `promote` CI job fails the release if this happens again.
 - **Unbounded WAL growth** — `internal/storage` now runs a periodic `PRAGMA wal_checkpoint(PASSIVE)` in the background and a final `TRUNCATE` checkpoint on shutdown, preventing the `-wal` file from growing large enough that crash recovery on the next boot exceeds `_busy_timeout` and fails with "database is locked". Also raised `_busy_timeout` from 5s to 10s for additional headroom.
 
 ## [0.54.0] - 2026-05-19

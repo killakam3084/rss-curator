@@ -1,5 +1,11 @@
 # Deploying RSS Curator on TrueNAS
 
+> **Superseded** — this guide describes an older architecture (no Infisical,
+> no Ollama, different Dockerfile/compose shape) and is kept for historical
+> reference only. For the current deployment, see [docker-compose.truenas.yml](../docker-compose.truenas.yml)
+> and the rc-release/uat-validate/promote flow in
+> [contribution-workflow SKILL.md](../../.github/skills/contribution-workflow/SKILL.md).
+
 This guide covers deploying RSS Curator as a containerized application on TrueNAS SCALE, integrated with your existing qBittorrent setup.
 
 ## Architecture
