@@ -1,16 +1,25 @@
-name: Build and Push to GitHub Container Registry
+name: CI and Release Promotion
 
+# Filename kept as build-and-push.yml for badge-URL stability, but this
+# workflow no longer builds/pushes images from source. RC images are built
+# and pushed manually (`make rc-release`) and validated locally (`make
+# uat-validate`) from a `release/X.Y` branch before a version tag exists; on
+# tag push, the `promote` job below only retags the already-validated
+# rc-<shortsha> manifest. `release/**` runs test/lint like main/develop so
+# the branch is verified before it's tagged and squash-merged back to main.
 on:
   push:
     branches:
       - main
       - develop
+      - 'release/**'
     tags:
       - 'v*'
   pull_request:
     branches:
       - main
       - develop
+      - 'release/**'
 
 env:
   REGISTRY: ghcr.io
@@ -123,70 +132,73 @@ jobs:
           path: tests/e2e/results/
           retention-days: 30
 
-  build-and-push:
+  promote:
+    # Only runs on version tag pushes. Does NOT rebuild from source — it
+    # retags the exact rc-<shortsha> manifest that was already built, pushed,
+    # and locally UAT-validated (see `make rc-release` / `make uat-validate`)
+    # before this tag was created, guaranteeing byte-identical provenance
+    # between what was validated and what gets deployed.
     needs: [test, lint, e2e]
-    # Run if test + lint succeeded regardless of whether e2e was skipped (patch
-    # releases) or succeeded (minor/major releases). `success()` (the default)
-    # would also skip this job when e2e is skipped, so we use the explicit
-    # !failure() && !cancelled() idiom instead.
-    if: ${{ !failure() && !cancelled() }}
+    if: startsWith(github.ref, 'refs/tags/v') && !failure() && !cancelled()
     runs-on: ubuntu-latest
-    
+
     permissions:
       contents: read
       packages: write
-    
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
         with:
           fetch-depth: 0
-      
+
+      - name: Verify version constant matches tag
+        run: |
+          tag_version="${GITHUB_REF_NAME#v}"
+          const_version=$(grep -oE 'version = "[^"]+"' cmd/curator/main.go | grep -oE '[0-9]+\.[0-9]+\.[0-9]+')
+          echo "tag=${tag_version} const=${const_version}"
+          if [ "${tag_version}" != "${const_version}" ]; then
+            echo "::error::Tag v${tag_version} does not match cmd/curator/main.go version constant (${const_version})."
+            exit 1
+          fi
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
-      
+
       - name: Log in to Container Registry
-        if: github.event_name != 'pull_request'
         uses: docker/login-action@v4
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      
-      - name: Extract metadata
+
+      - name: Verify RC image exists for this commit
+        id: rc
+        run: |
+          rc_sha=$(git rev-parse --short HEAD)
+          rc_ref="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:rc-${rc_sha}"
+          echo "rc_ref=${rc_ref}" >> "$GITHUB_OUTPUT"
+          if ! docker buildx imagetools inspect "${rc_ref}" > /dev/null 2>&1; then
+            echo "::error::No validated RC image found at ${rc_ref}. Run 'make rc-release' and validate with 'make uat-up REF=rc-${rc_sha}' + 'make uat-validate' before tagging a release."
+            exit 1
+          fi
+
+      - name: Extract semver tags
         id: meta
         uses: docker/metadata-action@v6
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
-            type=ref,event=branch
-            type=ref,event=tag
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
-            # drop SHA tag; branch prefix may be empty for tag events which produced invalid tag
-            # type=sha,prefix={{branch}}-
-            # Publish `latest` on default-branch pushes AND on any version tag push
-            # (includes patch releases which skip e2e for faster iteration).
-            type=raw,value=latest,enable=${{ github.ref == format('refs/heads/{0}', github.event.repository.default_branch) || startsWith(github.ref, 'refs/tags/') }}
-      
-      - name: Debug metadata
-        run: |
-          echo "event_name=${GITHUB_EVENT_NAME}"
-          echo "ref=${GITHUB_REF}"
-          echo "ref_name=${GITHUB_REF_NAME}"
-          echo "computed_tags=${{ steps.meta.outputs.tags }}"
-          echo "computed_labels=${{ steps.meta.outputs.labels }}"
+            type=raw,value=latest
 
-      
-      - name: Build and push
-        uses: docker/build-push-action@v7
-        with:
-          context: .
-          push: ${{ github.event_name != 'pull_request' }}
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-      
-      - name: Image digest
-        run: echo ${{ steps.docker_build.outputs.digest }}
+      - name: Promote validated RC to release tags (no rebuild)
+        run: |
+          tags="${{ steps.meta.outputs.tags }}"
+          tag_args=""
+          while IFS= read -r t; do
+            [ -n "$t" ] && tag_args="$tag_args -t $t"
+          done <<< "$tags"
+          echo "Promoting ${{ steps.rc.outputs.rc_ref }} ->$tag_args"
+          docker buildx imagetools create $tag_args "${{ steps.rc.outputs.rc_ref }}"
