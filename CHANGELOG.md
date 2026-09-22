@@ -8,6 +8,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.55.0] - 2026-09-22
+
 ### Added
 - **Release-candidate → UAT → promote pipeline** — `make rc-release` builds and
   pushes a multi-arch (`linux/amd64,linux/arm64`) image tagged `rc-<shortsha>`;
