@@ -1,0 +1,117 @@
+# Pre-promotion UAT stack — validates a specific published image (an RC
+# candidate or an already-promoted release tag) BEFORE it is trusted enough to
+# tag/deploy. Unlike compose.dev.yml (builds from local source), this pulls
+# the real GHCR artifact so what you validate here is byte-identical to what
+# TrueNAS will eventually run.
+#
+# Usage (see Makefile for the full flow):
+#   make rc-release                 # build + push rc-<shortsha>
+#   make uat-up REF=rc-<shortsha>   # pull and run it locally
+#   make uat-validate               # run the Hurl smoke+auth suite against it
+#   make uat-down                   # tear down
+#
+# Prerequisites:
+#   1. Copy uat.env.sample -> uat.env and configure it
+#   2. RSS_CURATOR_IMAGE_REF must be set (rc-<shortsha> or vX.Y.Z) — no default
+#
+# Note: compose-file ${VAR} interpolation (RSS_CURATOR_IMAGE_REF, CURATOR_PASSWORD)
+# is only satisfied via --env-file/shell env, not the `env_file:` container
+# directive — the Makefile targets pass --env-file uat.env for this reason.
+
+services:
+  ollama:
+    image: ollama/ollama
+    ports:
+      - "11434:11434"
+    restart: "no"
+    healthcheck:
+      test: [CMD, ollama, list]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    volumes:
+      - uat-ollama-data:/root/.ollama
+
+  ollama-init:
+    image: ollama/ollama
+    restart: "no"
+    depends_on:
+      ollama:
+        condition: service_healthy
+    environment:
+      OLLAMA_HOST: http://ollama:11434
+    entrypoint:
+      - sh
+      - -c
+      - ollama pull llama3.2:1b
+
+  curator:
+    image: ghcr.io/killakam3084/rss-curator:${RSS_CURATOR_IMAGE_REF:?RSS_CURATOR_IMAGE_REF must be set, e.g. rc-abc1234 or vX.Y.Z}
+    restart: "no"
+    depends_on:
+      ollama-init:
+        condition: service_completed_successfully
+    env_file:
+      - uat.env
+    environment:
+      CURATOR_API_PORT: 8081
+      STORAGE_PATH: /app/data/curator.db
+      CURATOR_USERNAME: admin
+      CURATOR_AI_PROVIDER: ollama
+      CURATOR_AI_HOST: http://ollama:11434
+      CURATOR_AI_SCORER_MODEL: llama3.2:1b
+      CURATOR_AI_ENRICHER_MODEL: llama3.2:1b
+    ports:
+      - "8081:8081"
+    volumes:
+      - uat-curator-data:/app/data
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8081/api/health"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+
+  # Validation sidecar — gated behind a profile so it doesn't start on a plain
+  # `up -d`. Run via `make uat-validate`.
+  hurl:
+    profiles: ["validate"]
+    image: ghcr.io/orange-opensource/hurl:4.3.0
+    entrypoint: ["/bin/sh", "-c"]
+    depends_on:
+      curator:
+        condition: service_healthy
+    volumes:
+      - ./tests:/tests
+      - ./tests/e2e/results:/results
+    environment:
+      HURL_base: http://curator:8081
+      HURL_username: admin
+      HURL_password: ${CURATOR_PASSWORD:?CURATOR_PASSWORD must be set in uat.env}
+    command:
+      - >-
+        hurl --test
+        --cookie-jar /tmp/hurl_cookies.jar
+        --report-junit /results/uat-smoke.xml
+        /tests/e2e/smoke/00-login.hurl
+        /tests/e2e/smoke/01-health.hurl
+        /tests/e2e/smoke/02-stats.hurl
+        /tests/e2e/smoke/03-activity.hurl
+        /tests/e2e/smoke/04-jobs.hurl
+        /tests/e2e/smoke/05-torrents.hurl
+        /tests/e2e/smoke/06-feed-stream.hurl
+        /tests/e2e/smoke/07-scheduler.hurl
+        /tests/e2e/smoke/08-rescore-errors.hurl
+        /tests/e2e/smoke/09-rematch-errors.hurl
+        /tests/e2e/smoke/10-alerts.hurl
+        &&
+        hurl --test
+        --report-junit /results/uat-auth.xml
+        /tests/e2e/auth/auth-flow.hurl
+
+volumes:
+  uat-ollama-data:
+    driver: local
+  uat-curator-data:
+    driver: local
