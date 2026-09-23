@@ -47,7 +47,7 @@ services:
       - ollama pull llama3.2:1b
 
   curator:
-    image: ghcr.io/killakam3084/rss-curator:${RSS_CURATOR_IMAGE_REF:?RSS_CURATOR_IMAGE_REF must be set, e.g. rc-abc1234 or vX.Y.Z}
+    image: ghcr.io/killakam3084/rss-curator:${RSS_CURATOR_IMAGE_REF:?RSS_CURATOR_IMAGE_REF must be set, e.g. rc-abc1234 or X.Y.Z (bare semver, no leading v)}
     restart: "no"
     depends_on:
       ollama-init:

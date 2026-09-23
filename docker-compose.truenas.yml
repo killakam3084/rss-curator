@@ -53,7 +53,7 @@ services:
 
   rss-curator:
     container_name: rss-curator
-    image: ghcr.io/killakam3084/rss-curator:${RSS_CURATOR_IMAGE_TAG:?RSS_CURATOR_IMAGE_TAG must be set, e.g. v0.55.0 — see rc-release/uat-validate/promote flow in contribution-workflow SKILL.md}
+    image: ghcr.io/killakam3084/rss-curator:${RSS_CURATOR_IMAGE_TAG:?RSS_CURATOR_IMAGE_TAG must be set, e.g. 0.55.0 (bare semver, no leading v — GHCR image tags drop it even though git tags keep vX.Y.Z) — see rc-release/uat-validate/promote flow in contribution-workflow SKILL.md}
     network_mode: host
     restart: unless-stopped
     depends_on:
