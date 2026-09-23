@@ -4,6 +4,14 @@
 # session, so it can't take all 11 smoke files in one invocation.
 set -e
 
+# podman-compose recreates dependent containers on every `run`, so curator's
+# healthcheck passing doesn't guarantee its network is fully up yet — wait
+# for a real response before starting the suite.
+for i in $(seq 1 30); do
+  wget -q --spider "$HURL_base/api/health" 2>/dev/null && break
+  sleep 1
+done
+
 prefix="${RESULTS_PREFIX:-smoke}"
 jar=/tmp/hurl_cookies.jar
 rm -f "$jar"
