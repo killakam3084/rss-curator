@@ -171,7 +171,8 @@ rc-release:
 # (rc-<shortsha> or an already-promoted vX.Y.Z) locally, then run the same
 # Hurl smoke+auth suite used for TrueNAS validation against it. --env-file is
 # required here (not just env_file:) so ${RSS_CURATOR_IMAGE_REF}/${CURATOR_PASSWORD}
-# compose-level interpolation is satisfied from uat.env.
+# compose-level interpolation is satisfied from uat.env. uat-up persists REF
+# into uat.env so uat-validate/uat-down/uat-logs don't need it repeated.
 uat-up:
 	@if [ -z "$(REF)" ]; then \
 		echo "Error: REF must be set, e.g. make uat-up REF=rc-abc1234"; \
@@ -182,7 +183,12 @@ uat-up:
 		echo "Copy uat.env.sample to uat.env and configure it"; \
 		exit 1; \
 	fi
-	RSS_CURATOR_IMAGE_REF=$(REF) $(CTR) compose --env-file uat.env -f docker-compose.uat.yml up -d
+	@if grep -q '^RSS_CURATOR_IMAGE_REF=' uat.env; then \
+		sed -i.bak 's/^RSS_CURATOR_IMAGE_REF=.*/RSS_CURATOR_IMAGE_REF=$(REF)/' uat.env && rm -f uat.env.bak; \
+	else \
+		echo "RSS_CURATOR_IMAGE_REF=$(REF)" >> uat.env; \
+	fi
+	$(CTR) compose --env-file uat.env -f docker-compose.uat.yml up -d
 	@echo "✓ UAT stack running ($(REF)) — API at http://localhost:8081"
 
 uat-down:

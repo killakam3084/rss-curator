@@ -21,7 +21,7 @@ services:
   hurl:
     image: ghcr.io/orange-opensource/hurl:4.3.0
     network_mode: host
-    entrypoint: ["/bin/sh", "-c"]
+    entrypoint: ["/bin/sh", "/tests/e2e/run-smoke-with-auth.sh"]
     volumes:
       - ./tests:/tests
       - ./tests/e2e/results:/results
@@ -29,25 +29,4 @@ services:
       HURL_base: http://localhost:8081
       HURL_username: ${CURATOR_USERNAME:?CURATOR_USERNAME must be set}
       HURL_password: ${CURATOR_PASSWORD:?CURATOR_PASSWORD must be set}
-    # Single-element list so the entire string is passed as one argument to
-    # /bin/sh -c, preserving the && between the two hurl invocations.
-    command:
-      - >-
-        hurl --test
-        --cookie-jar /tmp/hurl_cookies.jar
-        --report-junit /results/validate-smoke.xml
-        /tests/e2e/smoke/00-login.hurl
-        /tests/e2e/smoke/01-health.hurl
-        /tests/e2e/smoke/02-stats.hurl
-        /tests/e2e/smoke/03-activity.hurl
-        /tests/e2e/smoke/04-jobs.hurl
-        /tests/e2e/smoke/05-torrents.hurl
-        /tests/e2e/smoke/06-feed-stream.hurl
-        /tests/e2e/smoke/07-scheduler.hurl
-        /tests/e2e/smoke/08-rescore-errors.hurl
-        /tests/e2e/smoke/09-rematch-errors.hurl
-        /tests/e2e/smoke/10-alerts.hurl
-        &&
-        hurl --test
-        --report-junit /results/validate-auth.xml
-        /tests/e2e/auth/auth-flow.hurl
+      RESULTS_PREFIX: validate

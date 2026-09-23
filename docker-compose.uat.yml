@@ -78,7 +78,7 @@ services:
   hurl:
     profiles: ["validate"]
     image: ghcr.io/orange-opensource/hurl:4.3.0
-    entrypoint: ["/bin/sh", "-c"]
+    entrypoint: ["/bin/sh", "/tests/e2e/run-smoke-with-auth.sh"]
     depends_on:
       curator:
         condition: service_healthy
@@ -89,26 +89,7 @@ services:
       HURL_base: http://curator:8081
       HURL_username: admin
       HURL_password: ${CURATOR_PASSWORD:?CURATOR_PASSWORD must be set in uat.env}
-    command:
-      - >-
-        hurl --test
-        --cookie-jar /tmp/hurl_cookies.jar
-        --report-junit /results/uat-smoke.xml
-        /tests/e2e/smoke/00-login.hurl
-        /tests/e2e/smoke/01-health.hurl
-        /tests/e2e/smoke/02-stats.hurl
-        /tests/e2e/smoke/03-activity.hurl
-        /tests/e2e/smoke/04-jobs.hurl
-        /tests/e2e/smoke/05-torrents.hurl
-        /tests/e2e/smoke/06-feed-stream.hurl
-        /tests/e2e/smoke/07-scheduler.hurl
-        /tests/e2e/smoke/08-rescore-errors.hurl
-        /tests/e2e/smoke/09-rematch-errors.hurl
-        /tests/e2e/smoke/10-alerts.hurl
-        &&
-        hurl --test
-        --report-junit /results/uat-auth.xml
-        /tests/e2e/auth/auth-flow.hurl
+      RESULTS_PREFIX: uat
 
 volumes:
   uat-ollama-data:
