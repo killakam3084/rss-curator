@@ -3,7 +3,7 @@ module github.com/killakam3084/rss-curator
 go 1.26.1
 
 require (
-	github.com/autobrr/go-qbittorrent v1.18.0
+	github.com/autobrr/go-qbittorrent v1.19.0
 	github.com/mattn/go-sqlite3 v1.14.47
 	go.uber.org/zap v1.28.0
 )
@@ -14,6 +14,6 @@ require (
 	github.com/pkg/errors v0.9.1 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
 	golang.org/x/exp v0.0.0-20251113190631-e25ba8c21ef6 // indirect
-	golang.org/x/net v0.57.0 // indirect
+	golang.org/x/net v0.58.0 // indirect
 	golang.org/x/sync v0.22.0 // indirect
 )
