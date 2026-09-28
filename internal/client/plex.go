@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -51,6 +52,8 @@ type PlexSection struct {
 }
 
 // PlexItem is a single library entry: a show, a movie, or an episode.
+// Resolution, Codec and HDR are normalised to curator's own vocabulary so they
+// can be compared directly against a parsed release name.
 type PlexItem struct {
 	RatingKey            string
 	GrandparentRatingKey string // episodes only — the owning show
@@ -61,9 +64,9 @@ type PlexItem struct {
 	IMDbID               string
 	TMDBID               string
 	TVDBID               string
-	Resolution           string
-	Codec                string
-	HDR                  string
+	Resolution           string   // "2160P", "1080P", …
+	Codec                string   // "x265", "x264", …
+	HDR                  []string // canonical tags: dv, hdr10plus, hdr10, hlg, hdr
 	FileSize             int64
 	FilePath             string
 }
@@ -164,15 +167,48 @@ type plexMetadata struct {
 	Guids                []struct {
 		ID string `json:"id"`
 	} `json:"Guid"`
-	Media []struct {
-		VideoResolution string `json:"videoResolution"`
-		VideoCodec      string `json:"videoCodec"`
-		VideoProfile    string `json:"videoProfile"`
-		Part            []struct {
-			Size int64  `json:"size"`
-			File string `json:"file"`
-		} `json:"Part"`
-	} `json:"Media"`
+	Media []plexMedia `json:"Media"`
+}
+
+type plexMedia struct {
+	VideoResolution string `json:"videoResolution"`
+	VideoCodec      string `json:"videoCodec"`
+	Bitrate         int    `json:"bitrate"`
+	// ProxyType is non-zero on Plex-generated "optimized versions", which are
+	// transcodes of the real file and must never be read as what is owned.
+	ProxyType int        `json:"proxyType"`
+	Title     string     `json:"title"`
+	Part      []plexPart `json:"Part"`
+}
+
+type plexPart struct {
+	Size   int64        `json:"size"`
+	File   string       `json:"file"`
+	Stream []plexStream `json:"Stream"`
+}
+
+type plexStream struct {
+	StreamType           int      `json:"streamType"` // 1 = video
+	DisplayTitle         string   `json:"displayTitle"`
+	ExtendedDisplayTitle string   `json:"extendedDisplayTitle"`
+	ColorTrc             string   `json:"colorTrc"`
+	DOVIPresent          flexBool `json:"DOVIPresent"`
+	HDR10PlusPresent     flexBool `json:"HDR10PlusPresent"`
+}
+
+// flexBool decodes Plex's inconsistent boolean flags, which appear as true,
+// 1, or "1" depending on the endpoint and server version.
+type flexBool bool
+
+func (b *flexBool) UnmarshalJSON(data []byte) error {
+	s := strings.Trim(strings.TrimSpace(string(data)), `"`)
+	switch s {
+	case "true", "1":
+		*b = true
+	default:
+		*b = false
+	}
+	return nil
 }
 
 func (p *Plex) listSection(ctx context.Context, sectionKey string, itemType int, onPage func([]PlexItem) error) error {
@@ -231,17 +267,165 @@ func (m plexMetadata) toItem() PlexItem {
 		assignPlexGUID(&item, g.ID)
 	}
 
-	if len(m.Media) > 0 {
-		media := m.Media[0]
-		item.Resolution = media.VideoResolution
-		item.Codec = media.VideoCodec
-		item.HDR = normalizePlexVideoProfile(media.VideoProfile)
+	if media := selectMedia(m.Media); media != nil {
+		item.Resolution = normalizePlexResolution(media.VideoResolution)
+		item.Codec = normalizePlexCodec(media.VideoCodec)
+		item.HDR = extractPlexHDR(*media)
 		if len(media.Part) > 0 {
 			item.FileSize = media.Part[0].Size
 			item.FilePath = media.Part[0].File
 		}
 	}
 	return item
+}
+
+// selectMedia picks the Media entry that represents what is actually owned.
+// A library item can carry several: the original file plus any Plex-generated
+// optimized versions (a 4K DV original alongside a "Tablet-1080p-Low" H.264
+// transcode). Reading the wrong one makes a 2160p release look like a
+// duplicate of a 1080p copy the user never downloaded.
+func selectMedia(media []plexMedia) *plexMedia {
+	candidates := make([]plexMedia, 0, len(media))
+	for _, m := range media {
+		if m.ProxyType == 0 {
+			candidates = append(candidates, m)
+		}
+	}
+	if len(candidates) == 0 {
+		candidates = media
+	}
+	if len(candidates) == 0 {
+		return nil
+	}
+
+	best := 0
+	for i := 1; i < len(candidates); i++ {
+		bestRank := plexResolutionRank(candidates[best].VideoResolution)
+		rank := plexResolutionRank(candidates[i].VideoResolution)
+		if rank > bestRank || (rank == bestRank && candidates[i].Bitrate > candidates[best].Bitrate) {
+			best = i
+		}
+	}
+	return &candidates[best]
+}
+
+// extractPlexHDR derives canonical HDR tags from the video stream. Plex has no
+// dedicated HDR field: the reliable signals are the stream's display title
+// ("4K DoVi/HDR10+") and its Dolby Vision / HDR10+ flags. Media.videoProfile is
+// deliberately ignored — "main 10" only means 10-bit HEVC, not HDR.
+func extractPlexHDR(media plexMedia) []string {
+	seen := map[string]bool{}
+	add := func(tag string) {
+		if tag != "" {
+			seen[tag] = true
+		}
+	}
+
+	for _, part := range media.Part {
+		for _, s := range part.Stream {
+			if s.StreamType != 1 {
+				continue
+			}
+			if bool(s.DOVIPresent) {
+				add("dv")
+			}
+			if bool(s.HDR10PlusPresent) {
+				add("hdr10plus")
+			}
+			for _, tag := range parseHDRDisplayTitle(s.DisplayTitle + " " + s.ExtendedDisplayTitle) {
+				add(tag)
+			}
+			switch strings.ToLower(s.ColorTrc) {
+			case "smpte2084":
+				if !seen["dv"] && !seen["hdr10plus"] {
+					add("hdr10")
+				}
+			case "arib-std-b67":
+				add("hlg")
+			}
+		}
+	}
+
+	if len(seen) == 0 {
+		return nil
+	}
+	tags := make([]string, 0, len(seen))
+	for tag := range seen {
+		tags = append(tags, tag)
+	}
+	sort.Strings(tags)
+	return tags
+}
+
+// parseHDRDisplayTitle reads Plex's human-readable stream label, which is the
+// most dependable HDR signal the API exposes (e.g. "4K DoVi/HDR10+").
+func parseHDRDisplayTitle(title string) []string {
+	lower := strings.ToLower(title)
+	var tags []string
+	if strings.Contains(lower, "dovi") || strings.Contains(lower, "dolby vision") {
+		tags = append(tags, "dv")
+	}
+	switch {
+	case strings.Contains(lower, "hdr10+"), strings.Contains(lower, "hdr10plus"):
+		tags = append(tags, "hdr10plus")
+	case strings.Contains(lower, "hdr10"):
+		tags = append(tags, "hdr10")
+	case strings.Contains(lower, "hlg"):
+		tags = append(tags, "hlg")
+	case strings.Contains(lower, "hdr"):
+		tags = append(tags, "hdr")
+	}
+	return tags
+}
+
+// normalizePlexResolution maps Plex's resolution labels onto the tokens the
+// feed parser and matcher already use. Plex reports 4K as "4k" and standard
+// definition as "sd".
+func normalizePlexResolution(res string) string {
+	switch strings.ToLower(strings.TrimSpace(res)) {
+	case "":
+		return ""
+	case "4k", "2160", "2160p":
+		return "2160P"
+	case "1080", "1080p":
+		return "1080P"
+	case "720", "720p":
+		return "720P"
+	case "480", "480p", "sd":
+		return "480P"
+	default:
+		return strings.ToUpper(strings.TrimSpace(res))
+	}
+}
+
+// plexResolutionRank mirrors the quality hierarchy in internal/matcher.
+func plexResolutionRank(res string) int {
+	switch normalizePlexResolution(res) {
+	case "2160P":
+		return 3
+	case "1080P":
+		return 2
+	case "720P":
+		return 1
+	case "480P":
+		return 0
+	default:
+		return -1
+	}
+}
+
+// normalizePlexCodec maps Plex codec names onto the feed parser's vocabulary.
+func normalizePlexCodec(codec string) string {
+	switch c := strings.ToLower(strings.TrimSpace(codec)); c {
+	case "":
+		return ""
+	case "hevc", "h265", "x265":
+		return "x265"
+	case "h264", "x264", "avc":
+		return "x264"
+	default:
+		return c
+	}
 }
 
 // assignPlexGUID parses one GUID string and records it on the item. It handles
@@ -276,24 +460,6 @@ func assignPlexGUID(item *PlexItem, guid string) {
 		if item.TVDBID == "" {
 			item.TVDBID = rest
 		}
-	}
-}
-
-// normalizePlexVideoProfile maps Plex's videoProfile to curator's canonical
-// HDR tags. Plex does not expose a dedicated HDR field, so anything it does
-// not clearly signal is reported as empty rather than guessed.
-func normalizePlexVideoProfile(profile string) string {
-	switch p := strings.ToLower(strings.TrimSpace(profile)); {
-	case p == "":
-		return ""
-	case strings.Contains(p, "dvhe"), strings.Contains(p, "dvav"), strings.Contains(p, "dolby vision"):
-		return "dv"
-	case strings.Contains(p, "main 10"), strings.Contains(p, "main10"):
-		return "hdr10"
-	case strings.Contains(p, "hlg"):
-		return "hlg"
-	default:
-		return ""
 	}
 }
 

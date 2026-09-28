@@ -199,7 +199,7 @@ func TestPlexEpisodesLinkToShowAndPaginate(t *testing.T) {
 	if first.GrandparentRatingKey != "101" || first.Season != 3 {
 		t.Errorf("episode not linked to show: %+v", first)
 	}
-	if first.Resolution != "1080" || first.Codec != "hevc" || first.HDR != "hdr10" {
+	if first.Resolution != "1080P" || first.Codec != "x265" {
 		t.Errorf("media fields = %+v", first)
 	}
 	if first.FileSize != 4096 || first.FilePath != "/media/ep.mkv" {
@@ -250,23 +250,230 @@ func TestPlexListPropagatesCallbackError(t *testing.T) {
 	}
 }
 
-func TestNormalizePlexVideoProfile(t *testing.T) {
+func TestNormalizePlexResolution(t *testing.T) {
 	tests := map[string]string{
-		"":             "",
-		"main 10":      "hdr10",
-		"main10":       "hdr10",
-		"dvhe.05":      "dv",
-		"Dolby Vision": "dv",
-		"hlg":          "hlg",
-		"main":         "",
-		"high":         "",
+		"4k":    "2160P",
+		"2160":  "2160P",
+		"1080":  "1080P",
+		"720":   "720P",
+		"480":   "480P",
+		"sd":    "480P",
+		"":      "",
+		"weird": "WEIRD",
 	}
 	for in, want := range tests {
-		if got := normalizePlexVideoProfile(in); got != want {
-			t.Errorf("normalizePlexVideoProfile(%q) = %q, want %q", in, got, want)
+		if got := normalizePlexResolution(in); got != want {
+			t.Errorf("normalizePlexResolution(%q) = %q, want %q", in, got, want)
 		}
 	}
 }
+
+func TestNormalizePlexCodec(t *testing.T) {
+	tests := map[string]string{
+		"hevc": "x265",
+		"h264": "x264",
+		"avc":  "x264",
+		"":     "",
+		"vp9":  "vp9",
+	}
+	for in, want := range tests {
+		if got := normalizePlexCodec(in); got != want {
+			t.Errorf("normalizePlexCodec(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+func TestExtractPlexHDRIgnoresMain10Profile(t *testing.T) {
+	// "main 10" only means 10-bit HEVC — it is not evidence of HDR.
+	media := plexMedia{
+		Part: []plexPart{{Stream: []plexStream{{
+			StreamType:   1,
+			DisplayTitle: "1080p",
+			ColorTrc:     "bt709",
+		}}}},
+	}
+	if got := extractPlexHDR(media); got != nil {
+		t.Errorf("extractPlexHDR = %v, want nil for an SDR stream", got)
+	}
+}
+
+func TestExtractPlexHDRFromStreamFlags(t *testing.T) {
+	media := plexMedia{
+		Part: []plexPart{{Stream: []plexStream{
+			{StreamType: 2, DisplayTitle: "English (EAC3 5.1 + Atmos)"},
+			{
+				StreamType:       1,
+				DisplayTitle:     "4K DoVi/HDR10+",
+				DOVIPresent:      true,
+				HDR10PlusPresent: true,
+				ColorTrc:         "smpte2084",
+			},
+		}}},
+	}
+	got := extractPlexHDR(media)
+	want := []string{"dv", "hdr10plus"}
+	if len(got) != len(want) {
+		t.Fatalf("extractPlexHDR = %v, want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("extractPlexHDR = %v, want %v", got, want)
+		}
+	}
+}
+
+func TestExtractPlexHDRFromColorTrcAlone(t *testing.T) {
+	media := plexMedia{
+		Part: []plexPart{{Stream: []plexStream{{StreamType: 1, ColorTrc: "smpte2084"}}}},
+	}
+	got := extractPlexHDR(media)
+	if len(got) != 1 || got[0] != "hdr10" {
+		t.Errorf("extractPlexHDR = %v, want [hdr10]", got)
+	}
+
+	hlg := plexMedia{
+		Part: []plexPart{{Stream: []plexStream{{StreamType: 1, ColorTrc: "arib-std-b67"}}}},
+	}
+	if got := extractPlexHDR(hlg); len(got) != 1 || got[0] != "hlg" {
+		t.Errorf("extractPlexHDR = %v, want [hlg]", got)
+	}
+}
+
+func TestSelectMediaSkipsOptimizedVersions(t *testing.T) {
+	// Mirrors a real library entry: a 4K original plus a Plex-generated
+	// "Tablet-1080p-Low" transcode. Reading the transcode would make a 2160p
+	// release look like a duplicate of a 1080p copy the user never downloaded.
+	media := []plexMedia{
+		{VideoResolution: "4k", VideoCodec: "hevc", Bitrate: 25490, Title: "Original"},
+		{VideoResolution: "1080", VideoCodec: "h264", Bitrate: 5115, ProxyType: 42, Title: "Tablet-1080p-Low"},
+	}
+	got := selectMedia(media)
+	if got == nil || got.Title != "Original" {
+		t.Fatalf("selectMedia = %+v, want the Original entry", got)
+	}
+
+	// Order must not matter.
+	reversed := []plexMedia{media[1], media[0]}
+	if got := selectMedia(reversed); got == nil || got.Title != "Original" {
+		t.Fatalf("selectMedia(reversed) = %+v, want the Original entry", got)
+	}
+}
+
+func TestSelectMediaFallsBackWhenAllAreProxies(t *testing.T) {
+	media := []plexMedia{{VideoResolution: "1080", ProxyType: 42, Title: "only-proxy"}}
+	if got := selectMedia(media); got == nil || got.Title != "only-proxy" {
+		t.Errorf("selectMedia = %+v, want the proxy as a fallback", got)
+	}
+	if got := selectMedia(nil); got != nil {
+		t.Errorf("selectMedia(nil) = %+v, want nil", got)
+	}
+}
+
+func TestSelectMediaPrefersHigherResolutionThenBitrate(t *testing.T) {
+	media := []plexMedia{
+		{VideoResolution: "1080", Bitrate: 9000, Title: "hd"},
+		{VideoResolution: "4k", Bitrate: 100, Title: "uhd"},
+	}
+	if got := selectMedia(media); got.Title != "uhd" {
+		t.Errorf("selectMedia = %q, want uhd", got.Title)
+	}
+
+	sameRes := []plexMedia{
+		{VideoResolution: "1080", Bitrate: 3000, Title: "low"},
+		{VideoResolution: "1080", Bitrate: 9000, Title: "high"},
+	}
+	if got := selectMedia(sameRes); got.Title != "high" {
+		t.Errorf("selectMedia = %q, want high", got.Title)
+	}
+}
+
+// TestPlexEpisodeRealPayload exercises a verbatim capture from a live Plex
+// server: a 4K DV/HDR10+ episode that also carries an optimized 1080p version.
+func TestPlexEpisodeRealPayload(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(mobLandEpisodeJSON))
+	}))
+	defer srv.Close()
+
+	items := collectItems(t, func(onPage func([]PlexItem) error) error {
+		return mustPlex(t, srv.URL).Episodes(context.Background(), "1", onPage)
+	})
+	if len(items) != 1 {
+		t.Fatalf("got %d items, want 1", len(items))
+	}
+	got := items[0]
+
+	if got.RatingKey != "24256" || got.GrandparentRatingKey != "17784" {
+		t.Errorf("keys = %+v", got)
+	}
+	if got.Season != 2 || got.Episode != 1 {
+		t.Errorf("season/episode = %d/%d, want 2/1", got.Season, got.Episode)
+	}
+	if got.IMDbID != "tt37427409" || got.TMDBID != "7492637" || got.TVDBID != "11542638" {
+		t.Errorf("guids = %+v", got)
+	}
+	if got.Resolution != "2160P" {
+		t.Errorf("Resolution = %q, want 2160P (Plex reports \"4k\")", got.Resolution)
+	}
+	if got.Codec != "x265" {
+		t.Errorf("Codec = %q, want x265", got.Codec)
+	}
+	if len(got.HDR) != 2 || got.HDR[0] != "dv" || got.HDR[1] != "hdr10plus" {
+		t.Errorf("HDR = %v, want [dv hdr10plus]", got.HDR)
+	}
+	if got.FileSize != 9351276799 {
+		t.Errorf("FileSize = %d, want the original file size not the transcode", got.FileSize)
+	}
+	if strings.Contains(got.FilePath, "Plex Versions") {
+		t.Errorf("FilePath = %q, picked the optimized version", got.FilePath)
+	}
+}
+
+const mobLandEpisodeJSON = `{"MediaContainer":{"size":1,"Metadata":[{
+  "ratingKey":"24256",
+  "grandparentRatingKey":"17784",
+  "type":"episode",
+  "title":"I Wanna Be Your Dog",
+  "grandparentTitle":"MobLand",
+  "index":1,
+  "parentIndex":2,
+  "year":2026,
+  "guid":"plex://episode/695c50015e8e6d388f11d441",
+  "Media":[
+    {
+      "id":27570,"bitrate":25490,"videoCodec":"hevc","videoResolution":"4k",
+      "container":"mkv","videoProfile":"main 10","title":"Original",
+      "Part":[{
+        "id":27624,
+        "file":"/mnt/cell_block_d/media/video/television/MobLand S02E01/MobLand S02E01.mkv",
+        "size":9351276799,"videoProfile":"main 10",
+        "Stream":[
+          {"id":91874,"streamType":1,"codec":"hevc","DOVIPresent":true,"DOVIProfile":8,
+           "HDR10PlusPresent":true,"bitDepth":10,"colorPrimaries":"bt2020","colorTrc":"smpte2084",
+           "profile":"main 10","displayTitle":"4K DoVi/HDR10+",
+           "extendedDisplayTitle":"4K DoVi/HDR10+ (HEVC Main 10)"},
+          {"id":91875,"streamType":2,"codec":"eac3","displayTitle":"English (UK) (EAC3 5.1 + Atmos)"}
+        ]
+      }]
+    },
+    {
+      "id":27573,"bitrate":5115,"videoCodec":"h264","videoResolution":"1080",
+      "container":"mp4","proxyType":42,"target":"Tablet-1080p-Low",
+      "videoProfile":"constrained baseline","title":"Tablet-1080p-Low",
+      "Part":[{
+        "id":27627,
+        "file":"/mnt/cell_block_d/media/video/television/MobLand S02E01/Plex Versions/Tablet-1080p-Low 2521/MobLand/S02E01.mp4",
+        "size":1877987382,
+        "Stream":[
+          {"id":91906,"streamType":1,"codec":"h264","bitDepth":8,"colorTrc":"bt709",
+           "profile":"constrained baseline","displayTitle":"1080p",
+           "extendedDisplayTitle":"1080p (H.264 Constrained Baseline)"}
+        ]
+      }]
+    }
+  ],
+  "Guid":[{"id":"imdb://tt37427409"},{"id":"tmdb://7492637"},{"id":"tvdb://11542638"}]
+}]}}`
 
 func mustPlex(t *testing.T, baseURL string) *Plex {
 	t.Helper()
