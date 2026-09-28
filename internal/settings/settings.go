@@ -22,6 +22,7 @@ type AppSettings struct {
 	Match     MatchSettings     `json:"match"`
 	Auth      AuthSettings      `json:"auth"`
 	AutoQueue AutoQueueSettings `json:"auto_queue"`
+	Plex      PlexSettings      `json:"plex"`
 }
 
 // SchedulerSettings controls periodic background tasks.
@@ -84,6 +85,29 @@ type AutoQueueSettings struct {
 	DryRun bool `json:"dry_run"`
 }
 
+// PlexSettings controls the read-only Plex library integration.
+type PlexSettings struct {
+	// Enabled turns the integration on. Default false.
+	Enabled bool `json:"enabled"`
+	// URL is the Plex Media Server base address, e.g. http://10.0.0.5:32400.
+	URL string `json:"url"`
+	// Token is the X-Plex-Token. Always returned masked; sending the mask back
+	// on an update leaves the stored value untouched.
+	Token string `json:"token"`
+	// SectionKeys limits the sync to specific library sections. Empty syncs
+	// every movie and show section.
+	SectionKeys []string `json:"section_keys"`
+	// SyncEnabled turns on the plex_sync scheduler task. Deliberately separate
+	// from Enabled so the integration can be configured and exercised by hand
+	// before anything runs on a timer. Default false.
+	SyncEnabled bool `json:"sync_enabled"`
+	// SyncIntervalSecs is the period between scheduled syncs. Default 21600 (6 h).
+	SyncIntervalSecs int `json:"sync_interval_secs"`
+	// ReconcileOnFeedCheck re-annotates staged torrents after each feed check
+	// so newly discovered releases are marked without waiting for a sync.
+	ReconcileOnFeedCheck bool `json:"reconcile_on_feed_check"`
+}
+
 // EnvDefaults carries the values parsed from environment variables at startup.
 // Fields with zero/empty values mean "the env var was absent; use hardcoded default".
 type EnvDefaults struct {
@@ -95,6 +119,8 @@ type EnvDefaults struct {
 	PreferredGroups       []string
 	AuthUsername          string
 	AuthPassword          string
+	PlexURL               string
+	PlexToken             string
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
@@ -120,7 +146,18 @@ const (
 	keyAutoQueueHoldMins       = "auto_queue.hold_mins"
 	keyAutoQueueMaxHoldMins    = "auto_queue.max_hold_mins"
 	keyAutoQueueDryRun         = "auto_queue.dry_run"
+	keyPlexEnabled             = "plex.enabled"
+	keyPlexURL                 = "plex.url"
+	keyPlexToken               = "plex.token"
+	keyPlexSectionKeys         = "plex.section_keys"
+	keyPlexSyncEnabled         = "plex.sync_enabled"
+	keyPlexSyncIntervalSecs    = "plex.sync_interval_secs"
+	keyPlexReconcileOnFeed     = "plex.reconcile_on_feed_check"
 )
+
+// MaskedSecret is returned in place of stored secrets and, when sent back on
+// an update, means "leave the existing value alone".
+const MaskedSecret = "***"
 
 // ──────────────────────────────────────────────────────────────────────────────
 // Hardcoded fallbacks (lowest priority)
@@ -155,6 +192,15 @@ func hardcodedDefaults() AppSettings {
 			HoldMins:      30,
 			MaxHoldMins:   480,
 			DryRun:        false,
+		},
+		Plex: PlexSettings{
+			Enabled:              false,
+			URL:                  "http://localhost:32400",
+			Token:                "",
+			SectionKeys:          []string{},
+			SyncEnabled:          false,
+			SyncIntervalSecs:     21600,
+			ReconcileOnFeedCheck: true,
 		},
 	}
 }
@@ -208,6 +254,19 @@ func (m *Manager) Get() AppSettings {
 	return m.current
 }
 
+// GetRedacted returns a snapshot with secrets replaced by MaskedSecret, for
+// responses that leave the process.
+func (m *Manager) GetRedacted() AppSettings {
+	s := m.Get()
+	if s.Auth.Password != "" {
+		s.Auth.Password = MaskedSecret
+	}
+	if s.Plex.Token != "" {
+		s.Plex.Token = MaskedSecret
+	}
+	return s
+}
+
 // Update validates patch, persists each field to the database, and updates the
 // in-memory cache atomically. A Password value of "***" means "do not change".
 func (m *Manager) Update(patch AppSettings) error {
@@ -219,8 +278,11 @@ func (m *Manager) Update(patch AppSettings) error {
 	defer m.mu.Unlock()
 
 	next := patch
-	if next.Auth.Password == "***" {
+	if next.Auth.Password == MaskedSecret {
 		next.Auth.Password = m.current.Auth.Password
+	}
+	if next.Plex.Token == MaskedSecret {
+		next.Plex.Token = m.current.Plex.Token
 	}
 
 	if err := m.persist(next); err != nil {
@@ -244,6 +306,12 @@ func validate(s AppSettings) error {
 	if s.Alerts.ProgressInterval <= 0 {
 		return fmt.Errorf("settings: alerts.progress_interval must be > 0")
 	}
+	if s.Plex.SyncIntervalSecs <= 0 {
+		return fmt.Errorf("settings: plex.sync_interval_secs must be > 0")
+	}
+	if s.Plex.Enabled && s.Plex.URL == "" {
+		return fmt.Errorf("settings: plex.url is required when plex is enabled")
+	}
 	return nil
 }
 
@@ -252,6 +320,7 @@ func (m *Manager) persist(s AppSettings) error {
 	type kv struct{ key, val string }
 	excJSON, _ := json.Marshal(s.Match.ExcludeGroups)
 	prefJSON, _ := json.Marshal(s.Match.PreferredGroups)
+	sectionsJSON, _ := json.Marshal(s.Plex.SectionKeys)
 
 	pairs := []kv{
 		{keyFeedCheckIntervalSecs, fmt.Sprintf("%d", s.Scheduler.FeedCheckIntervalSecs)},
@@ -272,6 +341,13 @@ func (m *Manager) persist(s AppSettings) error {
 		{keyAutoQueueHoldMins, fmt.Sprintf("%d", s.AutoQueue.HoldMins)},
 		{keyAutoQueueMaxHoldMins, fmt.Sprintf("%d", s.AutoQueue.MaxHoldMins)},
 		{keyAutoQueueDryRun, boolStr(s.AutoQueue.DryRun)},
+		{keyPlexEnabled, boolStr(s.Plex.Enabled)},
+		{keyPlexURL, s.Plex.URL},
+		{keyPlexToken, s.Plex.Token},
+		{keyPlexSectionKeys, string(sectionsJSON)},
+		{keyPlexSyncEnabled, boolStr(s.Plex.SyncEnabled)},
+		{keyPlexSyncIntervalSecs, fmt.Sprintf("%d", s.Plex.SyncIntervalSecs)},
+		{keyPlexReconcileOnFeed, boolStr(s.Plex.ReconcileOnFeedCheck)},
 	}
 	for _, p := range pairs {
 		if err := m.store.SetSetting(p.key, p.val); err != nil {
@@ -305,6 +381,12 @@ func applyEnvDefaults(s *AppSettings, env EnvDefaults) {
 	}
 	if env.AuthPassword != "" {
 		s.Auth.Password = env.AuthPassword
+	}
+	if env.PlexURL != "" {
+		s.Plex.URL = env.PlexURL
+	}
+	if env.PlexToken != "" {
+		s.Plex.Token = env.PlexToken
 	}
 }
 
@@ -384,6 +466,32 @@ func applyStoredValues(s *AppSettings, stored map[string]string) {
 	}
 	if v, ok := stored[keyAutoQueueDryRun]; ok {
 		s.AutoQueue.DryRun = v == "true"
+	}
+	if v, ok := stored[keyPlexEnabled]; ok {
+		s.Plex.Enabled = v == "true"
+	}
+	if v, ok := stored[keyPlexURL]; ok && v != "" {
+		s.Plex.URL = v
+	}
+	if v, ok := stored[keyPlexToken]; ok {
+		s.Plex.Token = v
+	}
+	if v, ok := stored[keyPlexSectionKeys]; ok {
+		var arr []string
+		if json.Unmarshal([]byte(v), &arr) == nil {
+			s.Plex.SectionKeys = arr
+		}
+	}
+	if v, ok := stored[keyPlexSyncEnabled]; ok {
+		s.Plex.SyncEnabled = v == "true"
+	}
+	if v, ok := stored[keyPlexSyncIntervalSecs]; ok {
+		if n := parseInt(v); n > 0 {
+			s.Plex.SyncIntervalSecs = n
+		}
+	}
+	if v, ok := stored[keyPlexReconcileOnFeed]; ok {
+		s.Plex.ReconcileOnFeedCheck = v == "true"
 	}
 }
 
