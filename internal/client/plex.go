@@ -58,6 +58,7 @@ type PlexItem struct {
 	RatingKey            string
 	GrandparentRatingKey string // episodes only — the owning show
 	Title                string
+	OriginalTitle        string // e.g. "Shogun" for "Shōgun"; a second title alias
 	Year                 int
 	Season               int
 	Episode              int
@@ -69,6 +70,13 @@ type PlexItem struct {
 	HDR                  []string // canonical tags: dv, hdr10plus, hdr10, hlg, hdr
 	FileSize             int64
 	FilePath             string
+}
+
+// HasExternalIDs reports whether any cross-provider identifier was returned.
+// Section listings omit them, so callers must top up via Item() before relying
+// on an ID-based join.
+func (i PlexItem) HasExternalIDs() bool {
+	return i.IMDbID != "" || i.TMDBID != "" || i.TVDBID != ""
 }
 
 // NewPlex builds a Plex client. The base URL must be absolute with an http or
@@ -157,24 +165,21 @@ func (p *Plex) Movies(ctx context.Context, sectionKey string, onPage func([]Plex
 
 // Item fetches one library entry by rating key.
 //
-// Section listings do not reliably include per-stream data, which is the only
-// dependable source of HDR information. Callers use this to top up a specific
-// item on demand rather than paying for a detail request per library entry.
+// Section listings return a reduced field set: no per-stream data, and
+// crucially no external Guid entries. Callers use this to top up a specific
+// item rather than paying for a detail request per library entry.
 func (p *Plex) Item(ctx context.Context, ratingKey string) (*PlexItem, error) {
 	endpoint := fmt.Sprintf("/library/metadata/%s?includeGuids=1", url.PathEscape(ratingKey))
 
-	var resp struct {
-		MediaContainer struct {
-			Metadata []plexMetadata `json:"Metadata"`
-		} `json:"MediaContainer"`
-	}
+	var resp plexListResponse
 	if err := p.get(ctx, endpoint, nil, &resp); err != nil {
 		return nil, fmt.Errorf("plex: item %s: %w", ratingKey, err)
 	}
-	if len(resp.MediaContainer.Metadata) == 0 {
+	entries := resp.entries()
+	if len(entries) == 0 {
 		return nil, nil
 	}
-	item := resp.MediaContainer.Metadata[0].toItem()
+	item := entries[0].toItem()
 	return &item, nil
 }
 
@@ -183,6 +188,7 @@ type plexMetadata struct {
 	RatingKey            string `json:"ratingKey"`
 	GrandparentRatingKey string `json:"grandparentRatingKey"`
 	Title                string `json:"title"`
+	OriginalTitle        string `json:"originalTitle"`
 	Year                 int    `json:"year"`
 	ParentIndex          int    `json:"parentIndex"` // season number
 	Index                int    `json:"index"`       // episode number
@@ -246,17 +252,12 @@ func (p *Plex) listSection(ctx context.Context, sectionKey string, itemType int,
 		}
 		query := fmt.Sprintf("?type=%d&includeGuids=1", itemType)
 
-		var resp struct {
-			MediaContainer struct {
-				Size     int            `json:"size"`
-				Metadata []plexMetadata `json:"Metadata"`
-			} `json:"MediaContainer"`
-		}
+		var resp plexListResponse
 		if err := p.get(ctx, endpoint+query, headers, &resp); err != nil {
 			return fmt.Errorf("plex: list section %s type=%d offset=%d: %w", sectionKey, itemType, start, err)
 		}
 
-		page := resp.MediaContainer.Metadata
+		page := resp.entries()
 		if len(page) > 0 {
 			items := make([]PlexItem, 0, len(page))
 			for _, m := range page {
@@ -275,11 +276,30 @@ func (p *Plex) listSection(ctx context.Context, sectionKey string, itemType int,
 	}
 }
 
+// plexListResponse covers both container shapes Plex uses. Leaf media
+// (movies, episodes) arrive as Metadata, while shows and other container
+// types arrive as Directory.
+type plexListResponse struct {
+	MediaContainer struct {
+		Size      int            `json:"size"`
+		Metadata  []plexMetadata `json:"Metadata"`
+		Directory []plexMetadata `json:"Directory"`
+	} `json:"MediaContainer"`
+}
+
+func (r plexListResponse) entries() []plexMetadata {
+	if len(r.MediaContainer.Metadata) > 0 {
+		return r.MediaContainer.Metadata
+	}
+	return r.MediaContainer.Directory
+}
+
 func (m plexMetadata) toItem() PlexItem {
 	item := PlexItem{
 		RatingKey:            m.RatingKey,
 		GrandparentRatingKey: m.GrandparentRatingKey,
 		Title:                m.Title,
+		OriginalTitle:        m.OriginalTitle,
 		Year:                 m.Year,
 		Season:               m.ParentIndex,
 		Episode:              m.Index,

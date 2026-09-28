@@ -657,6 +657,55 @@ const amadeusMovieJSON = `{"MediaContainer":{"size":1,"Metadata":[{
   }]}]}
 }]}}`
 
+// TestPlexShowsListingUsesDirectoryShape covers a verbatim section listing.
+// Shows arrive as Directory rather than Metadata, carry no external Guid
+// entries, and expose originalTitle as a second title alias.
+func TestPlexShowsListingUsesDirectoryShape(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(showsListingJSON))
+	}))
+	defer srv.Close()
+
+	items := collectItems(t, func(onPage func([]PlexItem) error) error {
+		return mustPlex(t, srv.URL).Shows(context.Background(), "1", onPage)
+	})
+	if len(items) != 3 {
+		t.Fatalf("got %d shows, want 3 — Directory entries must be decoded", len(items))
+	}
+
+	mobland := items[0]
+	if mobland.RatingKey != "17784" || mobland.Title != "MobLand" || mobland.Year != 2025 {
+		t.Errorf("show = %+v", mobland)
+	}
+	// A section listing omits external ids entirely, so reconcile must top up
+	// via Item() before attempting an id-based join.
+	if mobland.HasExternalIDs() {
+		t.Errorf("expected no external ids from a listing, got %+v", mobland)
+	}
+
+	shogun := items[1]
+	if shogun.OriginalTitle != "Shogun" {
+		t.Errorf("OriginalTitle = %q, want Shogun", shogun.OriginalTitle)
+	}
+
+	solitude := items[2]
+	if solitude.OriginalTitle != "Cien años de soledad" {
+		t.Errorf("OriginalTitle = %q", solitude.OriginalTitle)
+	}
+}
+
+const showsListingJSON = `{"MediaContainer":{"size":3,"Directory":[
+  {"ratingKey":"17784","type":"show","title":"MobLand","year":2025,
+   "guid":"plex://show/65e04d051f43644ac5a79a99","slug":"mobland",
+   "leafCount":12,"childCount":2},
+  {"ratingKey":"16569","type":"show","title":"Shōgun","titleSort":"Shogun",
+   "originalTitle":"Shogun","year":2024,
+   "guid":"plex://show/60ad2998c037da002dbd41c1"},
+  {"ratingKey":"337","type":"show","title":"One Hundred Years of Solitude",
+   "originalTitle":"Cien años de soledad","year":2024,
+   "guid":"plex://show/62ea6624f9ccde150210bf0a"}
+]}}`
+
 func mustPlex(t *testing.T, baseURL string) *Plex {
 	t.Helper()
 	p, err := NewPlex(PlexConfig{BaseURL: baseURL, Token: "test-token"})
