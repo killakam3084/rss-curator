@@ -155,6 +155,29 @@ func (p *Plex) Movies(ctx context.Context, sectionKey string, onPage func([]Plex
 	return p.listSection(ctx, sectionKey, plexTypeMovie, onPage)
 }
 
+// Item fetches one library entry by rating key.
+//
+// Section listings do not reliably include per-stream data, which is the only
+// dependable source of HDR information. Callers use this to top up a specific
+// item on demand rather than paying for a detail request per library entry.
+func (p *Plex) Item(ctx context.Context, ratingKey string) (*PlexItem, error) {
+	endpoint := fmt.Sprintf("/library/metadata/%s?includeGuids=1", url.PathEscape(ratingKey))
+
+	var resp struct {
+		MediaContainer struct {
+			Metadata []plexMetadata `json:"Metadata"`
+		} `json:"MediaContainer"`
+	}
+	if err := p.get(ctx, endpoint, nil, &resp); err != nil {
+		return nil, fmt.Errorf("plex: item %s: %w", ratingKey, err)
+	}
+	if len(resp.MediaContainer.Metadata) == 0 {
+		return nil, nil
+	}
+	item := resp.MediaContainer.Metadata[0].toItem()
+	return &item, nil
+}
+
 // plexMetadata is the subset of a MediaContainer entry that curator consumes.
 type plexMetadata struct {
 	RatingKey            string `json:"ratingKey"`

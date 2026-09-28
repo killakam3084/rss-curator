@@ -475,6 +475,44 @@ const mobLandEpisodeJSON = `{"MediaContainer":{"size":1,"Metadata":[{
   "Guid":[{"id":"imdb://tt37427409"},{"id":"tmdb://7492637"},{"id":"tvdb://11542638"}]
 }]}}`
 
+func TestPlexItemFetchesDetail(t *testing.T) {
+	var gotPath string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+		_, _ = w.Write([]byte(mobLandEpisodeJSON))
+	}))
+	defer srv.Close()
+
+	item, err := mustPlex(t, srv.URL).Item(context.Background(), "24256")
+	if err != nil {
+		t.Fatalf("Item: %v", err)
+	}
+	if item == nil {
+		t.Fatal("Item returned nil")
+	}
+	if gotPath != "/library/metadata/24256" {
+		t.Errorf("path = %q", gotPath)
+	}
+	if len(item.HDR) != 2 || item.HDR[0] != "dv" {
+		t.Errorf("HDR = %v, want [dv hdr10plus]", item.HDR)
+	}
+}
+
+func TestPlexItemNotFound(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"MediaContainer":{"size":0}}`))
+	}))
+	defer srv.Close()
+
+	item, err := mustPlex(t, srv.URL).Item(context.Background(), "999")
+	if err != nil {
+		t.Fatalf("Item: %v", err)
+	}
+	if item != nil {
+		t.Errorf("Item = %+v, want nil for an empty container", item)
+	}
+}
+
 func mustPlex(t *testing.T, baseURL string) *Plex {
 	t.Helper()
 	p, err := NewPlex(PlexConfig{BaseURL: baseURL, Token: "test-token"})
