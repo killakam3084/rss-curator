@@ -300,20 +300,22 @@ func (s *Storage) migrate() error {
 		// episode-level GUIDs are not dependable. synced_at drives mark-and-sweep
 		// cleanup so media removed from Plex disappears from the cache.
 		`CREATE TABLE IF NOT EXISTS plex_shows (
-			rating_key  TEXT PRIMARY KEY,
-			section_key TEXT NOT NULL,
-			title       TEXT NOT NULL DEFAULT '',
-			norm_title  TEXT NOT NULL DEFAULT '',
-			year        INTEGER NOT NULL DEFAULT 0,
-			imdb_id     TEXT NOT NULL DEFAULT '',
-			tmdb_id     TEXT NOT NULL DEFAULT '',
-			tvdb_id     TEXT NOT NULL DEFAULT '',
-			synced_at   DATETIME NOT NULL
+			rating_key      TEXT PRIMARY KEY,
+			section_key     TEXT NOT NULL,
+			title           TEXT NOT NULL DEFAULT '',
+			norm_title      TEXT NOT NULL DEFAULT '',
+			norm_alt_title  TEXT NOT NULL DEFAULT '',
+			year            INTEGER NOT NULL DEFAULT 0,
+			imdb_id         TEXT NOT NULL DEFAULT '',
+			tmdb_id         TEXT NOT NULL DEFAULT '',
+			tvdb_id         TEXT NOT NULL DEFAULT '',
+			synced_at       DATETIME NOT NULL
 		)`,
 		`CREATE INDEX IF NOT EXISTS idx_plex_shows_imdb ON plex_shows(imdb_id)`,
 		`CREATE INDEX IF NOT EXISTS idx_plex_shows_tmdb ON plex_shows(tmdb_id)`,
 		`CREATE INDEX IF NOT EXISTS idx_plex_shows_tvdb ON plex_shows(tvdb_id)`,
 		`CREATE INDEX IF NOT EXISTS idx_plex_shows_norm_title ON plex_shows(norm_title)`,
+		`CREATE INDEX IF NOT EXISTS idx_plex_shows_norm_alt ON plex_shows(norm_alt_title)`,
 		`CREATE INDEX IF NOT EXISTS idx_plex_shows_section ON plex_shows(section_key)`,
 		`CREATE TABLE IF NOT EXISTS plex_items (
 			rating_key      TEXT PRIMARY KEY,
@@ -322,6 +324,7 @@ func (s *Storage) migrate() error {
 			show_rating_key TEXT NOT NULL DEFAULT '',
 			title           TEXT NOT NULL DEFAULT '',
 			norm_title      TEXT NOT NULL DEFAULT '',
+			norm_alt_title  TEXT NOT NULL DEFAULT '',
 			year            INTEGER NOT NULL DEFAULT 0,
 			season          INTEGER NOT NULL DEFAULT 0,
 			episode         INTEGER NOT NULL DEFAULT 0,
@@ -340,6 +343,7 @@ func (s *Storage) migrate() error {
 		`CREATE INDEX IF NOT EXISTS idx_plex_items_tmdb ON plex_items(tmdb_id)`,
 		`CREATE INDEX IF NOT EXISTS idx_plex_items_tvdb ON plex_items(tvdb_id)`,
 		`CREATE INDEX IF NOT EXISTS idx_plex_items_norm_title ON plex_items(norm_title, year)`,
+		`CREATE INDEX IF NOT EXISTS idx_plex_items_norm_alt ON plex_items(norm_alt_title, year)`,
 		`CREATE INDEX IF NOT EXISTS idx_plex_items_section ON plex_items(section_key)`,
 		`CREATE TABLE IF NOT EXISTS plex_libraries (
 			section_key    TEXT PRIMARY KEY,

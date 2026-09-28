@@ -23,15 +23,16 @@ const AnnotationSourcePlex = "plex"
 // episodes because show-level GUIDs are the reliable join key — Plex's
 // episode-level GUIDs are not dependable.
 type PlexShow struct {
-	RatingKey  string
-	SectionKey string
-	Title      string
-	NormTitle  string
-	Year       int
-	IMDbID     string
-	TMDBID     string
-	TVDBID     string
-	SyncedAt   time.Time
+	RatingKey    string
+	SectionKey   string
+	Title        string
+	NormTitle    string
+	NormAltTitle string // normalized originalTitle, e.g. "shogun" for "Shōgun"
+	Year         int
+	IMDbID       string
+	TMDBID       string
+	TVDBID       string
+	SyncedAt     time.Time
 }
 
 // PlexItem is a cached Plex library entry: a movie or an episode.
@@ -42,6 +43,7 @@ type PlexItem struct {
 	ShowRatingKey string // episodes only
 	Title         string
 	NormTitle     string
+	NormAltTitle  string
 	Year          int
 	Season        int
 	Episode       int
@@ -83,6 +85,46 @@ type Annotation struct {
 	UpdatedAt time.Time       `json:"updated_at"`
 }
 
+// ExternalIDs holds the cross-provider identifiers for one cached entry.
+type ExternalIDs struct {
+	IMDbID string
+	TMDBID string
+	TVDBID string
+}
+
+// Any reports whether at least one identifier is present.
+func (e ExternalIDs) Any() bool {
+	return e.IMDbID != "" || e.TMDBID != "" || e.TVDBID != ""
+}
+
+// PlexKnownExternalIDs returns rating_key → identifiers for everything already
+// cached in a section, across both shows and items.
+//
+// Plex section listings omit external ids, so sync has to fetch them per item.
+// This index lets it skip entries whose ids were resolved on an earlier run.
+func (s *Storage) PlexKnownExternalIDs(sectionKey string) (map[string]ExternalIDs, error) {
+	rows, err := s.db.Query(`
+		SELECT rating_key, imdb_id, tmdb_id, tvdb_id FROM plex_shows WHERE section_key = ?
+		UNION ALL
+		SELECT rating_key, imdb_id, tmdb_id, tvdb_id FROM plex_items WHERE section_key = ?`,
+		sectionKey, sectionKey)
+	if err != nil {
+		return nil, fmt.Errorf("plex known external ids: %w", err)
+	}
+	defer rows.Close()
+
+	out := map[string]ExternalIDs{}
+	for rows.Next() {
+		var key string
+		var ids ExternalIDs
+		if err := rows.Scan(&key, &ids.IMDbID, &ids.TMDBID, &ids.TVDBID); err != nil {
+			return nil, fmt.Errorf("scan plex external ids: %w", err)
+		}
+		out[key] = ids
+	}
+	return out, rows.Err()
+}
+
 // UpsertPlexShows inserts or refreshes cached shows in a single transaction.
 func (s *Storage) UpsertPlexShows(shows []PlexShow) error {
 	if len(shows) == 0 {
@@ -95,24 +137,25 @@ func (s *Storage) UpsertPlexShows(shows []PlexShow) error {
 	defer tx.Rollback()
 
 	stmt, err := tx.Prepare(`
-		INSERT INTO plex_shows (rating_key, section_key, title, norm_title, year, imdb_id, tmdb_id, tvdb_id, synced_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+		INSERT INTO plex_shows (rating_key, section_key, title, norm_title, norm_alt_title, year, imdb_id, tmdb_id, tvdb_id, synced_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(rating_key) DO UPDATE SET
-			section_key = excluded.section_key,
-			title       = excluded.title,
-			norm_title  = excluded.norm_title,
-			year        = excluded.year,
-			imdb_id     = excluded.imdb_id,
-			tmdb_id     = excluded.tmdb_id,
-			tvdb_id     = excluded.tvdb_id,
-			synced_at   = excluded.synced_at`)
+			section_key    = excluded.section_key,
+			title          = excluded.title,
+			norm_title     = excluded.norm_title,
+			norm_alt_title = excluded.norm_alt_title,
+			year           = excluded.year,
+			imdb_id        = excluded.imdb_id,
+			tmdb_id        = excluded.tmdb_id,
+			tvdb_id        = excluded.tvdb_id,
+			synced_at      = excluded.synced_at`)
 	if err != nil {
 		return fmt.Errorf("upsert plex shows: prepare: %w", err)
 	}
 	defer stmt.Close()
 
 	for _, sh := range shows {
-		if _, err := stmt.Exec(sh.RatingKey, sh.SectionKey, sh.Title, sh.NormTitle, sh.Year,
+		if _, err := stmt.Exec(sh.RatingKey, sh.SectionKey, sh.Title, sh.NormTitle, sh.NormAltTitle, sh.Year,
 			sh.IMDbID, sh.TMDBID, sh.TVDBID, sh.SyncedAt); err != nil {
 			return fmt.Errorf("upsert plex show %s: %w", sh.RatingKey, err)
 		}
@@ -133,16 +176,17 @@ func (s *Storage) UpsertPlexItems(items []PlexItem) error {
 
 	stmt, err := tx.Prepare(`
 		INSERT INTO plex_items (
-			rating_key, section_key, content_type, show_rating_key, title, norm_title,
+			rating_key, section_key, content_type, show_rating_key, title, norm_title, norm_alt_title,
 			year, season, episode, imdb_id, tmdb_id, tvdb_id,
 			resolution, codec, hdr, file_size, file_path, synced_at
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(rating_key) DO UPDATE SET
 			section_key     = excluded.section_key,
 			content_type    = excluded.content_type,
 			show_rating_key = excluded.show_rating_key,
 			title           = excluded.title,
 			norm_title      = excluded.norm_title,
+			norm_alt_title  = excluded.norm_alt_title,
 			year            = excluded.year,
 			season          = excluded.season,
 			episode         = excluded.episode,
@@ -162,7 +206,7 @@ func (s *Storage) UpsertPlexItems(items []PlexItem) error {
 
 	for _, it := range items {
 		if _, err := stmt.Exec(it.RatingKey, it.SectionKey, it.ContentType, it.ShowRatingKey,
-			it.Title, it.NormTitle, it.Year, it.Season, it.Episode,
+			it.Title, it.NormTitle, it.NormAltTitle, it.Year, it.Season, it.Episode,
 			it.IMDbID, it.TMDBID, it.TVDBID,
 			it.Resolution, it.Codec, joinHDR(it.HDR), it.FileSize, it.FilePath, it.SyncedAt); err != nil {
 			return fmt.Errorf("upsert plex item %s: %w", it.RatingKey, err)
@@ -211,11 +255,11 @@ func (s *Storage) LookupPlexShowByIDs(imdbID, tmdbID, tvdbID string) (*PlexShow,
 	}
 
 	row := s.db.QueryRow(`
-		SELECT rating_key, section_key, title, norm_title, year, imdb_id, tmdb_id, tvdb_id, synced_at
+		SELECT rating_key, section_key, title, norm_title, norm_alt_title, year, imdb_id, tmdb_id, tvdb_id, synced_at
 		FROM plex_shows WHERE `+strings.Join(conds, " OR ")+` LIMIT 1`, args...)
 
 	var sh PlexShow
-	err := row.Scan(&sh.RatingKey, &sh.SectionKey, &sh.Title, &sh.NormTitle, &sh.Year,
+	err := row.Scan(&sh.RatingKey, &sh.SectionKey, &sh.Title, &sh.NormTitle, &sh.NormAltTitle, &sh.Year,
 		&sh.IMDbID, &sh.TMDBID, &sh.TVDBID, &sh.SyncedAt)
 	if err == sql.ErrNoRows {
 		return nil, nil
@@ -226,18 +270,20 @@ func (s *Storage) LookupPlexShowByIDs(imdbID, tmdbID, tvdbID string) (*PlexShow,
 	return &sh, nil
 }
 
-// LookupPlexShowByTitle finds a cached show by normalized title. This is the
+// LookupPlexShowByTitle finds a cached show by normalized title, matching
+// either the display title or the original-language title. This is the
 // lower-confidence fallback used when no external id resolved.
 func (s *Storage) LookupPlexShowByTitle(normTitle string) (*PlexShow, error) {
 	if normTitle == "" {
 		return nil, nil
 	}
 	row := s.db.QueryRow(`
-		SELECT rating_key, section_key, title, norm_title, year, imdb_id, tmdb_id, tvdb_id, synced_at
-		FROM plex_shows WHERE norm_title = ? LIMIT 1`, normTitle)
+		SELECT rating_key, section_key, title, norm_title, norm_alt_title, year, imdb_id, tmdb_id, tvdb_id, synced_at
+		FROM plex_shows WHERE norm_title = ? OR (norm_alt_title != '' AND norm_alt_title = ?) LIMIT 1`,
+		normTitle, normTitle)
 
 	var sh PlexShow
-	err := row.Scan(&sh.RatingKey, &sh.SectionKey, &sh.Title, &sh.NormTitle, &sh.Year,
+	err := row.Scan(&sh.RatingKey, &sh.SectionKey, &sh.Title, &sh.NormTitle, &sh.NormAltTitle, &sh.Year,
 		&sh.IMDbID, &sh.TMDBID, &sh.TVDBID, &sh.SyncedAt)
 	if err == sql.ErrNoRows {
 		return nil, nil
@@ -270,21 +316,23 @@ func (s *Storage) LookupPlexMovieByIDs(imdbID, tmdbID, tvdbID string) (*PlexItem
 	return scanPlexItem(row)
 }
 
-// LookupPlexMovieByTitle finds a cached movie by normalized title, accepting a
-// one-year drift because release year and Plex's year can legitimately differ.
+// LookupPlexMovieByTitle finds a cached movie by normalized title, matching
+// either the display or original-language title and accepting a one-year
+// drift because release year and Plex's year can legitimately differ.
 func (s *Storage) LookupPlexMovieByTitle(normTitle string, year int) (*PlexItem, error) {
 	if normTitle == "" {
 		return nil, nil
 	}
+	const titleMatch = ` AND (norm_title = ? OR (norm_alt_title != '' AND norm_alt_title = ?))`
 	if year <= 0 {
 		row := s.db.QueryRow(plexItemSelect+`
-			WHERE content_type = 'movie' AND norm_title = ? LIMIT 1`, normTitle)
+			WHERE content_type = 'movie'`+titleMatch+` LIMIT 1`, normTitle, normTitle)
 		return scanPlexItem(row)
 	}
 	row := s.db.QueryRow(plexItemSelect+`
-		WHERE content_type = 'movie' AND norm_title = ?
+		WHERE content_type = 'movie'`+titleMatch+`
 		  AND (year = 0 OR ABS(year - ?) <= 1)
-		ORDER BY ABS(year - ?) LIMIT 1`, normTitle, year, year)
+		ORDER BY ABS(year - ?) LIMIT 1`, normTitle, normTitle, year, year)
 	return scanPlexItem(row)
 }
 
@@ -453,7 +501,7 @@ func (s *Storage) CountAnnotationsByKind() (map[string]int, error) {
 }
 
 const plexItemSelect = `
-	SELECT rating_key, section_key, content_type, show_rating_key, title, norm_title,
+	SELECT rating_key, section_key, content_type, show_rating_key, title, norm_title, norm_alt_title,
 	       year, season, episode, imdb_id, tmdb_id, tvdb_id,
 	       resolution, codec, hdr, file_size, file_path, synced_at
 	FROM plex_items`
@@ -462,7 +510,7 @@ func scanPlexItem(row *sql.Row) (*PlexItem, error) {
 	var it PlexItem
 	var hdr string
 	err := row.Scan(&it.RatingKey, &it.SectionKey, &it.ContentType, &it.ShowRatingKey,
-		&it.Title, &it.NormTitle, &it.Year, &it.Season, &it.Episode,
+		&it.Title, &it.NormTitle, &it.NormAltTitle, &it.Year, &it.Season, &it.Episode,
 		&it.IMDbID, &it.TMDBID, &it.TVDBID,
 		&it.Resolution, &it.Codec, &hdr, &it.FileSize, &it.FilePath, &it.SyncedAt)
 	if err == sql.ErrNoRows {
