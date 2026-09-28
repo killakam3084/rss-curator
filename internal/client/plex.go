@@ -196,10 +196,12 @@ type plexMetadata struct {
 type plexMedia struct {
 	VideoResolution string `json:"videoResolution"`
 	VideoCodec      string `json:"videoCodec"`
-	Bitrate         int    `json:"bitrate"`
-	// ProxyType is non-zero on Plex-generated "optimized versions", which are
-	// transcodes of the real file and must never be read as what is owned.
+	Duration        int64  `json:"duration"`
+	// ProxyType and Target are set on Plex-generated "optimized versions",
+	// which are transcodes of the real file and must never be read as what is
+	// owned. Not every server populates both, so each is checked independently.
 	ProxyType int        `json:"proxyType"`
+	Target    string     `json:"target"`
 	Title     string     `json:"title"`
 	Part      []plexPart `json:"Part"`
 }
@@ -303,14 +305,19 @@ func (m plexMetadata) toItem() PlexItem {
 }
 
 // selectMedia picks the Media entry that represents what is actually owned.
-// A library item can carry several: the original file plus any Plex-generated
-// optimized versions (a 4K DV original alongside a "Tablet-1080p-Low" H.264
-// transcode). Reading the wrong one makes a 2160p release look like a
-// duplicate of a 1080p copy the user never downloaded.
+// A library item can carry several: the original file, any number of
+// Plex-generated optimized versions at assorted resolutions, and sample files
+// that release groups ship alongside the real release. Reading the wrong one
+// makes a 2160p release look like a duplicate of a 1080p copy the user never
+// downloaded.
+//
+// Ranking among real files is resolution, then duration, then size. Bitrate is
+// deliberately not used — a 100-second sample routinely has a *higher* bitrate
+// than the full-length file it was cut from.
 func selectMedia(media []plexMedia) *plexMedia {
 	candidates := make([]plexMedia, 0, len(media))
 	for _, m := range media {
-		if m.ProxyType == 0 {
+		if !isOptimizedVersion(m) {
 			candidates = append(candidates, m)
 		}
 	}
@@ -323,13 +330,44 @@ func selectMedia(media []plexMedia) *plexMedia {
 
 	best := 0
 	for i := 1; i < len(candidates); i++ {
-		bestRank := plexResolutionRank(candidates[best].VideoResolution)
-		rank := plexResolutionRank(candidates[i].VideoResolution)
-		if rank > bestRank || (rank == bestRank && candidates[i].Bitrate > candidates[best].Bitrate) {
+		if mediaBetter(candidates[i], candidates[best]) {
 			best = i
 		}
 	}
 	return &candidates[best]
+}
+
+// isOptimizedVersion reports whether a Media entry is a Plex transcode rather
+// than the source file. Servers are inconsistent about which marker they set,
+// so any one of the three is treated as conclusive.
+func isOptimizedVersion(m plexMedia) bool {
+	if m.ProxyType != 0 || strings.TrimSpace(m.Target) != "" {
+		return true
+	}
+	for _, p := range m.Part {
+		if strings.Contains(p.File, "/Plex Versions/") {
+			return true
+		}
+	}
+	return false
+}
+
+func mediaBetter(a, b plexMedia) bool {
+	if ra, rb := plexResolutionRank(a.VideoResolution), plexResolutionRank(b.VideoResolution); ra != rb {
+		return ra > rb
+	}
+	if a.Duration != b.Duration {
+		return a.Duration > b.Duration
+	}
+	return mediaSize(a) > mediaSize(b)
+}
+
+func mediaSize(m plexMedia) int64 {
+	var total int64
+	for _, p := range m.Part {
+		total += p.Size
+	}
+	return total
 }
 
 // extractPlexHDR derives canonical HDR tags from the video stream. Plex has no

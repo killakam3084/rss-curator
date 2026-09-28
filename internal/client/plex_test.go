@@ -344,8 +344,8 @@ func TestSelectMediaSkipsOptimizedVersions(t *testing.T) {
 	// "Tablet-1080p-Low" transcode. Reading the transcode would make a 2160p
 	// release look like a duplicate of a 1080p copy the user never downloaded.
 	media := []plexMedia{
-		{VideoResolution: "4k", VideoCodec: "hevc", Bitrate: 25490, Title: "Original"},
-		{VideoResolution: "1080", VideoCodec: "h264", Bitrate: 5115, ProxyType: 42, Title: "Tablet-1080p-Low"},
+		{VideoResolution: "4k", VideoCodec: "hevc", Duration: 2934556, Title: "Original"},
+		{VideoResolution: "1080", VideoCodec: "h264", Duration: 2934580, ProxyType: 42, Title: "Tablet-1080p-Low"},
 	}
 	got := selectMedia(media)
 	if got == nil || got.Title != "Original" {
@@ -359,6 +359,30 @@ func TestSelectMediaSkipsOptimizedVersions(t *testing.T) {
 	}
 }
 
+func TestSelectMediaSkipsSampleFiles(t *testing.T) {
+	// Verbatim from a live library: the release ships a Sample.mkv alongside
+	// the feature. Both are 4k and neither is a Plex proxy, and the sample has
+	// the HIGHER bitrate — which is why bitrate must not be the tie-breaker.
+	media := []plexMedia{
+		{
+			VideoResolution: "4k", VideoCodec: "hevc", Duration: 8447333, Title: "feature",
+			Part: []plexPart{{Size: 26999399756, File: "/media/movies/A.Complete.Unknown.2025.mkv"}},
+		},
+		{
+			VideoResolution: "4k", VideoCodec: "hevc", Duration: 102000, Title: "sample",
+			Part: []plexPart{{Size: 371383739, File: "/media/movies/Sample.mkv"}},
+		},
+	}
+
+	got := selectMedia(media)
+	if got == nil || got.Title != "feature" {
+		t.Fatalf("selectMedia = %+v, want the feature not the sample", got)
+	}
+	if got := selectMedia([]plexMedia{media[1], media[0]}); got.Title != "feature" {
+		t.Fatalf("selectMedia(reversed) = %q, want feature", got.Title)
+	}
+}
+
 func TestSelectMediaFallsBackWhenAllAreProxies(t *testing.T) {
 	media := []plexMedia{{VideoResolution: "1080", ProxyType: 42, Title: "only-proxy"}}
 	if got := selectMedia(media); got == nil || got.Title != "only-proxy" {
@@ -369,21 +393,69 @@ func TestSelectMediaFallsBackWhenAllAreProxies(t *testing.T) {
 	}
 }
 
-func TestSelectMediaPrefersHigherResolutionThenBitrate(t *testing.T) {
-	media := []plexMedia{
-		{VideoResolution: "1080", Bitrate: 9000, Title: "hd"},
-		{VideoResolution: "4k", Bitrate: 100, Title: "uhd"},
+func TestIsOptimizedVersionMarkers(t *testing.T) {
+	// Servers are inconsistent about which marker they set, so each one alone
+	// must be enough to disqualify a transcode.
+	tests := []struct {
+		name  string
+		media plexMedia
+		want  bool
+	}{
+		{"source file", plexMedia{Part: []plexPart{{File: "/media/movies/Film.mkv"}}}, false},
+		{"proxyType only", plexMedia{ProxyType: 42}, true},
+		{"target only", plexMedia{Target: "Tablet-1080p-Low"}, true},
+		{"plex versions path only", plexMedia{
+			Part: []plexPart{{File: "/media/movies/Film/Plex Versions/Optimized for Mobile/Film.mp4"}},
+		}, true},
+		{"blank target is not a marker", plexMedia{Target: "  "}, false},
 	}
-	if got := selectMedia(media); got.Title != "uhd" {
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := isOptimizedVersion(tt.media); got != tt.want {
+				t.Errorf("isOptimizedVersion = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestSelectMediaSkipsHigherResolutionOptimizedVersion(t *testing.T) {
+	// An optimized version must lose even when it somehow outranks the source
+	// on resolution, because it is not what the user actually owns.
+	media := []plexMedia{
+		{VideoResolution: "1080", Duration: 9_000_000, Title: "source",
+			Part: []plexPart{{File: "/media/tv/Show S01E01.mkv"}}},
+		{VideoResolution: "4k", Duration: 9_000_000, Title: "optimized", Target: "Apple TV",
+			Part: []plexPart{{File: "/media/tv/Show S01E01/Plex Versions/Apple TV/S01E01.mp4"}}},
+	}
+	if got := selectMedia(media); got.Title != "source" {
+		t.Errorf("selectMedia = %q, want source", got.Title)
+	}
+}
+
+func TestSelectMediaPrefersHigherResolutionThenDurationThenSize(t *testing.T) {
+	resolutionWins := []plexMedia{
+		{VideoResolution: "1080", Duration: 9_000_000, Title: "hd"},
+		{VideoResolution: "4k", Duration: 100, Title: "uhd"},
+	}
+	if got := selectMedia(resolutionWins); got.Title != "uhd" {
 		t.Errorf("selectMedia = %q, want uhd", got.Title)
 	}
 
-	sameRes := []plexMedia{
-		{VideoResolution: "1080", Bitrate: 3000, Title: "low"},
-		{VideoResolution: "1080", Bitrate: 9000, Title: "high"},
+	durationWins := []plexMedia{
+		{VideoResolution: "1080", Duration: 100, Title: "short"},
+		{VideoResolution: "1080", Duration: 9_000_000, Title: "full"},
 	}
-	if got := selectMedia(sameRes); got.Title != "high" {
-		t.Errorf("selectMedia = %q, want high", got.Title)
+	if got := selectMedia(durationWins); got.Title != "full" {
+		t.Errorf("selectMedia = %q, want full", got.Title)
+	}
+
+	// Equal duration falls through to total part size.
+	sizeWins := []plexMedia{
+		{VideoResolution: "1080", Duration: 100, Title: "small", Part: []plexPart{{Size: 1}}},
+		{VideoResolution: "1080", Duration: 100, Title: "big", Part: []plexPart{{Size: 2}}},
+	}
+	if got := selectMedia(sizeWins); got.Title != "big" {
+		t.Errorf("selectMedia = %q, want big", got.Title)
 	}
 }
 
@@ -442,7 +514,7 @@ const mobLandEpisodeJSON = `{"MediaContainer":{"size":1,"Metadata":[{
   "Media":[
     {
       "id":27570,"bitrate":25490,"videoCodec":"hevc","videoResolution":"4k",
-      "container":"mkv","videoProfile":"main 10","title":"Original",
+      "duration":2934556,"container":"mkv","videoProfile":"main 10","title":"Original",
       "Part":[{
         "id":27624,
         "file":"/mnt/cell_block_d/media/video/television/MobLand S02E01/MobLand S02E01.mkv",
@@ -458,7 +530,7 @@ const mobLandEpisodeJSON = `{"MediaContainer":{"size":1,"Metadata":[{
     },
     {
       "id":27573,"bitrate":5115,"videoCodec":"h264","videoResolution":"1080",
-      "container":"mp4","proxyType":42,"target":"Tablet-1080p-Low",
+      "duration":2934580,"container":"mp4","proxyType":42,"target":"Tablet-1080p-Low",
       "videoProfile":"constrained baseline","title":"Tablet-1080p-Low",
       "Part":[{
         "id":27627,
@@ -512,6 +584,78 @@ func TestPlexItemNotFound(t *testing.T) {
 		t.Errorf("Item = %+v, want nil for an empty container", item)
 	}
 }
+
+func TestPlexMovieRealPayload(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(amadeusMovieJSON))
+	}))
+	defer srv.Close()
+
+	items := collectItems(t, func(onPage func([]PlexItem) error) error {
+		return mustPlex(t, srv.URL).Movies(context.Background(), "4", onPage)
+	})
+	if len(items) != 1 {
+		t.Fatalf("got %d items, want 1 — Extras and Related must not be parsed as library entries", len(items))
+	}
+	got := items[0]
+
+	if got.RatingKey != "17997" || got.Title != "Amadeus" || got.Year != 1984 {
+		t.Errorf("item = %+v", got)
+	}
+	if got.IMDbID != "tt0086879" || got.TMDBID != "279" || got.TVDBID != "3982" {
+		t.Errorf("guids = %+v", got)
+	}
+	if got.Resolution != "1080P" {
+		t.Errorf("Resolution = %q, want 1080P", got.Resolution)
+	}
+	if got.Codec != "vc1" {
+		t.Errorf("Codec = %q, want vc1 passed through unchanged", got.Codec)
+	}
+	if len(got.HDR) != 0 {
+		t.Errorf("HDR = %v, want empty for a bt709 SDR remux", got.HDR)
+	}
+	if got.FileSize != 25890801371 {
+		t.Errorf("FileSize = %d", got.FileSize)
+	}
+}
+
+// amadeusMovieJSON is a live-server movie entry: an SDR VC-1 remux that also
+// carries trailer Extras and a Related hub holding a different film. Only the
+// top-level entry may be read as a library item.
+const amadeusMovieJSON = `{"MediaContainer":{"size":1,"Metadata":[{
+  "ratingKey":"17997",
+  "type":"movie",
+  "title":"Amadeus",
+  "year":1984,
+  "guid":"plex://movie/5d776825151a60001f24a5d2",
+  "Media":[{
+    "id":17100,"duration":10825696,"bitrate":19133,"videoCodec":"vc1",
+    "videoResolution":"1080","container":"mkv","videoProfile":"advanced",
+    "Part":[{
+      "id":17154,
+      "file":"/mnt/cell_block_d/media/video/movies/Amadeus 1984 Director's Cut 1080p Bluray Remux VC-1.mkv",
+      "size":25890801371,
+      "Stream":[
+        {"id":39694,"streamType":1,"codec":"vc1","bitDepth":8,"colorPrimaries":"bt709",
+         "colorSpace":"bt709","colorTrc":"bt709","profile":"advanced",
+         "displayTitle":"1080p","extendedDisplayTitle":"1080p (VC1)"},
+        {"id":39695,"streamType":2,"codec":"truehd","displayTitle":"English (TRUEHD 5.1)"}
+      ]
+    }]
+  }],
+  "Guid":[{"id":"imdb://tt0086879"},{"id":"tmdb://279"},{"id":"tvdb://3982"}],
+  "Extras":{"size":1,"Metadata":[{
+    "ratingKey":"18000","type":"clip","title":"Amadeus (4K Trailer)","subtype":"trailer",
+    "Media":[{"id":17104,"duration":119000,"videoCodec":"h264","videoResolution":"1080",
+      "Part":[{"id":17158,"size":0}]}]
+  }]},
+  "Related":{"Hub":[{"hubIdentifier":"movie.similar","Metadata":[{
+    "ratingKey":"16517","type":"movie","title":"A Complete Unknown","year":2024,
+    "Guid":[{"id":"imdb://tt11563598"}],
+    "Media":[{"id":14599,"duration":8447333,"videoCodec":"hevc","videoResolution":"4k",
+      "Part":[{"id":14652,"size":26999399756}]}]
+  }]}]}
+}]}}`
 
 func mustPlex(t *testing.T, baseURL string) *Plex {
 	t.Helper()
