@@ -17,12 +17,19 @@ var leadingArticles = []string{"the ", "a ", "an "}
 // would need golang.org/x/text; this covers the practical cases without
 // adding a dependency.
 var diacriticFold = map[rune]rune{
-	'à': 'a', 'á': 'a', 'â': 'a', 'ã': 'a', 'ä': 'a', 'å': 'a',
-	'è': 'e', 'é': 'e', 'ê': 'e', 'ë': 'e',
-	'ì': 'i', 'í': 'i', 'î': 'i', 'ï': 'i',
-	'ò': 'o', 'ó': 'o', 'ô': 'o', 'õ': 'o', 'ö': 'o', 'ø': 'o',
-	'ù': 'u', 'ú': 'u', 'û': 'u', 'ü': 'u',
-	'ñ': 'n', 'ç': 'c', 'ý': 'y', 'ÿ': 'y',
+	'à': 'a', 'á': 'a', 'â': 'a', 'ã': 'a', 'ä': 'a', 'å': 'a', 'ā': 'a', 'ă': 'a',
+	'è': 'e', 'é': 'e', 'ê': 'e', 'ë': 'e', 'ē': 'e', 'ĕ': 'e', 'ě': 'e',
+	'ì': 'i', 'í': 'i', 'î': 'i', 'ï': 'i', 'ī': 'i', 'ĭ': 'i',
+	'ò': 'o', 'ó': 'o', 'ô': 'o', 'õ': 'o', 'ö': 'o', 'ø': 'o', 'ō': 'o', 'ŏ': 'o',
+	'ù': 'u', 'ú': 'u', 'û': 'u', 'ü': 'u', 'ū': 'u', 'ŭ': 'u',
+	'ñ': 'n', 'ń': 'n', 'ç': 'c', 'ć': 'c', 'č': 'c',
+	'ý': 'y', 'ÿ': 'y', 'š': 's', 'ś': 's', 'ž': 'z', 'ź': 'z', 'ż': 'z',
+	'ł': 'l', 'đ': 'd', 'ď': 'd', 'ť': 't', 'ř': 'r', 'ğ': 'g',
+}
+
+// diacriticExpand covers characters that fold to more than one ASCII letter.
+var diacriticExpand = map[rune]string{
+	'æ': "ae", 'œ': "oe", 'ß': "ss", 'þ': "th", 'ð': "d",
 }
 
 // NormalizeTitle reduces a show or movie title to a comparison key.
@@ -40,16 +47,22 @@ func NormalizeTitle(s string) string {
 			b.WriteRune(folded)
 			continue
 		}
+		if expanded, ok := diacriticExpand[r]; ok {
+			b.WriteString(expanded)
+			continue
+		}
 		switch {
-		case r == '.' || r == '_' || r == '-' || unicode.IsSpace(r):
+		// unicode.Dash covers the hyphen-minus plus the en/em dashes Plex
+		// titles use, e.g. "Star Wars: Maul – Shadow Lord".
+		case r == '.' || r == '_' || unicode.IsSpace(r) || unicode.Is(unicode.Dash, r):
 			b.WriteRune(' ')
 		case r == '&':
 			b.WriteString(" and ")
 		case unicode.IsLetter(r) || unicode.IsDigit(r):
 			b.WriteRune(r)
 		default:
-			// Drop apostrophes and the like without introducing a word break,
-			// so "don't" and "dont" agree.
+			// Colons and apostrophes land here. Dropping the apostrophe
+			// without a word break keeps "don't" and "dont" in agreement.
 		}
 	}
 
@@ -62,7 +75,41 @@ func NormalizeTitle(s string) string {
 			break
 		}
 	}
-	return strings.TrimSpace(out)
+	return collapseInitials(strings.TrimSpace(out))
+}
+
+// collapseInitials rejoins runs of single letters left behind by dotted
+// acronyms, so "U.S.A." and "USA" both reduce to "usa".
+func collapseInitials(s string) string {
+	fields := strings.Fields(s)
+	if len(fields) < 2 {
+		return s
+	}
+
+	out := make([]string, 0, len(fields))
+	for i := 0; i < len(fields); {
+		j := i
+		for j < len(fields) && len([]rune(fields[j])) == 1 && isLetterToken(fields[j]) {
+			j++
+		}
+		if j-i >= 2 {
+			out = append(out, strings.Join(fields[i:j], ""))
+			i = j
+			continue
+		}
+		out = append(out, fields[i])
+		i++
+	}
+	return strings.Join(out, " ")
+}
+
+func isLetterToken(s string) bool {
+	for _, r := range s {
+		if !unicode.IsLetter(r) {
+			return false
+		}
+	}
+	return s != ""
 }
 
 // stripTrailingYear removes a trailing 4-digit year (1900–2099) so that

@@ -56,3 +56,50 @@ func TestNormalizeTitleAgreesAcrossSources(t *testing.T) {
 		}
 	}
 }
+
+// TestNormalizeTitleRealLibraryTitles uses titles taken verbatim from a live
+// Plex TV library, paired with how a release group would name the same show.
+func TestNormalizeTitleRealLibraryTitles(t *testing.T) {
+	pairs := [][2]string{
+		{"Shōgun", "Shogun"},       // macron
+		{"Carnivàle", "Carnivale"}, // grave accent
+		{"The Law According to Lidia Poët", "The.Law.According.to.Lidia.Poet"}, // diaeresis
+		{"Star Wars: Maul – Shadow Lord", "Star.Wars.Maul.Shadow.Lord"},        // en dash
+		{"Asia (2024)", "Asia"}, // year suffix Plex adds
+		{"Yellowstone (2018)", "Yellowstone"},
+		{"INVINCIBLE (2021)", "Invincible"}, // caps plus year suffix
+		{"Avatar: The Last Airbender (2024)", "Avatar.The.Last.Airbender"},
+		{"Your Friends & Neighbors", "Your.Friends.and.Neighbors"},
+		{"Spider-Noir", "Spider.Noir"},
+		{"The Diplomat (US)", "The Diplomat (US)"},
+		{"Chappelle's Show", "Chappelles.Show"},
+		{"RuPaul's Drag Race", "RuPauls.Drag.Race"},
+		{"STAX: Soulsville U.S.A.", "STAX.Soulsville.USA"},
+		{"The U.S. and the Holocaust", "The.US.and.the.Holocaust"},
+	}
+
+	for _, p := range pairs {
+		if a, b := NormalizeTitle(p[0]), NormalizeTitle(p[1]); a != b {
+			t.Errorf("NormalizeTitle(%q)=%q != NormalizeTitle(%q)=%q", p[0], a, p[1], b)
+		}
+	}
+}
+
+func TestNormalizeTitleKeepsDistinctShowsApart(t *testing.T) {
+	// Near-miss titles from the same library that must NOT collapse together,
+	// otherwise reconcile would annotate the wrong show.
+	distinct := [][2]string{
+		{"Outlander", "Outlander: Blood of My Blood"},
+		{"Spartacus", "Spartacus: House of Ashur"},
+		{"The American Revolution", "The Americas"},
+		{"Turning Point: The Vietnam War", "The Vietnam War (2017)"},
+		{"American Manhunt: O.J. Simpson", "American Manhunt: Osama Bin Laden"},
+		{"Star Wars: The Bad Batch", "Star Wars: Tales of the Empire"},
+	}
+
+	for _, p := range distinct {
+		if a, b := NormalizeTitle(p[0]), NormalizeTitle(p[1]); a == b {
+			t.Errorf("NormalizeTitle collapsed distinct shows %q and %q to %q", p[0], p[1], a)
+		}
+	}
+}
