@@ -167,6 +167,32 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
 
+  mesh-uat:
+    # Validate the exact RC artifact against deterministic Plex, qBittorrent,
+    # AI and RSS mocks before anyone tags or deploys it.
+    if: startsWith(github.ref, 'refs/heads/release/')
+    needs: [rc]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Create mesh UAT environment
+        run: cp uat-mesh.env.sample uat-mesh.env
+
+      - name: Run deterministic mesh UAT
+        run: |
+          short_sha=$(git rev-parse --short HEAD)
+          make uat-mesh-up CTR=docker REF="rc-${short_sha}"
+          make uat-mesh-validate CTR=docker
+
+      - name: Tear down mesh UAT
+        if: always()
+        run: make uat-mesh-down CTR=docker
+
   promote:
     # Only runs on version tag pushes. Does NOT rebuild from source — it
     # retags the exact rc-<shortsha> manifest that was already built, pushed,

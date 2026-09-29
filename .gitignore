@@ -8,6 +8,7 @@ coverage.out
 # Local dev environment — never commit real credentials
 local.env
 uat.env
+uat-mesh.env
 .env
 
 # Runtime data and logs

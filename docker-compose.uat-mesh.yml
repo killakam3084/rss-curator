@@ -1,0 +1,68 @@
+# Deterministic dependency mesh for validating a published curator RC.
+# The mesh replaces live Plex, qBittorrent, Ollama and RSS services.
+#
+# Usage:
+#   cp uat.env.sample uat-mesh.env
+#   make uat-mesh-up REF=rc-<shortsha>
+#   make uat-mesh-validate
+#   make uat-mesh-down
+
+services:
+  mesh:
+    build:
+      context: ./tests/mesh
+      dockerfile: Dockerfile
+    image: rss-curator-uat-mesh:local
+    restart: "no"
+
+  curator:
+    image: ghcr.io/killakam3084/rss-curator:${RSS_CURATOR_IMAGE_REF:?RSS_CURATOR_IMAGE_REF must be set}
+    restart: "no"
+    depends_on:
+      mesh:
+        condition: service_started
+    env_file:
+      - uat-mesh.env
+    environment:
+      CURATOR_API_PORT: 8081
+      STORAGE_PATH: /app/data/curator.db
+      CURATOR_USERNAME: admin
+      CURATOR_AI_PROVIDER: ollama
+      CURATOR_AI_HOST: http://mesh:32400
+      CURATOR_AI_SCORER_MODEL: uat-model
+      CURATOR_AI_ENRICHER_MODEL: uat-model
+      CURATOR_PLEX_ENABLED: "true"
+      CURATOR_PLEX_SYNC_ENABLED: "false"
+      CURATOR_PLEX_URL: http://mesh:32400
+      CURATOR_PLEX_TOKEN: uat-plex-token
+      CURATOR_PLEX_RECONCILE_ON_FEED_CHECK: "true"
+    ports:
+      - "8081:8081"
+    volumes:
+      - uat-mesh-curator-data:/app/data
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8081/api/health"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+
+  hurl:
+    profiles: ["validate"]
+    image: ghcr.io/orange-opensource/hurl:4.3.0
+    entrypoint: ["/bin/sh", "/tests/e2e/run-mesh.sh"]
+    depends_on:
+      curator:
+        condition: service_healthy
+    volumes:
+      - ./tests:/tests
+      - ./tests/e2e/results:/results
+    environment:
+      HURL_base: http://curator:8081
+      HURL_username: admin
+      HURL_password: ${CURATOR_PASSWORD:?CURATOR_PASSWORD must be set in uat-mesh.env}
+      RESULTS_PREFIX: uat-mesh
+
+volumes:
+  uat-mesh-curator-data:
+    driver: local

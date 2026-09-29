@@ -994,6 +994,8 @@ func cmdServe(cfg models.Config, store *storage.Storage, buf *logbuffer.Buffer, 
 		AuthPassword:          authPassword,
 		PlexURL:               os.Getenv("CURATOR_PLEX_URL"),
 		PlexToken:             os.Getenv("CURATOR_PLEX_TOKEN"),
+		PlexEnabled:           os.Getenv("CURATOR_PLEX_ENABLED") == "true",
+		PlexSyncEnabled:       os.Getenv("CURATOR_PLEX_SYNC_ENABLED") == "true",
 	}
 	if err := settingsMgr.Load(envDefaults); err != nil {
 		fmt.Fprintf(os.Stderr, "[Serve] Warning: could not load settings from DB: %v\n", err)

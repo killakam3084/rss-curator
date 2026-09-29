@@ -121,6 +121,8 @@ type EnvDefaults struct {
 	AuthPassword          string
 	PlexURL               string
 	PlexToken             string
+	PlexEnabled           bool
+	PlexSyncEnabled       bool
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
@@ -387,6 +389,12 @@ func applyEnvDefaults(s *AppSettings, env EnvDefaults) {
 	}
 	if env.PlexToken != "" {
 		s.Plex.Token = env.PlexToken
+	}
+	if env.PlexEnabled {
+		s.Plex.Enabled = true
+	}
+	if env.PlexSyncEnabled {
+		s.Plex.SyncEnabled = true
 	}
 }
 

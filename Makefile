@@ -2,7 +2,8 @@
         dev-up dev-down dev-logs dev-rebuild dev-clean \
         image-build image-push image-clean \
         rc-release \
-        uat-up uat-down uat-logs uat-validate \
+		uat-up uat-down uat-logs uat-validate \
+		uat-mesh-up uat-mesh-down uat-mesh-validate \
         test-e2e validate-smoke
 
 BINARY_NAME=curator
@@ -46,6 +47,9 @@ help:
 	@echo "  make uat-validate                 Run Hurl smoke+auth suite against it"
 	@echo "  make uat-logs                      Tail logs from the running UAT stack"
 	@echo "  make uat-down                      Stop and remove the UAT stack"
+	@echo "  make uat-mesh-up REF=rc-<sha>      Run deterministic Plex/QB/AI/RSS mesh"
+	@echo "  make uat-mesh-validate             Run functional mesh Hurl suite"
+	@echo "  make uat-mesh-down                 Stop and remove the mesh UAT stack"
 	@echo ""
 	@echo "E2E / functional validation:"
 	@echo "  make test-e2e       Build fresh stack + run smoke suite (CI)"
@@ -197,6 +201,34 @@ uat-logs:
 uat-validate:
 	@mkdir -p tests/e2e/results
 	$(CTR) compose --env-file uat.env -f docker-compose.uat.yml --profile validate run --rm hurl
+
+# Deterministic dependency-mesh UAT. The mesh replaces live Plex,
+# qBittorrent, Ollama-compatible AI, and RSS services with fixtures.
+uat-mesh-up:
+	@if [ -z "$(REF)" ]; then \
+		echo "Error: REF must be set, e.g. make uat-mesh-up REF=rc-abc1234"; \
+		exit 1; \
+	fi
+	@if [ ! -f uat-mesh.env ]; then \
+		echo "Error: uat-mesh.env not found"; \
+		echo "Copy uat-mesh.env.sample to uat-mesh.env"; \
+		exit 1; \
+	fi
+	@if grep -q '^RSS_CURATOR_IMAGE_REF=' uat-mesh.env; then \
+		sed -i.bak 's/^RSS_CURATOR_IMAGE_REF=.*/RSS_CURATOR_IMAGE_REF=$(REF)/' uat-mesh.env && rm -f uat-mesh.env.bak; \
+	else \
+		echo "RSS_CURATOR_IMAGE_REF=$(REF)" >> uat-mesh.env; \
+	fi
+	@mkdir -p tests/e2e/results
+	$(CTR) compose --project-name rss-curator-uat-mesh --env-file uat-mesh.env -f docker-compose.uat-mesh.yml up -d --build mesh curator
+	@echo "✓ Mesh UAT stack running ($(REF)) — API at http://localhost:8081"
+
+uat-mesh-down:
+	$(CTR) compose --project-name rss-curator-uat-mesh --env-file uat-mesh.env -f docker-compose.uat-mesh.yml down --volumes
+
+uat-mesh-validate:
+	@mkdir -p tests/e2e/results
+	$(CTR) compose --project-name rss-curator-uat-mesh --env-file uat-mesh.env -f docker-compose.uat-mesh.yml --profile validate run --rm hurl
 
 # ── E2E / functional validation ──────────────────────────────────────────
 
