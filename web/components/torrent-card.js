@@ -18,6 +18,44 @@
                 const menuOpen = ref(false);
                 const infoOpen = ref(false);
 
+                // The Plex reconciler writes at most one verdict per torrent.
+                const plexAnnotation = Vue.computed(() => {
+                    const anns = props.torrent.annotations || [];
+                    return anns.find(a => a.source === 'plex') || null;
+                });
+
+                const plexDetail = Vue.computed(() => {
+                    const a = plexAnnotation.value;
+                    return (a && a.detail) ? a.detail : {};
+                });
+
+                // A title-tier match is a normalized-string guess rather than a
+                // provider-id match, so it is shown as tentative.
+                const plexUncertain = Vue.computed(() => plexDetail.value.match_tier === 'title');
+
+                const plexLabel = Vue.computed(() => {
+                    const a = plexAnnotation.value;
+                    if (!a) return '';
+                    const base = a.kind === 'library_upgrade' ? 'upgrade' : 'in library';
+                    return plexUncertain.value ? '~' + base : base;
+                });
+
+                const plexTooltip = Vue.computed(() => {
+                    const a = plexAnnotation.value;
+                    if (!a) return '';
+                    const d = plexDetail.value;
+                    const parts = [];
+                    if (d.reason) parts.push(d.reason);
+                    const copy = [d.plex_quality, d.plex_codec, (d.plex_hdr || []).join('+')]
+                        .filter(Boolean).join(' ');
+                    if (copy) parts.push('library copy: ' + copy);
+                    if (d.plex_title) parts.push('matched: ' + d.plex_title);
+                    parts.push(plexUncertain.value
+                        ? 'matched on title only — verify before bulk action'
+                        : 'matched on ' + (d.matched_on || 'id'));
+                    return parts.join('\n');
+                });
+
                 const formatSize = (bytes) => {
                     const units = ['B', 'KB', 'MB', 'GB'];
                     let size = bytes;
@@ -36,7 +74,7 @@
                 onMounted(() => { document.addEventListener('click', closeMenu); });
                 onUnmounted(() => { document.removeEventListener('click', closeMenu); });
 
-                return { menuOpen, infoOpen, formatSize, fmtDate };
+                return { menuOpen, infoOpen, formatSize, fmtDate, plexAnnotation, plexDetail, plexLabel, plexTooltip, plexUncertain };
             },
 
             template: `
@@ -145,6 +183,17 @@
                             <div v-if="torrent.ai_scored && torrent.match_confidence >= 0 && torrent.match_confidence < 0.5" class="flex items-center justify-between">
                                 <span class="fg-dim font-mono">match:</span>
                                 <span class="font-mono font-bold px-2 py-1 rounded text-xs badge-amber border" :title="torrent.match_confidence_reason">&#9888; low confidence</span>
+                            </div>
+                            <div v-if="plexAnnotation" class="flex items-center justify-between">
+                                <span class="fg-dim font-mono">plex:</span>
+                                <span
+                                    :class="[
+                                        'font-mono font-bold px-2 py-1 rounded text-xs border',
+                                        plexAnnotation.kind === 'library_upgrade' ? 'badge-amber' : 'badge-indigo',
+                                        plexUncertain ? 'opacity-60 border-dashed' : ''
+                                    ]"
+                                    :title="plexTooltip"
+                                >{{ plexLabel }}</span>
                             </div>
                             <!-- Failure reason banner -->
                             <div v-if="torrent.status === 'failed' && torrent.fail_reason" class="mt-3 p-2 rounded bg-red-950/40 border border-red-800/50">

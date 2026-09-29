@@ -9,6 +9,7 @@ const settingsApp = createApp({
             { id: 'auto_queue',  label: 'auto-queue'  },
             { id: 'alerts',      label: 'alerts'      },
             { id: 'match',       label: 'match'       },
+            { id: 'plex',        label: 'plex'        },
             { id: 'auth',        label: 'auth'        },
         ];
         const activeSection = ref('scheduler');
@@ -49,7 +50,25 @@ const settingsApp = createApp({
                 username: '',
                 password: '***',
             },
+            plex: {
+                enabled: false,
+                url: '',
+                token: '***',
+                section_keys: [],
+                sync_enabled: false,
+                sync_interval_secs: 21600,
+                reconcile_on_feed_check: true,
+            },
         });
+
+        // Plex connection test + cached status
+        const plexTesting = ref(false);
+        const plexTestResult = ref(null);   // { ok, message }
+        const plexLibraries = ref([]);      // sections reported by the server
+        const plexStatus = ref(null);       // cached counts from /api/plex/status
+        const plexSyncing = ref(false);
+        // Separate token input so a blank field means "keep the stored token".
+        const plexTokenInput = ref('');
 
         // Comma-separated text inputs for array fields
         const preferredGroupsInput = ref('');
@@ -110,6 +129,15 @@ const settingsApp = createApp({
                 form.auth.username = data.auth.username ?? '';
                 // passwordInput stays empty; user types new value if they want to change it
             }
+            // plex — token always masked server-side, same as the password
+            if (data.plex) {
+                form.plex.enabled                 = data.plex.enabled                 ?? false;
+                form.plex.url                     = data.plex.url                     ?? '';
+                form.plex.section_keys            = data.plex.section_keys            ?? [];
+                form.plex.sync_enabled            = data.plex.sync_enabled            ?? false;
+                form.plex.sync_interval_secs      = data.plex.sync_interval_secs      ?? 21600;
+                form.plex.reconcile_on_feed_check = data.plex.reconcile_on_feed_check ?? true;
+            }
         }
 
         // ── Load ─────────────────────────────────────────────────────
@@ -158,6 +186,11 @@ const settingsApp = createApp({
                     // send sentinel so the server keeps the current password.
                     password: passwordInput.value.length > 0 ? passwordInput.value : '***',
                 };
+            } else if (section === 'plex') {
+                patch.plex = {
+                    ...form.plex,
+                    token: plexTokenInput.value.length > 0 ? plexTokenInput.value : '***',
+                };
             }
 
             try {
@@ -173,6 +206,7 @@ const settingsApp = createApp({
                 const updated = await res.json();
                 populateForm(updated);
                 passwordInput.value = ''; // clear after successful save
+                plexTokenInput.value = '';
                 showToast('settings saved', 'success');
             } catch (err) {
                 showToast(`save failed: ${err.message}`, 'error');
@@ -180,6 +214,79 @@ const settingsApp = createApp({
             } finally {
                 saving.value = false;
             }
+        }
+
+        // ── Plex ─────────────────────────────────────────────────────
+        // Save before testing: the server tests with its stored credentials,
+        // so an untested edit in the form would give a misleading result.
+        async function testPlexConnection() {
+            if (plexTesting.value) return;
+            plexTesting.value = true;
+            plexTestResult.value = null;
+            try {
+                await save('plex');
+                const res = await fetch('/api/plex/meta');
+                const data = await res.json().catch(() => ({}));
+                if (!res.ok) {
+                    plexTestResult.value = { ok: false, message: data.error || `HTTP ${res.status}` };
+                    return;
+                }
+                plexLibraries.value = data.libraries || [];
+                plexTestResult.value = data.connected
+                    ? {
+                        ok: true,
+                        message: `connected to plex ${data.server_version || ''} — ${plexLibraries.value.length} usable librar${plexLibraries.value.length === 1 ? 'y' : 'ies'}`.trim(),
+                    }
+                    : { ok: false, message: data.error || 'could not reach plex' };
+            } catch (err) {
+                plexTestResult.value = { ok: false, message: err.message };
+            } finally {
+                plexTesting.value = false;
+            }
+        }
+
+        async function loadPlexStatus() {
+            try {
+                const res = await fetch('/api/plex/status');
+                if (!res.ok) return;
+                plexStatus.value = await res.json();
+            } catch (err) {
+                console.error('loadPlexStatus:', err);
+            }
+        }
+
+        async function runPlexSync() {
+            if (plexSyncing.value) return;
+            plexSyncing.value = true;
+            try {
+                const res = await fetch('/api/plex/sync', { method: 'POST' });
+                if (res.status === 409) {
+                    showToast('a plex sync is already running', 'error');
+                    return;
+                }
+                if (!res.ok) {
+                    const d = await res.json().catch(() => ({}));
+                    showToast(d.error || `sync failed: HTTP ${res.status}`, 'error');
+                    return;
+                }
+                showToast('plex sync started', 'success');
+                // The job runs in the background; poll the cached counts for a
+                // while so the panel reflects it without a manual reload.
+                for (let i = 0; i < 15; i++) {
+                    await new Promise(r => setTimeout(r, 2000));
+                    await loadPlexStatus();
+                }
+            } catch (err) {
+                showToast(`sync failed: ${err.message}`, 'error');
+            } finally {
+                plexSyncing.value = false;
+            }
+        }
+
+        function togglePlexSection(key) {
+            const keys = form.plex.section_keys;
+            const idx = keys.indexOf(key);
+            if (idx === -1) keys.push(key); else keys.splice(idx, 1);
         }
 
         async function runAutoQueue() {
@@ -248,6 +355,7 @@ const settingsApp = createApp({
         // ── Lifecycle ────────────────────────────────────────────────
         onMounted(() => {
             loadSettings();
+            loadPlexStatus();
         });
 
         return {
@@ -265,6 +373,15 @@ const settingsApp = createApp({
             runFeedCheck,
             autoQueueRunning,
             runAutoQueue,
+            plexTesting,
+            plexTestResult,
+            plexLibraries,
+            plexStatus,
+            plexSyncing,
+            plexTokenInput,
+            testPlexConnection,
+            runPlexSync,
+            togglePlexSection,
             logsOpen,
         };
     }

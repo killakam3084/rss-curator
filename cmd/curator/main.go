@@ -486,6 +486,21 @@ func resolveShowsPath() string {
 	return "watchlist.json"
 }
 
+// buildPlexClient returns a Plex client, or nil when the integration is
+// disabled or misconfigured. Plex is an optional dependency: a bad URL or
+// missing token must never stop the server from starting.
+func buildPlexClient(st settings.PlexSettings) *client.Plex {
+	if !st.Enabled || st.URL == "" || st.Token == "" {
+		return nil
+	}
+	px, err := client.NewPlex(client.PlexConfig{BaseURL: st.URL, Token: st.Token})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "[Plex] %v\n", err)
+		return nil
+	}
+	return px
+}
+
 func getEnv(key, defaultValue string) string {
 	if value := os.Getenv(key); value != "" {
 		return value
@@ -922,6 +937,33 @@ func cmdServe(cfg models.Config, store *storage.Storage, buf *logbuffer.Buffer, 
 		},
 	})
 
+	// plex_sync — refresh the cached Plex library, then re-annotate staged
+	// torrents. Disabled until explicitly turned on: the integration is meant
+	// to be exercised by hand first so the guid/title match mix can be checked.
+	sched.Register(&scheduler.Task{
+		Type:     "plex_sync",
+		Interval: 6 * time.Hour,
+		Enabled:  false, // managed by settingsMgr after load
+		Fn: func(ctx context.Context) {
+			st := settingsMgr.Get().Plex
+			plexClient := buildPlexClient(st)
+			if plexClient == nil {
+				return
+			}
+			if _, err := ops.RunPlexSync(ctx,
+				ops.PlexSyncConfig{SectionKeys: st.SectionKeys},
+				ops.PlexSyncDeps{Store: store, Plex: plexClient}); err != nil {
+				fmt.Fprintf(os.Stderr, "[Plex] sync failed: %v\n", err)
+				return
+			}
+			if _, err := ops.RunPlexReconcile(ctx, ops.PlexReconcileDeps{
+				Store: store, Plex: plexClient, Metadata: metaLookup,
+			}); err != nil {
+				fmt.Fprintf(os.Stderr, "[Plex] reconcile failed: %v\n", err)
+			}
+		},
+	})
+
 	sched.Start()
 
 	// Cold-cache fill: if suggestions table is empty and provider is available,
@@ -950,6 +992,8 @@ func cmdServe(cfg models.Config, store *storage.Storage, buf *logbuffer.Buffer, 
 		PreferredGroups:       cfg.MatchRules.PreferredGroups,
 		AuthUsername:          authUsername,
 		AuthPassword:          authPassword,
+		PlexURL:               os.Getenv("CURATOR_PLEX_URL"),
+		PlexToken:             os.Getenv("CURATOR_PLEX_TOKEN"),
 	}
 	if err := settingsMgr.Load(envDefaults); err != nil {
 		fmt.Fprintf(os.Stderr, "[Serve] Warning: could not load settings from DB: %v\n", err)
@@ -959,6 +1003,14 @@ func cmdServe(cfg models.Config, store *storage.Storage, buf *logbuffer.Buffer, 
 	// settings save handler in server.go.
 	sched.SetEnabled("rescore_backfill",
 		scorerProvider.Available() && settingsMgr.Get().Scheduler.RescoreBackfillEnabled)
+
+	plexSettings := settingsMgr.Get().Plex
+	plexClient := buildPlexClient(plexSettings)
+	if plexSettings.Enabled && plexClient == nil {
+		fmt.Fprintln(os.Stderr, "[Plex] enabled but the client could not be built; endpoints will report unavailable")
+	}
+	sched.SetInterval("plex_sync", time.Duration(plexSettings.SyncIntervalSecs)*time.Second)
+	sched.SetEnabled("plex_sync", plexSettings.Enabled && plexSettings.SyncEnabled && plexClient != nil)
 
 	// On-demand feed-check: backfill suppressed (BackfillEnabled stays nil in the
 	// stored deps — the handler overrides it to false before each submission).
@@ -971,7 +1023,8 @@ func cmdServe(cfg models.Config, store *storage.Storage, buf *logbuffer.Buffer, 
 		WithShowsPath(resolveShowsPath()).
 		WithSuggester(sg).
 		WithFeedCheck(feedCheckCfg, onDemandFeedCheckDeps).
-		WithAutoQueueDeps(autoQueueDeps)
+		WithAutoQueueDeps(autoQueueDeps).
+		WithPlex(api.PlexDeps{Client: plexClient, Store: store, Metadata: metaLookup})
 	fmt.Printf("[Serve] Starting API server on port %d\n", port)
 	if err := server.Start(); err != nil {
 		fmt.Fprintf(os.Stderr, "Error starting API server: %v\n", err)

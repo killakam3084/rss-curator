@@ -77,10 +77,18 @@ const app = createApp({
 
         // Content type filter: '' = all, 'show', 'movie'
         const contentTypeFilter = ref('');
+        // '' | 'in_library' | 'library_upgrade' — server-side filter on Plex
+        // annotations, used to bulk-clear duplicates.
+        const annotationFilter = ref('');
         const contentTypeOptions = [
             { value: '',      label: 'All' },
             { value: 'show',  label: 'Shows' },
             { value: 'movie', label: 'Movies' },
+        ];
+        const annotationOptions = [
+            { value: '',                label: 'All library states' },
+            { value: 'in_library',      label: 'In library' },
+            { value: 'library_upgrade', label: 'Upgrade candidates' },
         ];
 
         // Sort field display labels
@@ -225,7 +233,8 @@ const app = createApp({
             try {
                 const q = searchQuery.value ? `&q=${encodeURIComponent(searchQuery.value)}` : '';
                 const ct = contentTypeFilter.value ? `&content_type=${contentTypeFilter.value}` : '';
-                const response = await fetch(`/api/torrents?status=${status}${q}${ct}`);
+                const an = annotationFilter.value ? `&annotation=${annotationFilter.value}` : '';
+                const response = await fetch(`/api/torrents?status=${status}${q}${ct}${an}`);
                 const data = await response.json();
                 torrents.value = data.torrents || [];
             } catch (error) {
@@ -240,11 +249,12 @@ const app = createApp({
             try {
 				const q = searchQuery.value ? `&q=${encodeURIComponent(searchQuery.value)}` : '';
                 const ct = contentTypeFilter.value ? `&content_type=${contentTypeFilter.value}` : '';
+                const an = annotationFilter.value ? `&annotation=${annotationFilter.value}` : '';
                 const [pending, accepted, queued, rejected] = await Promise.all([
-                    fetch(`/api/torrents?status=pending${q}${ct}`).then(r => r.json()),
-                    fetch(`/api/torrents?status=accepted${q}${ct}`).then(r => r.json()),
-                    fetch(`/api/torrents?status=queued${q}${ct}`).then(r => r.json()),
-                    fetch(`/api/torrents?status=rejected${q}${ct}`).then(r => r.json())
+                    fetch(`/api/torrents?status=pending${q}${ct}${an}`).then(r => r.json()),
+                    fetch(`/api/torrents?status=accepted${q}${ct}${an}`).then(r => r.json()),
+                    fetch(`/api/torrents?status=queued${q}${ct}${an}`).then(r => r.json()),
+                    fetch(`/api/torrents?status=rejected${q}${ct}${an}`).then(r => r.json())
                 ]);
                 torrents.value = [
                     ...(pending.torrents || []),
@@ -797,6 +807,12 @@ const app = createApp({
             fetchAllTorrents();
         });
 
+        // Plex annotation filter: re-fetch immediately when changed.
+        watch(annotationFilter, () => {
+            currentPage.value = 1;
+            fetchAllTorrents();
+        });
+
         // Back-to-top helpers — wired to the main scroll container via @scroll="onMainScroll".
         function onMainScroll(e) {
             scrollYOffset.value = e.target.scrollTop;
@@ -1104,7 +1120,9 @@ const app = createApp({
             currentPage,
             searchQuery,
             contentTypeFilter,
+            annotationFilter,
             contentTypeOptions,
+            annotationOptions,
             fetchTorrents,
             fetchAllTorrents,
             fetchActivities,

@@ -46,7 +46,11 @@ type tvmazeShow struct {
 	} `json:"webChannel"`
 	Premiered string `json:"premiered"` // "YYYY-MM-DD" or ""
 	Summary   string `json:"summary"`   // may contain HTML tags
-	Embedded  *struct {
+	Externals *struct {
+		IMDb    string `json:"imdb"`
+		TheTVDB *int   `json:"thetvdb"`
+	} `json:"externals"`
+	Embedded *struct {
 		Cast []struct {
 			Person struct {
 				Name string `json:"name"`
@@ -87,11 +91,19 @@ func (p *tvmazeProvider) Fetch(ctx context.Context, showName string) (*ShowMetad
 	meta := &ShowMetadata{
 		ProviderID:  fmt.Sprintf("%d", show.ID),
 		ProviderURL: show.URL,
+		Provider:    "tvmaze",
 		ShowName:    show.Name,
 		Genres:      show.Genres,
 		Status:      show.Status,
 		Overview:    stripHTML(show.Summary),
 		FetchedAt:   time.Now().UTC(),
+	}
+
+	if show.Externals != nil {
+		meta.IMDbID = show.Externals.IMDb
+		if show.Externals.TheTVDB != nil && *show.Externals.TheTVDB > 0 {
+			meta.TVDBID = fmt.Sprintf("%d", *show.Externals.TheTVDB)
+		}
 	}
 
 	// Prefer Network name; fall back to WebChannel for streaming-only shows.
