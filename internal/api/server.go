@@ -2157,6 +2157,19 @@ func (s *Server) startAlertPoller() {
 // It is called by WithSettings at startup and by handlePatchSettings after
 // every successful update.
 func (s *Server) applySettings(cfg settings.AppSettings) {
+	if cfg.Plex.Enabled && cfg.Plex.URL != "" && cfg.Plex.Token != "" {
+		if plexClient, err := client.NewPlex(client.PlexConfig{
+			BaseURL: cfg.Plex.URL,
+			Token:   cfg.Plex.Token,
+		}); err == nil {
+			s.plex.Client = plexClient
+		} else {
+			s.plex.Client = nil
+			s.logger.Warn("plex settings invalid", zap.Error(err))
+		}
+	} else {
+		s.plex.Client = nil
+	}
 	// Progress interval
 	if cfg.Alerts.ProgressInterval > 0 {
 		s.progressInterval = cfg.Alerts.ProgressInterval
