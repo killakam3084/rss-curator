@@ -1,12 +1,10 @@
 name: CI and Release Promotion
 
-# Filename kept as build-and-push.yml for badge-URL stability, but this
-# workflow no longer builds/pushes images from source. RC images are built
-# and pushed manually (`make rc-release`) and validated locally (`make
-# uat-validate`) from a `release/X.Y` branch before a version tag exists; on
-# tag push, the `promote` job below only retags the already-validated
-# rc-<shortsha> manifest. `release/**` runs test/lint like main/develop so
-# the branch is verified before it's tagged and squash-merged back to main.
+# Filename kept as build-and-push.yml for badge-URL stability. Release branch
+# pushes build and publish one immutable Linux/amd64 RC image in GitHub Actions.
+# That RC is pulled into the NAS-like UAT environment before a version tag;
+# tag pushes only retag the validated rc-<shortsha> image. Local macOS builds
+# remain developer tooling only.
 on:
   push:
     branches:
@@ -132,10 +130,47 @@ jobs:
           path: tests/e2e/results/
           retention-days: 30
 
+  rc:
+    # Release branch pushes produce the candidate artifact. Building here
+    # keeps the host architecture out of the release decision.
+    if: startsWith(github.ref, 'refs/heads/release/')
+    needs: [test, lint]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Log in to Container Registry
+        uses: docker/login-action@v4
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Generate RC image metadata
+        id: meta
+        uses: docker/metadata-action@v6
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=sha,prefix=rc-,format=short
+
+      - name: Build and push Linux amd64 release candidate
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          platforms: linux/amd64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+
   promote:
     # Only runs on version tag pushes. Does NOT rebuild from source — it
     # retags the exact rc-<shortsha> manifest that was already built, pushed,
-    # and locally UAT-validated (see `make rc-release` / `make uat-validate`)
+    # and UAT-validated from the RC job before this tag was created
     # before this tag was created, guaranteeing byte-identical provenance
     # between what was validated and what gets deployed.
     needs: [test, lint, e2e]
@@ -179,7 +214,7 @@ jobs:
           rc_ref="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:rc-${rc_sha}"
           echo "rc_ref=${rc_ref}" >> "$GITHUB_OUTPUT"
           if ! docker buildx imagetools inspect "${rc_ref}" > /dev/null 2>&1; then
-            echo "::error::No validated RC image found at ${rc_ref}. Run 'make rc-release' and validate with 'make uat-up REF=rc-${rc_sha}' + 'make uat-validate' before tagging a release."
+            echo "::error::No RC image found at ${rc_ref}. Push the release branch, pull it into UAT with 'make uat-up REF=rc-${rc_sha}', and run 'make uat-validate' before tagging."
             exit 1
           fi
 

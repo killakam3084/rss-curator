@@ -37,7 +37,7 @@ help:
 	@echo "  make image-clean    Remove local image"
 	@echo ""
 	@echo "Release candidates (validate before tagging a release):"
-	@echo "  make rc-release     Build+push a multi-arch RC image tagged rc-<shortsha>"
+	@echo "  make rc-release     Optional local Linux/amd64 RC build; release CI is canonical"
 	@echo "                      Requires: podman login ghcr.io (write:packages scope)"
 	@echo "                      [CTR=docker instead requires: docker buildx create --use]"
 	@echo ""
@@ -131,17 +131,14 @@ image-clean:
 
 # ── Release candidate (validate locally before tagging a release) ────────
 
-# rc-release: builds and pushes a multi-arch RC image tagged rc-<shortsha>,
-# tied to the exact commit it was built from. CI later promotes this same
-# manifest (no rebuild) once the corresponding vX.Y.Z tag is pushed — so the
-# local UAT validation and the TrueNAS deploy always share identical bytes.
+# rc-release: optional local Linux/amd64 RC build for development. The
+# canonical release candidate is built and pushed by GitHub Actions when a
+# release/X.Y branch is pushed; CI later promotes that exact image after UAT.
 #
 # Prerequisites (one-time):
 #   podman (default, CTR=podman): podman login ghcr.io   (PAT with write:packages)
 #   docker (CTR=docker):         docker buildx create --use && docker login ghcr.io
 #
-# linux/amd64,linux/arm64 is required even for Mac-only testing: TrueNAS is
-# amd64, so a plain arm64-only Mac build would ship the wrong arch.
 RC_SHA := $(shell git rev-parse --short HEAD)
 
 rc-release:
@@ -153,14 +150,14 @@ rc-release:
 	@test -z "$$(gofmt -l .)" || (echo "Error: gofmt found unformatted files — run 'gofmt -w .'"; exit 1)
 	go vet ./...
 	go test ./...
-	@echo "Building and pushing $(IMAGE):rc-$(RC_SHA) (linux/amd64,linux/arm64)..."
+	@echo "Building and pushing $(IMAGE):rc-$(RC_SHA) (linux/amd64)..."
 	@if [ "$(CTR)" = "podman" ]; then \
 		podman manifest rm $(IMAGE):rc-$(RC_SHA) >/dev/null 2>&1 || true; \
 		podman manifest create $(IMAGE):rc-$(RC_SHA); \
-		podman build --platform linux/amd64,linux/arm64 --manifest $(IMAGE):rc-$(RC_SHA) .; \
+				podman build --platform linux/amd64 --manifest $(IMAGE):rc-$(RC_SHA) .; \
 		podman manifest push --all $(IMAGE):rc-$(RC_SHA) docker://$(IMAGE):rc-$(RC_SHA); \
 	else \
-		docker buildx build --platform linux/amd64,linux/arm64 -t $(IMAGE):rc-$(RC_SHA) --push .; \
+				docker buildx build --platform linux/amd64 -t $(IMAGE):rc-$(RC_SHA) --push .; \
 	fi
 	@echo "✓ Pushed: $(IMAGE):rc-$(RC_SHA)"
 	@echo "  Next: make uat-up REF=rc-$(RC_SHA)"

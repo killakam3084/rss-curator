@@ -101,8 +101,8 @@ DOCKER_BUILDKIT=1 docker build -t rss-curator:latest .
 # Build with specific version tag
 docker build -t rss-curator:v0.1.0 .
 
-# Build for multiple platforms (requires buildx)
-docker buildx build --platform linux/amd64,linux/arm64 -t rss-curator:latest .
+# Build for the TrueNAS target architecture (requires buildx)
+docker buildx build --platform linux/amd64 -t rss-curator:latest .
 ```
 
 ### Using Make
