@@ -8,6 +8,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.56.0] - 2026-09-30
+
+### Added
+- **Plex library reconciliation** — read-only Plex integration with cached
+  library metadata, provider-ID-first matching, title fallback matching, and
+  non-destructive `in_library` / `library_upgrade` annotations on staged
+  torrents.
+- **Plex review workflow** — settings-based connection test and manual sync,
+  opt-in scheduled sync, dashboard badges and tooltips, annotation filters,
+  and the existing bulk `already_have` action for cleanup.
+- **Plex safety coverage** — handles Directory-shaped show listings, optimized
+  versions, sample files, HDR stream metadata, original-language titles, and
+  legacy Plex GUID formats.
+
+## [0.55.0] - 2026-09-22
+
 ### Added
 - **Release-candidate → UAT → promote pipeline** — `make rc-release` builds and
   pushes a multi-arch (`linux/amd64,linux/arm64`) image tagged `rc-<shortsha>`;

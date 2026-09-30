@@ -64,6 +64,7 @@ type Server struct {
 	feedCheckCfg     ops.FeedCheckConfig
 	feedCheckDeps    ops.FeedCheckDeps
 	autoQueueDeps    ops.AutoQueueDeps // populated by WithAutoQueueDeps
+	plex             PlexDeps          // populated by WithPlex; zero value disables the endpoints
 	httpSrv          *http.Server
 	metrics          metricsState
 }
@@ -94,6 +95,9 @@ type TorrentResponse struct {
 	MatchConfidenceReason string             `json:"match_confidence_reason"`
 	ContentType           models.ContentType `json:"content_type"`
 	ReleaseYear           int                `json:"release_year,omitempty"`
+	// Annotations are non-destructive markers such as the Plex in_library and
+	// library_upgrade verdicts. Always an array so the UI can iterate it.
+	Annotations []storage.Annotation `json:"annotations"`
 }
 
 type ListResponse struct {
@@ -190,7 +194,61 @@ func torrentToResponse(t models.StagedTorrent) TorrentResponse {
 		MatchConfidenceReason: t.MatchConfidenceReason,
 		ContentType:           t.FeedItem.ContentType,
 		ReleaseYear:           t.FeedItem.ReleaseYear,
+		Annotations:           []storage.Annotation{},
 	}
+}
+
+// annotationReader is an optional storage capability. Keeping it out of
+// storage.Store avoids churning that interface and its test doubles.
+type annotationReader interface {
+	AnnotationsForTorrents(torrentIDs []int) (map[int][]storage.Annotation, error)
+}
+
+// attachAnnotations batch-loads annotations for the listed torrents and
+// optionally drops any that lack the requested kind.
+func (s *Server) attachAnnotations(items []TorrentResponse, kind string) []TorrentResponse {
+	reader, ok := s.store.(annotationReader)
+	if !ok || len(items) == 0 {
+		if kind != "" {
+			return []TorrentResponse{}
+		}
+		return items
+	}
+
+	ids := make([]int, 0, len(items))
+	for _, it := range items {
+		ids = append(ids, it.ID)
+	}
+	byTorrent, err := reader.AnnotationsForTorrents(ids)
+	if err != nil {
+		s.logger.Warn("could not load annotations", zap.Error(err))
+		if kind != "" {
+			return []TorrentResponse{}
+		}
+		return items
+	}
+
+	out := make([]TorrentResponse, 0, len(items))
+	for _, it := range items {
+		anns := byTorrent[it.ID]
+		if kind != "" && !hasAnnotationKind(anns, kind) {
+			continue
+		}
+		if len(anns) > 0 {
+			it.Annotations = anns
+		}
+		out = append(out, it)
+	}
+	return out
+}
+
+func hasAnnotationKind(anns []storage.Annotation, kind string) bool {
+	for _, a := range anns {
+		if a.Kind == kind {
+			return true
+		}
+	}
+	return false
 }
 
 // SuggestionsResponse is the shape returned by GET /api/suggestions.
@@ -395,6 +453,10 @@ func (s *Server) Start() error {
 	mux.HandleFunc("/api/settings", s.handleSettings)
 	mux.HandleFunc("/api/watchlist", s.handleWatchlist)
 	mux.HandleFunc("/api/qb/meta", s.handleQBMeta)
+	mux.HandleFunc("/api/plex/meta", s.handlePlexMeta)
+	mux.HandleFunc("/api/plex/status", s.handlePlexStatus)
+	mux.HandleFunc("/api/plex/sync", s.handlePlexSync)
+	mux.HandleFunc("/api/plex/reconcile", s.handlePlexReconcile)
 	// Deprecated: /api/shows redirects to /api/watchlist for backward compatibility.
 	mux.HandleFunc("/api/shows", func(w http.ResponseWriter, r *http.Request) {
 		target := "/api/watchlist"
@@ -508,6 +570,7 @@ func (s *Server) handleList(w http.ResponseWriter, r *http.Request) {
 	}
 	q := r.URL.Query().Get("q")
 	contentType := r.URL.Query().Get("content_type")
+	annotation := r.URL.Query().Get("annotation")
 
 	torrents, err := s.store.List(status, q, contentType)
 	if err != nil {
@@ -520,14 +583,13 @@ func (s *Server) handleList(w http.ResponseWriter, r *http.Request) {
 
 	s.logger.Info("torrents listed", zap.String("status", status), zap.Int("count", len(torrents)))
 
-	resp := ListResponse{
-		Torrents: make([]TorrentResponse, 0),
-		Count:    len(torrents),
-	}
-
+	items := make([]TorrentResponse, 0, len(torrents))
 	for _, t := range torrents {
-		resp.Torrents = append(resp.Torrents, torrentToResponse(t))
+		items = append(items, torrentToResponse(t))
 	}
+	items = s.attachAnnotations(items, annotation)
+
+	resp := ListResponse{Torrents: items, Count: len(items)}
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(resp)
@@ -2095,6 +2157,19 @@ func (s *Server) startAlertPoller() {
 // It is called by WithSettings at startup and by handlePatchSettings after
 // every successful update.
 func (s *Server) applySettings(cfg settings.AppSettings) {
+	if cfg.Plex.Enabled && cfg.Plex.URL != "" && cfg.Plex.Token != "" {
+		if plexClient, err := client.NewPlex(client.PlexConfig{
+			BaseURL: cfg.Plex.URL,
+			Token:   cfg.Plex.Token,
+		}); err == nil {
+			s.plex.Client = plexClient
+		} else {
+			s.plex.Client = nil
+			s.logger.Warn("plex settings invalid", zap.Error(err))
+		}
+	} else {
+		s.plex.Client = nil
+	}
 	// Progress interval
 	if cfg.Alerts.ProgressInterval > 0 {
 		s.progressInterval = cfg.Alerts.ProgressInterval
@@ -2122,6 +2197,14 @@ func (s *Server) applySettings(cfg settings.AppSettings) {
 			s.scheduler.SetInterval("auto_queue",
 				time.Duration(cfg.AutoQueue.IntervalSecs)*time.Second)
 		}
+		if cfg.Plex.SyncIntervalSecs > 0 {
+			s.scheduler.SetInterval("plex_sync",
+				time.Duration(cfg.Plex.SyncIntervalSecs)*time.Second)
+		}
+		// The scheduled sync needs the integration on, the task opted in, and
+		// a usable client.
+		s.scheduler.SetEnabled("plex_sync",
+			cfg.Plex.Enabled && cfg.Plex.SyncEnabled && s.plex.Client != nil)
 	}
 	// Auto-queue: wire the post-feed-check trigger into feedCheckDeps so
 	// RunFeedCheck can kick off an auto-queue pass after staging completes.
@@ -2161,12 +2244,7 @@ func (s *Server) handleSettings(w http.ResponseWriter, r *http.Request) {
 
 	switch r.Method {
 	case http.MethodGet:
-		cfg := s.settingsMgr.Get()
-		// Mask password in response.
-		if cfg.Auth.Password != "" {
-			cfg.Auth.Password = "***"
-		}
-		json.NewEncoder(w).Encode(cfg)
+		json.NewEncoder(w).Encode(s.settingsMgr.GetRedacted())
 
 	case http.MethodPatch:
 		// Start from the current stored settings so omitted fields keep their values.
@@ -2183,12 +2261,7 @@ func (s *Server) handleSettings(w http.ResponseWriter, r *http.Request) {
 		}
 		s.applySettings(s.settingsMgr.Get())
 		s.logger.Info("settings updated")
-		// Return updated settings with password masked.
-		updated := s.settingsMgr.Get()
-		if updated.Auth.Password != "" {
-			updated.Auth.Password = "***"
-		}
-		json.NewEncoder(w).Encode(updated)
+		json.NewEncoder(w).Encode(s.settingsMgr.GetRedacted())
 
 	default:
 		w.WriteHeader(http.StatusMethodNotAllowed)

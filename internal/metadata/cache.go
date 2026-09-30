@@ -11,6 +11,15 @@ import (
 	_ "github.com/mattn/go-sqlite3"
 )
 
+// metaFormatVersion is the shape version of the JSON blob stored in the cache.
+// Bump it whenever ShowMetadata gains a field that callers depend on — rows
+// written at a lower version are treated as misses and refetched immediately
+// instead of serving empty fields until the TTL expires.
+//
+//	1 — original shape
+//	2 — added Provider / TMDBID / TVDBID
+const metaFormatVersion = 2
+
 // Cache is a SQLite-backed TTL store for ShowMetadata. It lives as a sibling
 // file to the main curator database so it ends up in the same directory in
 // every environment (local home dir, container volume, TrueNAS dataset, …).
@@ -57,23 +66,56 @@ CREATE TABLE IF NOT EXISTS show_metadata (
 	data       TEXT NOT NULL DEFAULT '{}',
 	fetched_at INTEGER NOT NULL DEFAULT 0
 );`
-	_, err := db.Exec(ddl)
-	return err
+	if _, err := db.Exec(ddl); err != nil {
+		return err
+	}
+
+	var hasVersion bool
+	rows, err := db.Query(`PRAGMA table_info(show_metadata)`)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var cid int
+		var name, ctype string
+		var notNull, pk int
+		var dflt sql.NullString
+		if err := rows.Scan(&cid, &name, &ctype, &notNull, &dflt, &pk); err != nil {
+			return err
+		}
+		if name == "format_version" {
+			hasVersion = true
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	if !hasVersion {
+		if _, err := db.Exec(`ALTER TABLE show_metadata ADD COLUMN format_version INTEGER NOT NULL DEFAULT 1`); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // Get returns cached metadata for showKey, or (nil, nil) on a cache miss.
 func (c *Cache) Get(showKey string) (*ShowMetadata, error) {
 	row := c.db.QueryRow(
-		`SELECT data, fetched_at FROM show_metadata WHERE show_key = ?`, showKey,
+		`SELECT data, fetched_at, format_version FROM show_metadata WHERE show_key = ?`, showKey,
 	)
 
 	var dataJSON string
 	var fetchedUnix int64
-	if err := row.Scan(&dataJSON, &fetchedUnix); err != nil {
+	var version int
+	if err := row.Scan(&dataJSON, &fetchedUnix, &version); err != nil {
 		if err == sql.ErrNoRows {
 			return nil, nil
 		}
 		return nil, fmt.Errorf("metadata cache: get %q: %w", showKey, err)
+	}
+	if version < metaFormatVersion {
+		return nil, nil // stale shape — force a refetch
 	}
 
 	var meta ShowMetadata
@@ -93,13 +135,14 @@ func (c *Cache) Put(showKey, provider string, meta *ShowMetadata) error {
 	}
 
 	_, err = c.db.Exec(
-		`INSERT INTO show_metadata (show_key, provider, data, fetched_at)
-		 VALUES (?, ?, ?, ?)
+		`INSERT INTO show_metadata (show_key, provider, data, fetched_at, format_version)
+		 VALUES (?, ?, ?, ?, ?)
 		 ON CONFLICT(show_key) DO UPDATE SET
-		   provider   = excluded.provider,
-		   data       = excluded.data,
-		   fetched_at = excluded.fetched_at`,
-		showKey, provider, string(data), meta.FetchedAt.Unix(),
+		   provider       = excluded.provider,
+		   data           = excluded.data,
+		   fetched_at     = excluded.fetched_at,
+		   format_version = excluded.format_version`,
+		showKey, provider, string(data), meta.FetchedAt.Unix(), metaFormatVersion,
 	)
 	if err != nil {
 		return fmt.Errorf("metadata cache: put %q: %w", showKey, err)

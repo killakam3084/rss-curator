@@ -295,6 +295,78 @@ func (s *Storage) migrate() error {
 		// Migration 14: index on activity_log action to speed up group reputation
 		// and auto_queue window stat queries.
 		`CREATE INDEX IF NOT EXISTS idx_activity_torrent_id ON activity_log(torrent_id)`,
+		// Migration 15: Plex library cache. Shows are stored separately from
+		// episodes because show-level GUIDs are the reliable join key — Plex's
+		// episode-level GUIDs are not dependable. synced_at drives mark-and-sweep
+		// cleanup so media removed from Plex disappears from the cache.
+		`CREATE TABLE IF NOT EXISTS plex_shows (
+			rating_key      TEXT PRIMARY KEY,
+			section_key     TEXT NOT NULL,
+			title           TEXT NOT NULL DEFAULT '',
+			norm_title      TEXT NOT NULL DEFAULT '',
+			norm_alt_title  TEXT NOT NULL DEFAULT '',
+			year            INTEGER NOT NULL DEFAULT 0,
+			imdb_id         TEXT NOT NULL DEFAULT '',
+			tmdb_id         TEXT NOT NULL DEFAULT '',
+			tvdb_id         TEXT NOT NULL DEFAULT '',
+			synced_at       DATETIME NOT NULL
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_plex_shows_imdb ON plex_shows(imdb_id)`,
+		`CREATE INDEX IF NOT EXISTS idx_plex_shows_tmdb ON plex_shows(tmdb_id)`,
+		`CREATE INDEX IF NOT EXISTS idx_plex_shows_tvdb ON plex_shows(tvdb_id)`,
+		`CREATE INDEX IF NOT EXISTS idx_plex_shows_norm_title ON plex_shows(norm_title)`,
+		`CREATE INDEX IF NOT EXISTS idx_plex_shows_norm_alt ON plex_shows(norm_alt_title)`,
+		`CREATE INDEX IF NOT EXISTS idx_plex_shows_section ON plex_shows(section_key)`,
+		`CREATE TABLE IF NOT EXISTS plex_items (
+			rating_key      TEXT PRIMARY KEY,
+			section_key     TEXT NOT NULL,
+			content_type    TEXT NOT NULL,
+			show_rating_key TEXT NOT NULL DEFAULT '',
+			title           TEXT NOT NULL DEFAULT '',
+			norm_title      TEXT NOT NULL DEFAULT '',
+			norm_alt_title  TEXT NOT NULL DEFAULT '',
+			year            INTEGER NOT NULL DEFAULT 0,
+			season          INTEGER NOT NULL DEFAULT 0,
+			episode         INTEGER NOT NULL DEFAULT 0,
+			imdb_id         TEXT NOT NULL DEFAULT '',
+			tmdb_id         TEXT NOT NULL DEFAULT '',
+			tvdb_id         TEXT NOT NULL DEFAULT '',
+			resolution      TEXT NOT NULL DEFAULT '',
+			codec           TEXT NOT NULL DEFAULT '',
+			hdr             TEXT NOT NULL DEFAULT '',
+			file_size       INTEGER NOT NULL DEFAULT 0,
+			file_path       TEXT NOT NULL DEFAULT '',
+			synced_at       DATETIME NOT NULL
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_plex_items_episode ON plex_items(show_rating_key, season, episode)`,
+		`CREATE INDEX IF NOT EXISTS idx_plex_items_imdb ON plex_items(imdb_id)`,
+		`CREATE INDEX IF NOT EXISTS idx_plex_items_tmdb ON plex_items(tmdb_id)`,
+		`CREATE INDEX IF NOT EXISTS idx_plex_items_tvdb ON plex_items(tvdb_id)`,
+		`CREATE INDEX IF NOT EXISTS idx_plex_items_norm_title ON plex_items(norm_title, year)`,
+		`CREATE INDEX IF NOT EXISTS idx_plex_items_norm_alt ON plex_items(norm_alt_title, year)`,
+		`CREATE INDEX IF NOT EXISTS idx_plex_items_section ON plex_items(section_key)`,
+		`CREATE TABLE IF NOT EXISTS plex_libraries (
+			section_key    TEXT PRIMARY KEY,
+			title          TEXT NOT NULL DEFAULT '',
+			type           TEXT NOT NULL DEFAULT '',
+			item_count     INTEGER NOT NULL DEFAULT 0,
+			last_synced_at DATETIME NOT NULL
+		)`,
+		// Migration 16: non-destructive annotations on staged torrents. Kept
+		// generic (kind + source + JSON detail) so future signals can annotate
+		// torrents without another schema change.
+		`CREATE TABLE IF NOT EXISTS torrent_annotations (
+			torrent_id INTEGER NOT NULL,
+			kind       TEXT NOT NULL,
+			source     TEXT NOT NULL,
+			detail     TEXT NOT NULL DEFAULT '{}',
+			created_at DATETIME NOT NULL,
+			updated_at DATETIME NOT NULL,
+			PRIMARY KEY (torrent_id, kind),
+			FOREIGN KEY (torrent_id) REFERENCES staged_torrents(id) ON DELETE CASCADE
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_torrent_annotations_kind ON torrent_annotations(kind)`,
+		`CREATE INDEX IF NOT EXISTS idx_torrent_annotations_source ON torrent_annotations(source)`,
 	}
 
 	for _, migration := range migrations {

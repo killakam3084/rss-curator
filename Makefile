@@ -2,7 +2,8 @@
         dev-up dev-down dev-logs dev-rebuild dev-clean \
         image-build image-push image-clean \
         rc-release \
-        uat-up uat-down uat-logs uat-validate \
+		uat-up uat-down uat-logs uat-validate \
+		uat-mesh-up uat-mesh-down uat-mesh-validate \
         test-e2e validate-smoke
 
 BINARY_NAME=curator
@@ -37,15 +38,18 @@ help:
 	@echo "  make image-clean    Remove local image"
 	@echo ""
 	@echo "Release candidates (validate before tagging a release):"
-	@echo "  make rc-release     Build+push a multi-arch RC image tagged rc-<shortsha>"
-	@echo "                      Requires: docker buildx create --use (one-time),"
-	@echo "                      docker login ghcr.io (write:packages scope)"
+	@echo "  make rc-release     Optional local Linux/amd64 RC build; release CI is canonical"
+	@echo "                      Requires: podman login ghcr.io (write:packages scope)"
+	@echo "                      [CTR=docker instead requires: docker buildx create --use]"
 	@echo ""
 	@echo "Pre-promotion UAT (validate an RC/pinned tag before deploying):"
 	@echo "  make uat-up REF=rc-<sha>|vX.Y.Z   Pull and run that exact image locally"
 	@echo "  make uat-validate                 Run Hurl smoke+auth suite against it"
 	@echo "  make uat-logs                      Tail logs from the running UAT stack"
 	@echo "  make uat-down                      Stop and remove the UAT stack"
+	@echo "  make uat-mesh-up REF=rc-<sha>      Run deterministic Plex/QB/AI/RSS mesh"
+	@echo "  make uat-mesh-validate             Run functional mesh Hurl suite"
+	@echo "  make uat-mesh-down                 Stop and remove the mesh UAT stack"
 	@echo ""
 	@echo "E2E / functional validation:"
 	@echo "  make test-e2e       Build fresh stack + run smoke suite (CI)"
@@ -131,17 +135,14 @@ image-clean:
 
 # ── Release candidate (validate locally before tagging a release) ────────
 
-# rc-release: builds and pushes a multi-arch RC image tagged rc-<shortsha>,
-# tied to the exact commit it was built from. CI later promotes this same
-# manifest (no rebuild) once the corresponding vX.Y.Z tag is pushed — so the
-# local UAT validation and the TrueNAS deploy always share identical bytes.
+# rc-release: optional local Linux/amd64 RC build for development. The
+# canonical release candidate is built and pushed by GitHub Actions when a
+# release/X.Y branch is pushed; CI later promotes that exact image after UAT.
 #
 # Prerequisites (one-time):
-#   docker buildx create --use
-#   docker login ghcr.io   (PAT with write:packages)
+#   podman (default, CTR=podman): podman login ghcr.io   (PAT with write:packages)
+#   docker (CTR=docker):         docker buildx create --use && docker login ghcr.io
 #
-# linux/amd64,linux/arm64 is required even for Mac-only testing: TrueNAS is
-# amd64, so a plain arm64-only Mac build would ship the wrong arch.
 RC_SHA := $(shell git rev-parse --short HEAD)
 
 rc-release:
@@ -153,8 +154,15 @@ rc-release:
 	@test -z "$$(gofmt -l .)" || (echo "Error: gofmt found unformatted files — run 'gofmt -w .'"; exit 1)
 	go vet ./...
 	go test ./...
-	@echo "Building and pushing $(IMAGE):rc-$(RC_SHA) (linux/amd64,linux/arm64)..."
-	docker buildx build --platform linux/amd64,linux/arm64 -t $(IMAGE):rc-$(RC_SHA) --push .
+	@echo "Building and pushing $(IMAGE):rc-$(RC_SHA) (linux/amd64)..."
+	@if [ "$(CTR)" = "podman" ]; then \
+		podman manifest rm $(IMAGE):rc-$(RC_SHA) >/dev/null 2>&1 || true; \
+		podman manifest create $(IMAGE):rc-$(RC_SHA); \
+				podman build --platform linux/amd64 --manifest $(IMAGE):rc-$(RC_SHA) .; \
+		podman manifest push --all $(IMAGE):rc-$(RC_SHA) docker://$(IMAGE):rc-$(RC_SHA); \
+	else \
+				docker buildx build --platform linux/amd64 -t $(IMAGE):rc-$(RC_SHA) --push .; \
+	fi
 	@echo "✓ Pushed: $(IMAGE):rc-$(RC_SHA)"
 	@echo "  Next: make uat-up REF=rc-$(RC_SHA)"
 
@@ -164,7 +172,8 @@ rc-release:
 # (rc-<shortsha> or an already-promoted vX.Y.Z) locally, then run the same
 # Hurl smoke+auth suite used for TrueNAS validation against it. --env-file is
 # required here (not just env_file:) so ${RSS_CURATOR_IMAGE_REF}/${CURATOR_PASSWORD}
-# compose-level interpolation is satisfied from uat.env.
+# compose-level interpolation is satisfied from uat.env. uat-up persists REF
+# into uat.env so uat-validate/uat-down/uat-logs don't need it repeated.
 uat-up:
 	@if [ -z "$(REF)" ]; then \
 		echo "Error: REF must be set, e.g. make uat-up REF=rc-abc1234"; \
@@ -175,7 +184,12 @@ uat-up:
 		echo "Copy uat.env.sample to uat.env and configure it"; \
 		exit 1; \
 	fi
-	RSS_CURATOR_IMAGE_REF=$(REF) $(CTR) compose --env-file uat.env -f docker-compose.uat.yml up -d
+	@if grep -q '^RSS_CURATOR_IMAGE_REF=' uat.env; then \
+		sed -i.bak 's/^RSS_CURATOR_IMAGE_REF=.*/RSS_CURATOR_IMAGE_REF=$(REF)/' uat.env && rm -f uat.env.bak; \
+	else \
+		echo "RSS_CURATOR_IMAGE_REF=$(REF)" >> uat.env; \
+	fi
+	$(CTR) compose --env-file uat.env -f docker-compose.uat.yml up -d
 	@echo "✓ UAT stack running ($(REF)) — API at http://localhost:8081"
 
 uat-down:
@@ -187,6 +201,34 @@ uat-logs:
 uat-validate:
 	@mkdir -p tests/e2e/results
 	$(CTR) compose --env-file uat.env -f docker-compose.uat.yml --profile validate run --rm hurl
+
+# Deterministic dependency-mesh UAT. The mesh replaces live Plex,
+# qBittorrent, Ollama-compatible AI, and RSS services with fixtures.
+uat-mesh-up:
+	@if [ -z "$(REF)" ]; then \
+		echo "Error: REF must be set, e.g. make uat-mesh-up REF=rc-abc1234"; \
+		exit 1; \
+	fi
+	@if [ ! -f uat-mesh.env ]; then \
+		echo "Error: uat-mesh.env not found"; \
+		echo "Copy uat-mesh.env.sample to uat-mesh.env"; \
+		exit 1; \
+	fi
+	@if grep -q '^RSS_CURATOR_IMAGE_REF=' uat-mesh.env; then \
+		sed -i.bak 's/^RSS_CURATOR_IMAGE_REF=.*/RSS_CURATOR_IMAGE_REF=$(REF)/' uat-mesh.env && rm -f uat-mesh.env.bak; \
+	else \
+		echo "RSS_CURATOR_IMAGE_REF=$(REF)" >> uat-mesh.env; \
+	fi
+	@mkdir -p tests/e2e/results
+	$(CTR) compose --project-name rss-curator-uat-mesh --env-file uat-mesh.env -f docker-compose.uat-mesh.yml up -d --build mesh curator
+	@echo "✓ Mesh UAT stack running ($(REF)) — API at http://localhost:8081"
+
+uat-mesh-down:
+	$(CTR) compose --project-name rss-curator-uat-mesh --env-file uat-mesh.env -f docker-compose.uat-mesh.yml down --volumes
+
+uat-mesh-validate:
+	@mkdir -p tests/e2e/results
+	$(CTR) compose --project-name rss-curator-uat-mesh --env-file uat-mesh.env -f docker-compose.uat-mesh.yml --profile validate run --rm hurl
 
 # ── E2E / functional validation ──────────────────────────────────────────
 

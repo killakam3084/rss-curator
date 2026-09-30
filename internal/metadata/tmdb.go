@@ -121,6 +121,7 @@ func (p *tmdbProvider) fetchTVDetail(ctx context.Context, id int) (*ShowMetadata
 		} `json:"credits"`
 		ExternalIDs *struct {
 			IMDbID string `json:"imdb_id"`
+			TVDbID *int   `json:"tvdb_id"`
 		} `json:"external_ids"`
 	}
 	if err := p.get(ctx, detailURL, &detail); err != nil {
@@ -133,15 +134,20 @@ func (p *tmdbProvider) fetchTVDetail(ctx context.Context, id int) (*ShowMetadata
 	meta := &ShowMetadata{
 		ProviderID:  fmt.Sprintf("%d", detail.ID),
 		ProviderURL: fmt.Sprintf("https://www.themoviedb.org/tv/%d", id),
+		Provider:    "tmdb",
 		ShowName:    detail.Name,
 		Status:      detail.Status,
 		Overview:    detail.Overview,
+		TMDBID:      fmt.Sprintf("%d", detail.ID),
 		VoteAverage: detail.VoteAverage,
 		VoteCount:   detail.VoteCount,
 		FetchedAt:   time.Now().UTC(),
 	}
 	if detail.ExternalIDs != nil {
 		meta.IMDbID = detail.ExternalIDs.IMDbID
+		if detail.ExternalIDs.TVDbID != nil && *detail.ExternalIDs.TVDbID > 0 {
+			meta.TVDBID = fmt.Sprintf("%d", *detail.ExternalIDs.TVDbID)
+		}
 	}
 	for _, g := range detail.Genres {
 		meta.Genres = append(meta.Genres, g.Name)
@@ -168,7 +174,7 @@ func (p *tmdbProvider) fetchTVDetail(ctx context.Context, id int) (*ShowMetadata
 }
 
 func (p *tmdbProvider) fetchMovieDetail(ctx context.Context, id int) (*ShowMetadata, error) {
-	detailURL := fmt.Sprintf("%s/3/movie/%d?language=en-US&append_to_response=credits", p.host, id)
+	detailURL := fmt.Sprintf("%s/3/movie/%d?language=en-US&append_to_response=credits,external_ids", p.host, id)
 
 	var detail struct {
 		ID                  int         `json:"id"`
@@ -193,6 +199,9 @@ func (p *tmdbProvider) fetchMovieDetail(ctx context.Context, id int) (*ShowMetad
 				Job  string `json:"job"`
 			} `json:"crew"`
 		} `json:"credits"`
+		ExternalIDs *struct {
+			IMDbID string `json:"imdb_id"`
+		} `json:"external_ids"`
 	}
 	if err := p.get(ctx, detailURL, &detail); err != nil {
 		return nil, fmt.Errorf("tmdb: movie detail %d: %w", id, err)
@@ -204,13 +213,18 @@ func (p *tmdbProvider) fetchMovieDetail(ctx context.Context, id int) (*ShowMetad
 	meta := &ShowMetadata{
 		ProviderID:  fmt.Sprintf("%d", detail.ID),
 		ProviderURL: fmt.Sprintf("https://www.themoviedb.org/movie/%d", id),
+		Provider:    "tmdb",
 		ShowName:    detail.Title,
 		Status:      detail.Status,
 		Overview:    detail.Overview,
 		IMDbID:      detail.IMDbID,
+		TMDBID:      fmt.Sprintf("%d", detail.ID),
 		VoteAverage: detail.VoteAverage,
 		VoteCount:   detail.VoteCount,
 		FetchedAt:   time.Now().UTC(),
+	}
+	if meta.IMDbID == "" && detail.ExternalIDs != nil {
+		meta.IMDbID = detail.ExternalIDs.IMDbID
 	}
 	for _, g := range detail.Genres {
 		meta.Genres = append(meta.Genres, g.Name)

@@ -1,0 +1,21 @@
+{
+  "shows": [
+    {
+      "name": "MobLand",
+      "min_quality": "1080p",
+      "preferred_codec": "x265"
+    },
+    {
+      "name": "Unowned Show",
+      "min_quality": "1080p",
+      "preferred_codec": "x265"
+    }
+  ],
+  "movies": [
+    {
+      "name": "Amadeus",
+      "min_quality": "1080p",
+      "preferred_codec": "x265"
+    }
+  ]
+}
