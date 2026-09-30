@@ -4,7 +4,10 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
+
+	"github.com/killakam3084/rss-curator/internal/settings"
 )
 
 // The Plex endpoints must stay registered and well-behaved when the
@@ -35,6 +38,94 @@ func TestPlexMetaUnconfigured(t *testing.T) {
 	}
 }
 
+func TestPlexMetaTestsConnectionWhenDisabled(t *testing.T) {
+	plexServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("X-Plex-Token") != "test-token" {
+			t.Errorf("X-Plex-Token = %q, want test-token", r.Header.Get("X-Plex-Token"))
+		}
+		switch r.URL.Path {
+		case "/identity":
+			w.Write([]byte(`{"MediaContainer":{"machineIdentifier":"test","version":"1.40"}}`))
+		case "/library/sections":
+			w.Write([]byte(`{"MediaContainer":{"Directory":[{"key":"1","title":"Movies","type":"movie"}]}}`))
+		default:
+			t.Errorf("unexpected Plex request path %q", r.URL.Path)
+			http.NotFound(w, r)
+		}
+	}))
+	defer plexServer.Close()
+
+	server, mockStore := setupTestServer(t)
+	manager := settings.NewManager(mockStore)
+	if err := manager.Load(settings.EnvDefaults{}); err != nil {
+		t.Fatalf("load settings: %v", err)
+	}
+	server.settingsMgr = manager
+
+	// Missing credentials are reported as configuration errors before any
+	// connection is attempted.
+	missingConfig := httptest.NewRecorder()
+	server.handlePlexMeta(missingConfig, httptest.NewRequest(http.MethodGet, "/api/plex/meta", nil))
+	var missingResp plexMetaResponse
+	if err := json.Unmarshal(missingConfig.Body.Bytes(), &missingResp); err != nil {
+		t.Fatalf("decode missing-config response: %v", err)
+	}
+	if missingResp.Connected || missingResp.Error != "plex URL and token are required to test the connection" {
+		t.Fatalf("missing-config response = %+v", missingResp)
+	}
+
+	configured := manager.Get()
+	configured.Plex.URL = "not a URL"
+	configured.Plex.Token = "test-token"
+	if err := manager.Update(configured); err != nil {
+		t.Fatalf("save invalid Plex settings: %v", err)
+	}
+	invalidConfig := httptest.NewRecorder()
+	server.handlePlexMeta(invalidConfig, httptest.NewRequest(http.MethodGet, "/api/plex/meta", nil))
+	var invalidResp plexMetaResponse
+	if err := json.Unmarshal(invalidConfig.Body.Bytes(), &invalidResp); err != nil {
+		t.Fatalf("decode invalid-config response: %v", err)
+	}
+	if invalidResp.Connected || !strings.HasPrefix(invalidResp.Error, "invalid plex configuration:") {
+		t.Fatalf("invalid-config response = %+v", invalidResp)
+	}
+
+	configured = manager.Get()
+	configured.Plex.URL = plexServer.URL
+	configured.Plex.Token = "test-token"
+	if err := manager.Update(configured); err != nil {
+		t.Fatalf("save Plex settings: %v", err)
+	}
+	if configured.Plex.Enabled {
+		t.Fatal("test requires Plex integration to remain disabled")
+	}
+
+	rec := httptest.NewRecorder()
+	server.handlePlexMeta(rec, httptest.NewRequest(http.MethodGet, "/api/plex/meta", nil))
+	var resp plexMetaResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode connection response: %v", err)
+	}
+	if !resp.Connected || resp.ServerVersion != "1.40" || len(resp.Libraries) != 1 {
+		t.Fatalf("connection response = %+v", resp)
+	}
+
+	configured = manager.Get()
+	configured.Plex.URL = "http://127.0.0.1:1"
+	if err := manager.Update(configured); err != nil {
+		t.Fatalf("save unreachable Plex settings: %v", err)
+	}
+	unreachable := httptest.NewRecorder()
+	server.handlePlexMeta(unreachable, httptest.NewRequest(http.MethodGet, "/api/plex/meta", nil))
+	var unreachableResp plexMetaResponse
+	if err := json.Unmarshal(unreachable.Body.Bytes(), &unreachableResp); err != nil {
+		t.Fatalf("decode unreachable response: %v", err)
+	}
+	if unreachableResp.Connected || !strings.HasPrefix(unreachableResp.Error, "plex connection failed:") {
+		t.Fatalf("unreachable response = %+v", unreachableResp)
+	}
+}
+
 func TestPlexStatusUnconfigured(t *testing.T) {
 	server, _ := setupTestServer(t)
 
@@ -51,8 +142,13 @@ func TestPlexStatusUnconfigured(t *testing.T) {
 	if resp.Enabled {
 		t.Error("Enabled = true by default; the integration is opt-in")
 	}
-	if resp.Libraries == nil || resp.Annotations == nil {
+	if resp.Libraries == nil || resp.Annotations == nil || resp.AnnotationsByStatus == nil {
 		t.Error("collections must serialise as empty, not null")
+	}
+	for _, status := range []string{"pending", "accepted"} {
+		if resp.AnnotationsByStatus[status] == nil {
+			t.Errorf("annotations_by_status.%s must be initialized", status)
+		}
 	}
 }
 

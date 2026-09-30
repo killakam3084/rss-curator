@@ -519,9 +519,17 @@
                             <span class="fg-base">{{ plexStatus.counts.episodes }} <span class="fg-muted text-xs">episodes</span></span>
                             <span class="fg-base">{{ plexStatus.counts.movies }} <span class="fg-muted text-xs">movies</span></span>
                         </div>
-                        <div class="flex flex-wrap gap-4 font-mono text-sm">
-                            <span class="fg-base">{{ plexStatus.annotations.in_library || 0 }} <span class="fg-muted text-xs">marked in library</span></span>
-                            <span class="fg-base">{{ plexStatus.annotations.library_upgrade || 0 }} <span class="fg-muted text-xs">marked upgrade</span></span>
+                        <div class="space-y-1 font-mono text-sm">
+                            <div class="flex flex-wrap gap-x-4 gap-y-1">
+                                <span class="fg-muted text-xs uppercase">pending</span>
+                                <span class="fg-base">{{ plexStatus.annotations_by_status.pending.in_library || 0 }} <span class="fg-muted text-xs">in library</span></span>
+                                <span class="fg-base">{{ plexStatus.annotations_by_status.pending.library_upgrade || 0 }} <span class="fg-muted text-xs">upgrades</span></span>
+                            </div>
+                            <div class="flex flex-wrap gap-x-4 gap-y-1">
+                                <span class="fg-muted text-xs uppercase">accepted</span>
+                                <span class="fg-base">{{ plexStatus.annotations_by_status.accepted.in_library || 0 }} <span class="fg-muted text-xs">in library</span></span>
+                                <span class="fg-base">{{ plexStatus.annotations_by_status.accepted.library_upgrade || 0 }} <span class="fg-muted text-xs">upgrades</span></span>
+                            </div>
                         </div>
                         <p v-if="plexStatus.error" class="text-xs font-mono badge-red px-2 py-1 rounded border inline-block">{{ plexStatus.error }}</p>
                     </div>

@@ -8,6 +8,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.57.0] - 2026-09-30
+
+### Added
+- **Plex status-aware annotation counts** — settings now separates pending and
+  accepted releases marked as already owned or as quality upgrades.
+
+### Fixed
+- **Plex connection testing** — saved URL and token can be tested while the
+  integration is disabled; configuration and connection failures are reported
+  separately, and a failed settings save no longer tests stale credentials.
+
+### Updated
+- **Dependencies** — Go builder image to 1.27.1-alpine, go-qbittorrent to
+  v1.19.0, and go-sqlite3 to v1.14.52.
+
 ## [0.56.1] - 2026-09-30
 
 ### Fixed

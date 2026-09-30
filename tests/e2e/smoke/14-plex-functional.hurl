@@ -41,6 +41,9 @@ jsonpath "$.counts.episodes" isInteger
 jsonpath "$.counts.movies" isInteger
 jsonpath "$.annotations.in_library" isInteger
 jsonpath "$.annotations.library_upgrade" isInteger
+jsonpath "$.annotations_by_status.pending.in_library" == 1
+jsonpath "$.annotations_by_status.pending.library_upgrade" == 1
+jsonpath "$.annotations_by_status.accepted.library_upgrade" == 0
 
 # The lower-quality MobLand fixture is already in Plex.
 GET {{base}}/api/torrents?annotation=in_library
@@ -78,6 +81,13 @@ POST {{base}}/api/torrents/{{upgrade_id}}/approve
 HTTP 200
 [Asserts]
 jsonpath "$.status" == "accepted"
+
+GET {{base}}/api/plex/status
+
+HTTP 200
+[Asserts]
+jsonpath "$.annotations_by_status.pending.in_library" == 1
+jsonpath "$.annotations_by_status.accepted.library_upgrade" == 1
 
 POST {{base}}/api/torrents/{{upgrade_id}}/queue
 Content-Type: application/json

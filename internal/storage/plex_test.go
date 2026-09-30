@@ -327,6 +327,17 @@ func TestAnnotationLifecycle(t *testing.T) {
 	if counts[AnnotationInLibrary] != 1 || counts[AnnotationLibraryUpgrade] != 1 {
 		t.Errorf("counts = %+v", counts)
 	}
+	if err := s.UpdateStatus(id2, "accepted"); err != nil {
+		t.Fatalf("UpdateStatus: %v", err)
+	}
+	statusCounts, err := s.CountAnnotationsByStatusAndKind()
+	if err != nil {
+		t.Fatalf("CountAnnotationsByStatusAndKind: %v", err)
+	}
+	if statusCounts["pending"][AnnotationInLibrary] != 1 ||
+		statusCounts["accepted"][AnnotationLibraryUpgrade] != 1 {
+		t.Errorf("status counts = %+v", statusCounts)
+	}
 
 	deleted, err := s.DeleteAnnotationsBySource([]int{id1}, AnnotationSourcePlex)
 	if err != nil {

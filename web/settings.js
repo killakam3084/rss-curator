@@ -208,9 +208,11 @@ const settingsApp = createApp({
                 passwordInput.value = ''; // clear after successful save
                 plexTokenInput.value = '';
                 showToast('settings saved', 'success');
+                return true;
             } catch (err) {
                 showToast(`save failed: ${err.message}`, 'error');
                 console.error('save:', err);
+                return false;
             } finally {
                 saving.value = false;
             }
@@ -224,7 +226,7 @@ const settingsApp = createApp({
             plexTesting.value = true;
             plexTestResult.value = null;
             try {
-                await save('plex');
+                if (!await save('plex')) return;
                 const res = await fetch('/api/plex/meta');
                 const data = await res.json().catch(() => ({}));
                 if (!res.ok) {

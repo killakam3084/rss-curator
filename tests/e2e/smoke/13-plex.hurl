@@ -27,6 +27,12 @@ jsonpath "$.libraries"   isCollection
 jsonpath "$.counts.shows"    isInteger
 jsonpath "$.counts.episodes" isInteger
 jsonpath "$.counts.movies"   isInteger
+jsonpath "$.annotations.in_library" isInteger
+jsonpath "$.annotations.library_upgrade" isInteger
+jsonpath "$.annotations_by_status.pending.in_library" isInteger
+jsonpath "$.annotations_by_status.pending.library_upgrade" isInteger
+jsonpath "$.annotations_by_status.accepted.in_library" isInteger
+jsonpath "$.annotations_by_status.accepted.library_upgrade" isInteger
 
 
 # Wrong method on a read endpoint → 405.

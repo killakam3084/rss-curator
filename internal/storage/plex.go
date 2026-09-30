@@ -500,6 +500,33 @@ func (s *Storage) CountAnnotationsByKind() (map[string]int, error) {
 	return out, rows.Err()
 }
 
+// CountAnnotationsByStatusAndKind returns annotation totals grouped by torrent status and kind.
+func (s *Storage) CountAnnotationsByStatusAndKind() (map[string]map[string]int, error) {
+	rows, err := s.db.Query(`
+		SELECT staged_torrents.status, torrent_annotations.kind, COUNT(*)
+		FROM torrent_annotations
+		JOIN staged_torrents ON staged_torrents.id = torrent_annotations.torrent_id
+		GROUP BY staged_torrents.status, torrent_annotations.kind`)
+	if err != nil {
+		return nil, fmt.Errorf("count annotations by status and kind: %w", err)
+	}
+	defer rows.Close()
+
+	out := map[string]map[string]int{}
+	for rows.Next() {
+		var status, kind string
+		var count int
+		if err := rows.Scan(&status, &kind, &count); err != nil {
+			return nil, fmt.Errorf("scan annotation status count: %w", err)
+		}
+		if out[status] == nil {
+			out[status] = map[string]int{}
+		}
+		out[status][kind] = count
+	}
+	return out, rows.Err()
+}
+
 const plexItemSelect = `
 	SELECT rating_key, section_key, content_type, show_rating_key, title, norm_title, norm_alt_title,
 	       year, season, episode, imdb_id, tmdb_id, tvdb_id,

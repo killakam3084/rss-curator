@@ -27,6 +27,7 @@ type plexAPIStore interface {
 	ops.PlexReconcileStore
 	ListPlexLibraries() ([]storage.PlexLibrary, error)
 	CountAnnotationsByKind() (map[string]int, error)
+	CountAnnotationsByStatusAndKind() (map[string]map[string]int, error)
 }
 
 // WithPlex attaches the Plex integration. Passing a zero PlexDeps leaves the
@@ -60,24 +61,43 @@ func (s *Server) handlePlexMeta(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
 	resp := plexMetaResponse{Libraries: []plexLibraryResponse{}}
-	if s.plex.Client == nil {
-		resp.Error = "plex is not configured"
-		json.NewEncoder(w).Encode(resp)
-		return
+	plexClient := s.plex.Client
+	if plexClient == nil {
+		if s.settingsMgr == nil {
+			resp.Error = "plex is not configured"
+			json.NewEncoder(w).Encode(resp)
+			return
+		}
+		plexSettings := s.settingsMgr.Get().Plex
+		if plexSettings.URL == "" || plexSettings.Token == "" || plexSettings.Token == "***" {
+			resp.Error = "plex URL and token are required to test the connection"
+			json.NewEncoder(w).Encode(resp)
+			return
+		}
+		var err error
+		plexClient, err = client.NewPlex(client.PlexConfig{
+			BaseURL: plexSettings.URL,
+			Token:   plexSettings.Token,
+		})
+		if err != nil {
+			resp.Error = "invalid plex configuration: " + err.Error()
+			json.NewEncoder(w).Encode(resp)
+			return
+		}
 	}
 
-	identity, err := s.plex.Client.Identity(r.Context())
+	identity, err := plexClient.Identity(r.Context())
 	if err != nil {
-		resp.Error = err.Error()
+		resp.Error = "plex connection failed: " + err.Error()
 		json.NewEncoder(w).Encode(resp)
 		return
 	}
 	resp.Connected = true
 	resp.ServerVersion = identity.Version
 
-	sections, err := s.plex.Client.Sections(r.Context())
+	sections, err := plexClient.Sections(r.Context())
 	if err != nil {
-		resp.Error = err.Error()
+		resp.Error = "connected, but failed to list plex libraries: " + err.Error()
 		json.NewEncoder(w).Encode(resp)
 		return
 	}
@@ -93,13 +113,14 @@ func (s *Server) handlePlexMeta(w http.ResponseWriter, r *http.Request) {
 }
 
 type plexStatusResponse struct {
-	Enabled     bool                   `json:"enabled"`
-	SyncEnabled bool                   `json:"sync_enabled"`
-	Libraries   []storage.PlexLibrary  `json:"libraries"`
-	Counts      storage.PlexCounts     `json:"counts"`
-	Annotations map[string]int         `json:"annotations"`
-	Error       string                 `json:"error,omitempty"`
-	Settings    map[string]interface{} `json:"settings,omitempty"`
+	Enabled             bool                      `json:"enabled"`
+	SyncEnabled         bool                      `json:"sync_enabled"`
+	Libraries           []storage.PlexLibrary     `json:"libraries"`
+	Counts              storage.PlexCounts        `json:"counts"`
+	Annotations         map[string]int            `json:"annotations"`
+	AnnotationsByStatus map[string]map[string]int `json:"annotations_by_status"`
+	Error               string                    `json:"error,omitempty"`
+	Settings            map[string]interface{}    `json:"settings,omitempty"`
 }
 
 // handlePlexStatus reports what is currently cached.
@@ -116,6 +137,16 @@ func (s *Server) handlePlexStatus(w http.ResponseWriter, r *http.Request) {
 		Annotations: map[string]int{
 			storage.AnnotationInLibrary:      0,
 			storage.AnnotationLibraryUpgrade: 0,
+		},
+		AnnotationsByStatus: map[string]map[string]int{
+			"pending": {
+				storage.AnnotationInLibrary:      0,
+				storage.AnnotationLibraryUpgrade: 0,
+			},
+			"accepted": {
+				storage.AnnotationInLibrary:      0,
+				storage.AnnotationLibraryUpgrade: 0,
+			},
 		},
 	}
 	if s.settingsMgr != nil {
@@ -140,6 +171,16 @@ func (s *Server) handlePlexStatus(w http.ResponseWriter, r *http.Request) {
 	if ann, err := s.plex.Store.CountAnnotationsByKind(); err == nil {
 		for kind, count := range ann {
 			resp.Annotations[kind] = count
+		}
+	}
+	if ann, err := s.plex.Store.CountAnnotationsByStatusAndKind(); err == nil {
+		for status, counts := range ann {
+			if _, ok := resp.AnnotationsByStatus[status]; !ok {
+				continue
+			}
+			for kind, count := range counts {
+				resp.AnnotationsByStatus[status][kind] = count
+			}
 		}
 	}
 	json.NewEncoder(w).Encode(resp)
