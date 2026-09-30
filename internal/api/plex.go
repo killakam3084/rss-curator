@@ -112,8 +112,11 @@ func (s *Server) handlePlexStatus(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
 	resp := plexStatusResponse{
-		Libraries:   []storage.PlexLibrary{},
-		Annotations: map[string]int{},
+		Libraries: []storage.PlexLibrary{},
+		Annotations: map[string]int{
+			storage.AnnotationInLibrary:      0,
+			storage.AnnotationLibraryUpgrade: 0,
+		},
 	}
 	if s.settingsMgr != nil {
 		st := s.settingsMgr.Get().Plex
@@ -135,7 +138,9 @@ func (s *Server) handlePlexStatus(w http.ResponseWriter, r *http.Request) {
 		resp.Counts = counts
 	}
 	if ann, err := s.plex.Store.CountAnnotationsByKind(); err == nil {
-		resp.Annotations = ann
+		for kind, count := range ann {
+			resp.Annotations[kind] = count
+		}
 	}
 	json.NewEncoder(w).Encode(resp)
 }

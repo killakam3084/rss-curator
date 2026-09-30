@@ -11,14 +11,15 @@ jsonpath "$.job_id" isInteger
 [Captures]
 feed_job_id: jsonpath "$.job_id"
 
-# Wait for staging to finish.
-GET {{base}}/api/jobs/{{feed_job_id}}
+# Wait for the fixture torrents to be staged. This avoids relying on the
+# global jobs list while the asynchronous feed check is still running.
+GET {{base}}/api/torrents?status=pending
 [Options]
 retry: 20
 
 HTTP 200
 [Asserts]
-jsonpath "$.status" == "completed"
+jsonpath "$.count" == 3
 
 # Sync the mock Plex library and reconcile staged candidates.
 POST {{base}}/api/plex/sync
@@ -90,7 +91,7 @@ GET http://mesh:32400/health
 
 HTTP 200
 [Asserts]
-jsonpath "$.added" contains "magnet:?xt=urn:btih:uat-amadeus"
+jsonpath "$.added[0]" == "magnet:?xt=urn:btih:uat-amadeus"
 
 # Manual cleanup uses the existing already_have action; Plex never changes
 # the status automatically.
