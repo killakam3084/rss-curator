@@ -22,6 +22,7 @@ func main() {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/health", m.health)
 	mux.HandleFunc("/rss/shows", m.rss)
+	mux.HandleFunc("/rss/movies", m.movieRSS)
 	mux.HandleFunc("/identity", m.plexIdentity)
 	mux.HandleFunc("/library/sections", m.plexSections)
 	mux.HandleFunc("/library/sections/1/all", m.plexShowsOrEpisodes)
@@ -52,6 +53,13 @@ func (m *mesh) rss(w http.ResponseWriter, _ *http.Request) {
 <item><title>MobLand.S02E01.1080p.WEB-DL.x265-UAT</title><link>magnet:?xt=urn:btih:uat-mobland</link><guid>uat-mobland</guid><pubDate>Tue, 29 Sep 2026 12:00:00 GMT</pubDate><size>4000000000</size></item>
 <item><title>Amadeus.1984.2160p.WEB-DL.x265-UAT</title><link>magnet:?xt=urn:btih:uat-amadeus</link><guid>uat-amadeus</guid><pubDate>Tue, 29 Sep 2026 12:01:00 GMT</pubDate><size>12000000000</size></item>
 <item><title>Unowned.Show.S01E01.1080p.WEB-DL.x265-UAT</title><link>magnet:?xt=urn:btih:uat-unknown</link><guid>uat-unknown</guid><pubDate>Tue, 29 Sep 2026 12:02:00 GMT</pubDate><size>4000000000</size></item>
+</channel></rss>`)
+}
+
+func (m *mesh) movieRSS(w http.ResponseWriter, _ *http.Request) {
+	w.Header().Set("Content-Type", "application/rss+xml")
+	_, _ = io.WriteString(w, `<?xml version="1.0"?><rss version="2.0"><channel><title>UAT movie fixture</title>
+<item><title>Amadeus.1984.2160p.WEB-DL.x265-UAT</title><link>magnet:?xt=urn:btih:uat-amadeus</link><guid>uat-amadeus</guid><pubDate>Tue, 29 Sep 2026 12:01:00 GMT</pubDate><size>12000000000</size></item>
 </channel></rss>`)
 }
 
