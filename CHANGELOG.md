@@ -8,6 +8,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.56.1] - 2026-09-30
+
+### Fixed
+- **SQLite startup lock** — the container no longer launches the legacy
+  scheduler process alongside the API process; the built-in scheduler is now
+  the sole scheduler of record.
+
 ## [0.56.0] - 2026-09-30
 
 ### Added
