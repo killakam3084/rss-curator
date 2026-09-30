@@ -8,6 +8,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.56.0] - 2026-09-30
+
 ### Added
 - **Plex library reconciliation** — read-only Plex integration with cached
   library metadata, provider-ID-first matching, title fallback matching, and
