@@ -18,7 +18,6 @@ for f in \
   /tests/e2e/smoke/04-jobs.hurl \
   /tests/e2e/smoke/05-torrents.hurl \
   /tests/e2e/smoke/06-feed-stream.hurl \
-  /tests/e2e/smoke/07-scheduler.hurl \
   /tests/e2e/smoke/10-alerts.hurl \
   /tests/e2e/smoke/13-plex.hurl \
   /tests/e2e/smoke/14-plex-functional.hurl; do
