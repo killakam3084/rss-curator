@@ -14,13 +14,19 @@ services:
       dockerfile: Dockerfile
     image: rss-curator-uat-mesh:local
     restart: "no"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:32400/health"]
+      interval: 2s
+      timeout: 2s
+      retries: 15
+      start_period: 2s
 
   curator:
     image: ghcr.io/killakam3084/rss-curator:${RSS_CURATOR_IMAGE_REF:?RSS_CURATOR_IMAGE_REF must be set}
     restart: "no"
     depends_on:
       mesh:
-        condition: service_started
+        condition: service_healthy
     env_file:
       - uat-mesh.env
     environment:
